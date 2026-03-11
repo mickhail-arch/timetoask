@@ -1,0 +1,7 @@
+{
+  "id": "_template",
+  "model": "openrouter/auto",
+  "executionMode": "sync",
+  "token_cost": 100,
+  "status": "disabled"
+}
