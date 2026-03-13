@@ -1,2 +1,6 @@
 // modules/notifications/index.ts — Notifications module barrel export
-export {};
+export {
+  notifyEmailVerification,
+  notifyPasswordReset,
+  notifyBalanceLow,
+} from './notifications.service';

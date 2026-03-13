@@ -69,3 +69,14 @@ export async function sendWelcomeEmail(
     `<p>Здравствуйте, ${name}!</p><p>Добро пожаловать в ${env.APP_NAME}. Мы рады видеть вас!</p>`,
   );
 }
+
+export async function sendBalanceLowEmail(
+  to: string,
+  currentBalance: string,
+): Promise<void> {
+  await send(
+    to,
+    'Низкий баланс',
+    `<p>Ваш текущий баланс: ${currentBalance}. Рекомендуем пополнить счёт, чтобы продолжить использование сервиса.</p>`,
+  );
+}

@@ -1,4 +1,5 @@
 // plugins/_template/index.ts — ITool entry point
-export {} from './schema.js';
-export { systemPrompt } from './prompt.js';
-export { buildUserMessage } from './handler.js';
+export { inputSchema, outputSchema } from './schema';
+export type { ToolInput, ToolOutput } from './schema';
+export { systemPrompt } from './prompt';
+export { buildUserMessage } from './handler';

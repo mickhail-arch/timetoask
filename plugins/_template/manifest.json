@@ -3,5 +3,7 @@
   "model": "openrouter/auto",
   "executionMode": "sync",
   "token_cost": 100,
+  "free_uses_limit": 3,
+  "output_format": "markdown",
   "status": "disabled"
 }

@@ -1,4 +1,5 @@
 // core/types/index.ts — Domain types
+import type { ZodType } from 'zod';
 
 export type UserId = string & { __brand: 'UserId' };
 export type ToolId = string & { __brand: 'ToolId' };
@@ -12,3 +13,16 @@ export type ApiError = {
 export type ExecutionMode = 'sync' | 'async';
 export type ToolStatus = 'active' | 'disabled' | 'beta';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ResolvedTool {
+  slug: string;
+  model: string;
+  promptText: string;
+  status: ToolStatus;
+  executionMode: ExecutionMode;
+  tokenCost: number;
+  freeUsesLimit: number;
+  inputSchema: ZodType;
+  outputSchema: ZodType;
+  buildUserMessage: (input: Record<string, unknown>) => string;
+}

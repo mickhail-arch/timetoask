@@ -1,2 +1,11 @@
-// modules/billing/index.ts — Billing module barrel export
-export {};
+export {
+  getBalance,
+  getHistory,
+  createCheckout,
+  handleWebhook,
+  reserveTokens,
+  finalizeTokens,
+  rollbackTokens,
+  checkFreeUses,
+  cleanupStaleReserves,
+} from './billing.service';
