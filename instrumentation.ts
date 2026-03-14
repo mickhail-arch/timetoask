@@ -4,16 +4,22 @@ export async function register() {
     const { CLEANUP_INTERVAL_MS } = await import('@/core/constants');
     const { purgeDeletedAccounts } = await import('@/modules/user');
     const { ToolRegistry } = await import('@/plugins/registry');
-    // const { cleanupStaleReserves } = await import('@/modules/billing');
-    // const { cleanupStaleJobs } = await import('@/modules/llm');
+    const { cleanupStaleReserves } = await import('@/modules/billing');
+    const { cleanupStaleJobs } = await import('@/modules/llm');
 
     await ToolRegistry.initialize();
+    await cleanupStaleReserves();
+    await cleanupStaleJobs();
 
     setInterval(() => {
       purgeDeletedAccounts().catch(console.error);
     }, CLEANUP_INTERVAL_MS);
 
-    // setInterval(() => { cleanupStaleReserves().catch(console.error); }, CLEANUP_INTERVAL_MS);
-    // setInterval(() => { cleanupStaleJobs().catch(console.error); }, CLEANUP_INTERVAL_MS);
+    const g = globalThis as Record<string, unknown>;
+    if (g.__cleanupInterval) clearInterval(g.__cleanupInterval as NodeJS.Timeout);
+    g.__cleanupInterval = setInterval(() => {
+      cleanupStaleReserves().catch(console.error);
+      cleanupStaleJobs().catch(console.error);
+    }, CLEANUP_INTERVAL_MS);
   }
 }
