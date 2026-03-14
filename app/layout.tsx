@@ -1,4 +1,6 @@
 // app/layout.tsx — Root layout
+import './globals.css';
+
 export const metadata = {
   title: 'TimeToAsk',
   description: 'AI-powered marketing tools',

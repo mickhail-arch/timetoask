@@ -7,10 +7,9 @@ import {
   finalizeTokens,
   rollbackTokens,
 } from '@/modules/billing/billing.service';
-import { streamText, generateText } from '@/adapters/llm/openrouter.adapter';
+import { streamText } from '@/adapters/llm/openrouter.adapter';
 import { wrapSystemPrompt } from './prompt-guard';
-import { runMultiStepPipeline } from './pipeline.runner';
-import { pipelineRegistry } from './pipelines';
+import { processJob } from '@/workers/jobs/tool-execution.job';
 import { env } from '@/core/config/env';
 import { STALE_JOB_BUFFER_MS } from '@/core/constants';
 import {
@@ -142,108 +141,9 @@ export async function executeAsync(
     },
   });
 
-  const steps = pipelineRegistry[tool.slug];
-  if (steps) {
-    void runMultiStepPipeline(job.id, userId, tool, input, steps);
-  } else {
-    void runAsyncPipeline(job.id, userId, tool, input);
-  }
+  void processJob(job.id);
 
   return { jobId: job.id };
-}
-
-// ---------------------------------------------------------------------------
-// runAsyncPipeline (private)
-// ---------------------------------------------------------------------------
-
-async function runAsyncPipeline(
-  jobId: string,
-  userId: string,
-  tool: ToolRecord,
-  input: string,
-): Promise<void> {
-  await prisma.jobStep.update({
-    where: { id: jobId },
-    data: { status: 'processing', startedAt: new Date() },
-  });
-
-  const idempotencyKey = `async:${userId}:${tool.id}:${jobId}`;
-  let reserved = false;
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      await reserveTokens(userId, tool.tokenCost, idempotencyKey, tx);
-    });
-    reserved = true;
-
-    const systemPrompt = wrapSystemPrompt(tool.promptText);
-    const result = await generateText({
-      model: tool.model,
-      systemPrompt,
-      userMessage: input,
-    });
-
-    await prisma.$transaction(async (tx) => {
-      await finalizeTokens(userId, tool.tokenCost, tx);
-
-      let chat = await tx.chat.findFirst({
-        where: { userId, toolId: tool.id },
-        orderBy: { updatedAt: 'desc' },
-      });
-
-      if (!chat) {
-        chat = await tx.chat.create({
-          data: { userId, toolId: tool.id, title: tool.name },
-        });
-      }
-
-      await tx.message.createMany({
-        data: [
-          { chatId: chat.id, role: 'user', content: input },
-          { chatId: chat.id, role: 'assistant', content: result },
-        ],
-      });
-
-      await tx.usageLog.create({
-        data: {
-          userId,
-          toolId: tool.id,
-          idempotencyKey,
-          tokensUsed: Math.ceil(result.length / 4),
-          cost: tool.tokenCost,
-        },
-      });
-    });
-
-    await prisma.jobStep.update({
-      where: { id: jobId },
-      data: {
-        status: 'completed',
-        output: { result },
-        endedAt: new Date(),
-      },
-    });
-  } catch (err) {
-    if (reserved) {
-      try {
-        await prisma.$transaction(async (tx) => {
-          await rollbackTokens(userId, tool.tokenCost, tx);
-        });
-      } catch {
-        console.error(`[tool-execution] rollback failed for job=${jobId}`);
-      }
-    }
-
-    const message = err instanceof Error ? err.message : String(err);
-    await prisma.jobStep.update({
-      where: { id: jobId },
-      data: {
-        status: 'failed',
-        error: message,
-        endedAt: new Date(),
-      },
-    });
-  }
 }
 
 // ---------------------------------------------------------------------------
