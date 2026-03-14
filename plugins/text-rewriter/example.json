@@ -1,0 +1,7 @@
+{
+  "input": { "text": "Hey, just wanted to check if you got my last message.", "tone": "formal" },
+  "output": {
+    "rewritten": "I am writing to kindly inquire whether you have received my previous message.",
+    "changes_summary": "Replaced informal greeting and phrasing with formal, professional language; removed contraction."
+  }
+}

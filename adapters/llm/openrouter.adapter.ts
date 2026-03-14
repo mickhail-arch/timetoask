@@ -82,6 +82,59 @@ export async function generateText(params: LlmParams): Promise<string> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Image generation (OpenRouter /images/generations)
+// ---------------------------------------------------------------------------
+
+export type ImageParams = {
+  model: string;
+  prompt: string;
+  n?: number;
+  size?: string;
+};
+
+export type ImageResult = {
+  url?: string;
+  b64_json?: string;
+};
+
+export async function generateImage(params: ImageParams): Promise<ImageResult> {
+  const { model, prompt, n = 1, size = '1024x1024' } = params;
+
+  const res = await fetch('https://openrouter.ai/api/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model, prompt, n, size }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(
+      `[llm:generateImage] model=${model} status=${res.status} error="${text}"`,
+    );
+    throw new LlmUnavailableError();
+  }
+
+  const body = (await res.json()) as {
+    data?: Array<{ url?: string; b64_json?: string }>;
+  };
+
+  const first = body.data?.[0];
+  if (!first) {
+    throw new LlmUnavailableError();
+  }
+
+  console.info(`[llm:generateImage] model=${model} status=ok`);
+  return { url: first.url, b64_json: first.b64_json };
+}
+
+// ---------------------------------------------------------------------------
+// streamText
+// ---------------------------------------------------------------------------
+
 export async function* streamText(
   params: LlmParams,
 ): AsyncGenerator<string, void, undefined> {

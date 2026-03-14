@@ -9,6 +9,8 @@ import {
 } from '@/modules/billing/billing.service';
 import { streamText, generateText } from '@/adapters/llm/openrouter.adapter';
 import { wrapSystemPrompt } from './prompt-guard';
+import { runMultiStepPipeline } from './pipeline.runner';
+import { pipelineRegistry } from './pipelines';
 import { env } from '@/core/config/env';
 import { STALE_JOB_BUFFER_MS } from '@/core/constants';
 import {
@@ -140,7 +142,12 @@ export async function executeAsync(
     },
   });
 
-  void runAsyncPipeline(job.id, userId, tool, input);
+  const steps = pipelineRegistry[tool.slug];
+  if (steps) {
+    void runMultiStepPipeline(job.id, userId, tool, input, steps);
+  } else {
+    void runAsyncPipeline(job.id, userId, tool, input);
+  }
 
   return { jobId: job.id };
 }

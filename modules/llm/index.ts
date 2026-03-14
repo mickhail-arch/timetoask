@@ -8,3 +8,10 @@ export {
   cleanupStaleJobs,
   type JobStatusResponse,
 } from './tool-execution.service';
+export { runMultiStepPipeline, pipelineLlm } from './pipeline.runner';
+export { pipelineRegistry } from './pipelines';
+export type {
+  PipelineContext,
+  PipelineStepDef,
+  ToolRecord,
+} from './pipeline.types';

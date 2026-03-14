@@ -1,0 +1,9 @@
+{
+  "id": "text-rewriter",
+  "model": "openai/gpt-4o-mini",
+  "fallbackModel": "anthropic/claude-haiku-4-5-20251001",
+  "executionMode": "sync",
+  "token_cost": 50,
+  "free_uses_limit": 5,
+  "status": "enabled"
+}

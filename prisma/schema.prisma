@@ -145,6 +145,9 @@ model Tool {
 
 model JobStep {
   id        String   @id @default(cuid())
+  parentId  String?
+  stepIndex Int?
+  stepName  String?
   userId    String
   toolId    String
   status    String   @default("pending")
@@ -155,8 +158,10 @@ model JobStep {
   endedAt   DateTime?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tool      Tool     @relation(fields: [toolId], references: [id])
+  parent   JobStep?  @relation("PipelineSteps", fields: [parentId], references: [id])
+  children JobStep[] @relation("PipelineSteps")
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tool     Tool      @relation(fields: [toolId], references: [id])
 
   @@map("job_steps")
 }

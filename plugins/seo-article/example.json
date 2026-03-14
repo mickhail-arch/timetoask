@@ -1,0 +1,24 @@
+{
+  "input": {
+    "keyword": "лучшие CRM для малого бизнеса",
+    "language": "ru",
+    "wordCount": 2000,
+    "autoMode": true
+  },
+  "output": {
+    "html": "<article>\n<img src=\"https://example.com/hero.png\" alt=\"Лучшие CRM для малого бизнеса\" loading=\"lazy\" />\n<h1>Лучшие CRM для малого бизнеса в 2026 году</h1>\n<p>...</p>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Article\",\"headline\":\"Лучшие CRM для малого бизнеса в 2026 году\"}</script>\n</article>",
+    "metadata": {
+      "title": "Лучшие CRM для малого бизнеса в 2026 году",
+      "description": "Обзор лучших CRM-систем для малого бизнеса: сравнение функций, цен и отзывов…",
+      "keyword": "лучшие CRM для малого бизнеса"
+    },
+    "seoAudit": {
+      "score": 85,
+      "issues": ["Keyword density slightly low: 0.8%"]
+    },
+    "factCheck": {
+      "verified": true,
+      "corrections": []
+    }
+  }
+}
