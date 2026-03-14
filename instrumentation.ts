@@ -1,5 +1,6 @@
 // instrumentation.ts — Server startup hooks
 export async function register() {
+  console.log('[instrumentation] register() called, runtime:', process.env.NEXT_RUNTIME)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { CLEANUP_INTERVAL_MS } = await import('@/core/constants');
     const { purgeDeletedAccounts } = await import('@/modules/user');
@@ -8,7 +9,9 @@ export async function register() {
     const { cleanupStaleJobs } = await import('@/modules/llm');
 
     await ToolRegistry.initialize();
+    console.log('[instrumentation] ToolRegistry initialized')
     await cleanupStaleReserves();
+    console.log('[instrumentation] cleanup done')
     await cleanupStaleJobs();
 
     setInterval(() => {
