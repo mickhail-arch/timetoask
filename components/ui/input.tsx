@@ -1,22 +1,67 @@
-import * as React from "react"
+'use client';
 
-import { cn } from "@/lib/utils"
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+export interface InputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'placeholder'> {
+  label?: string;
+  error?: string;
+  hint?: string;
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, label, error, hint, disabled, id, ...props }, ref) => {
+    const inputId = id || React.useId();
+
     return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
-Input.displayName = "Input"
+      <div className="w-full">
+        <div className="relative">
+          <input
+            id={inputId}
+            type={type}
+            disabled={disabled}
+            placeholder=" "
+            className={cn(
+              'peer w-full rounded-lg border bg-bg-surface px-4 pt-5 pb-2 text-base text-text-primary outline-none transition-colors',
+              'placeholder-transparent',
+              error
+                ? 'border-border-error [border-width:1.5px]'
+                : 'border-border focus:border-border-focus focus:[border-width:1.5px]',
+              disabled && 'cursor-not-allowed bg-bg-sidebar',
+              className,
+            )}
+            ref={ref}
+            {...props}
+          />
+          {label && (
+            <label
+              htmlFor={inputId}
+              className={cn(
+                'pointer-events-none absolute left-4 origin-[0] transition-all',
+                'top-1/2 -translate-y-1/2 text-base font-medium',
+                'peer-focus:top-2.5 peer-focus:-translate-y-0 peer-focus:text-xs',
+                'peer-not-placeholder-shown:top-2.5 peer-not-placeholder-shown:-translate-y-0 peer-not-placeholder-shown:text-xs',
+                error
+                  ? 'text-error'
+                  : 'text-text-secondary peer-focus:text-text-primary',
+              )}
+            >
+              {label}
+            </label>
+          )}
+        </div>
 
-export { Input }
+        {error && (
+          <p className="mt-1.5 text-sm text-error">{error}</p>
+        )}
+        {!error && hint && (
+          <p className="mt-1.5 text-sm text-text-secondary">{hint}</p>
+        )}
+      </div>
+    );
+  },
+);
+Input.displayName = 'Input';
+
+export { Input };

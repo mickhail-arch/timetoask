@@ -21,12 +21,22 @@ interface UseToolsResult {
   error: string | null;
 }
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+let toolsCache: { data: Tool[]; timestamp: number } | null = null;
+
 export function useTools(): UseToolsResult {
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tools, setTools] = useState<Tool[]>(toolsCache?.data ?? []);
+  const [isLoading, setIsLoading] = useState(!toolsCache);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (toolsCache && Date.now() - toolsCache.timestamp < CACHE_TTL_MS) {
+      setTools(toolsCache.data);
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function fetchTools() {
@@ -34,8 +44,10 @@ export function useTools(): UseToolsResult {
         const res = await fetch('/api/tools');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
+        const data: Tool[] = json.data ?? [];
+        toolsCache = { data, timestamp: Date.now() };
         if (!cancelled) {
-          setTools(json.data ?? []);
+          setTools(data);
           setError(null);
         }
       } catch (err) {
