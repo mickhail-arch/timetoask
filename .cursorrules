@@ -199,3 +199,99 @@ error — необработанные исключения
 warn  — невалидная подпись, retry LLM, зависший резерв
 info  — успешный запуск инструмента, пополнение баланса
 debug — только dev, никогда в production
+
+# ══════════════════════════════════════
+# FRONTEND — ТАЙМТУАСК
+# Полная документация: UI_TOKENS.md, UI_COMPONENTS.md,
+# UI_PAGES.md, UX_SCENARIOS.md, FRONTEND_ONBOARDING.md
+# ══════════════════════════════════════
+
+# СТЕК ФРОНТЕНДА
+Tailwind CSS 4, shadcn/ui, next/font (Inter)
+react-hook-form + zod, sonner (toast)
+Хуки: useBalance, useTools, useJobStatus, useToolExecution
+
+# ФАЙЛОВАЯ СТРУКТУРА
+app/(dashboard)/    — страницы кабинета (защищены сессией)
+app/(auth)/         — вход/регистрация (без оболочки)
+components/ui/      — базовые примитивы (Button, Input, Badge...)
+components/app/     — составные компоненты (Sidebar, Header, AutoForm...)
+hooks/              — вся логика запросов только здесь
+config/nav.ts       — только статичные пункты меню
+
+# АБСОЛЮТНЫЕ ЗАПРЕТЫ ФРОНТЕНДА
+- Хардкод цветов ЗАПРЕЩЁН: bg-[#A6E800], style={{color:'#fff'}}
+- ТОЛЬКО CSS-переменные через Tailwind-алиасы: bg-accent, text-primary
+- fetch/axios внутри компонентов ЗАПРЕЩЁН — только через хуки
+- Хардкод инструментов в Sidebar ЗАПРЕЩЁН — только useTools() → GET /api/tools
+- Кастомная форма инструмента ЗАПРЕЩЕНА — только <AutoForm schema={plugin.inputSchema} />
+- config/nav.ts — инструменты не добавлять, только статичные пункты
+
+# ОБЯЗАТЕЛЬНЫЕ ПАТТЕРНЫ
+
+Каждый блок с данными — 4 состояния обязательны:
+  loading → Skeleton (не спиннер на всю страницу)
+  empty   → Иконка + текст + кнопка действия
+  error   → Toast error + кнопка «Повторить»
+  filled  → Контент
+
+Добавить страницу в кабинет = 4 шага:
+  1. app/(dashboard)/[name]/page.tsx
+  2. Добавить в config/nav.ts
+  3. Описать в UI_PAGES.md
+  4. Всё остальное работает автоматически
+
+AutoForm инструмента:
+  <AutoForm
+    schema={plugin.inputSchema}
+    onSubmit={handleExecute}
+    loading={isExecuting}
+    tokenCost={plugin.token_cost}
+    freeUsesLeft={freeUsesLeft}
+  />
+  Маппинг Zod → поля: UI_COMPONENTS.md раздел 4.2
+
+Выполнение инструмента:
+  sync  → SSE-стрим → <StreamResult />
+  async → jobId + polling 2s → <JobProgress /> → <JobResult />
+  Режим определяется по plugin.executionMode
+
+Защита маршрутов:
+  (dashboard)/* → getServerSession → redirect(/login) если нет сессии
+  /admin        → role === 'admin' → иначе redirect(/dashboard)
+  (auth)/*      → если сессия есть → redirect(/dashboard)
+
+# ТОКЕНЫ (справочник)
+accent         = #A6E800
+bg-page        = #FFFFFF
+bg-sidebar     = #F5F5F5
+border         = #E0E0E0
+text-primary   = #1A1A1A
+text-secondary = #6B6B6B
+text-link      = #007AFF
+error          = #FF3B30
+success        = #34C759
+
+Sidebar = 220px, Header = 52px, ContentArea padding = 24px (p-6)
+radius-sm=6px (badge), radius-md=10px (кнопки/инпуты), radius-lg=12px (карточки)
+z: sidebar=10, header=20, dropdown=30, modal=50, toast=60
+
+# ХУКИ
+useBalance()        → { balance, reserved, isLoading }  polling 30s
+useTools()          → { tools, isLoading }               кеш 5 мин
+useJobStatus(jobId) → { status, steps, result, error }  polling 2s
+useToolExecution()  → { execute, streamContent, isExecuting, jobId, error }
+
+# РОЛИ
+user:  стандартный доступ
+admin: + /admin, + «Админка» в UserMenu, + колонка «Стоимость $» в логах
+
+Server Component: const session = await getServerSession(authOptions)
+Client Component: const { data: session } = useSession()
+Условный рендер:  {session?.user?.role === 'admin' && <AdminLink />}
+
+# ТЕКСТЫ ОШИБОК (точные, из макета)
+Login:           «Неверный email или пароль»
+Register пароль: «Пароль слишком простой. Используйте не менее 8 символов, включая буквы и цифры»
+Register repeat: «Пароли не совпадают. Проверьте введённые данные»
+Register код:    «Неверный код»

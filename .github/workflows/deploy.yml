@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: timetoask_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 1. Install
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 2. Audit
+      - name: Security audit
+        run: pnpm audit --audit-level=critical
+
+      # 3. Typecheck
+      - name: Typecheck
+        run: pnpm tsc --noEmit
+
+      # 4. Lint
+      - name: Lint
+        run: pnpm lint
+
+      # 5. Unit tests
+      - name: Unit tests
+        run: pnpm vitest run
+
+      # 6. Integration tests
+      - name: Integration tests
+        env:
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST || 'postgresql://test:test@localhost:5432/timetoask_test' }}
+        run: |
+          if echo "$DATABASE_URL_TEST" | grep -qv 'test'; then
+            echo "::error::DATABASE_URL_TEST must contain 'test' in the database name"
+            exit 1
+          fi
+          pnpm prisma generate
+          DATABASE_URL="$DATABASE_URL_TEST" pnpm prisma migrate deploy
+          RUN_INTEGRATION=1 pnpm vitest run __integration__/
+
+      # 7. Deploy
+      - name: Deploy via SSH
+        if: success()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH || '~/timetoask' }}
+            git pull origin main
+            docker compose -f docker-compose.prod.yml up -d --build

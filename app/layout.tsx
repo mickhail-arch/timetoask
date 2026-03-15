@@ -1,5 +1,12 @@
-// app/layout.tsx — Root layout
+import { Inter } from 'next/font/google';
+import { Providers } from './providers';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['cyrillic', 'latin'],
+  weight: ['400', '500', '700'],
+  variable: '--font-inter',
+});
 
 export const metadata = {
   title: 'TimeToAsk',
@@ -12,8 +19,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru">
-      <body>{children}</body>
+    <html lang="ru" className={inter.variable}>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

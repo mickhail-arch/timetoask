@@ -1,0 +1,10 @@
+.next/
+node_modules/
+.git/
+.env
+.env.local
+.env.production
+coverage/
+*.log
+prisma/*.db
+.cursor/
