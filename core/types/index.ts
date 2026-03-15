@@ -15,6 +15,8 @@ export type ToolStatus = 'active' | 'disabled' | 'beta';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface ResolvedTool {
+  id: string;
+  name: string;
   slug: string;
   model: string;
   promptText: string;

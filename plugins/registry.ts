@@ -101,6 +101,8 @@ export class ToolRegistry {
     }
 
     const resolved: ResolvedTool = {
+      id: dbTool.id,
+      name: dbTool.name,
       slug: dbTool.slug,
       model: dbTool.model,
       promptText: dbTool.promptText,
@@ -114,6 +116,8 @@ export class ToolRegistry {
     };
 
     const serializable = {
+      id: resolved.id,
+      name: resolved.name,
       slug: resolved.slug,
       model: resolved.model,
       promptText: resolved.promptText,
