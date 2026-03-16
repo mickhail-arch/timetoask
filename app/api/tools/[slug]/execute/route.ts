@@ -14,16 +14,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     if (!tool) return NextResponse.json(
       { error: { code: 'NOT_FOUND', message: 'Tool not found', statusCode: 404 } }, { status: 404 });
     const body = await req.json();
-    const input = tool.buildUserMessage(body);
+    const userMessage = tool.buildUserMessage(body.input as Record<string, unknown>);
     if (tool.executionMode === 'async') {
-      const result = await executeAsync(session.user.id, tool, input);
+      const result = await executeAsync(session.user.id, tool, userMessage);
       return NextResponse.json({ data: result });
     }
     const stream = new ReadableStream({
       async start(c) {
-        for await (const chunk of executeSync(session.user.id, tool, input))
-          c.enqueue(new TextEncoder().encode(chunk));
-        c.close();
+        try {
+          for await (const chunk of executeSync(session.user.id, tool, userMessage))
+            c.enqueue(new TextEncoder().encode(chunk));
+          c.close();
+        } catch (err) {
+          c.error(err);
+        }
       },
     });
     return new Response(stream, {
