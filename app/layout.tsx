@@ -21,11 +21,6 @@ export default function RootLayout({
   return (
     <html lang="ru" className={inter.variable}>
       <body>
-        <div id="mobile-stub">
-          <span>Таймтуаск</span>
-          <p>Сервис доступен только на десктопе</p>
-          <p>Откройте сайт на компьютере</p>
-        </div>
         <Providers>{children}</Providers>
       </body>
     </html>

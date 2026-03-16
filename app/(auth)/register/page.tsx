@@ -9,9 +9,21 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-const registerSchema = z.object({
-  email: z.string().email('Введите корректный email'),
-});
+const registerSchema = z
+  .object({
+    email: z.string().email('Введите корректный email'),
+    password: z
+      .string()
+      .min(8, 'Минимум 8 символов')
+      .regex(/[A-Z]/, 'Нужна хотя бы одна заглавная буква')
+      .regex(/[a-z]/, 'Нужна хотя бы одна строчная буква')
+      .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Нужен хотя бы один спецсимвол'),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Пароли не совпадают',
+    path: ['confirmPassword'],
+  });
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
@@ -28,13 +40,21 @@ export default function RegisterPage() {
 
   async function onSubmit(data: RegisterForm) {
     setServerError('');
-
-    // TODO: replace stub with real API call when backend supports single-step email registration
-    // const res = await fetch('/api/auth/register', { method: 'POST', ... });
-    // if (res.status === 409) { setServerError('Аккаунт с таким email уже существует'); return; }
-
-    sessionStorage.setItem('register_email', data.email);
-    router.push('/register/verify');
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: data.email, password: data.password }),
+    });
+    if (!res.ok) {
+      const json = await res.json();
+      if (res.status === 409) {
+        setServerError('Аккаунт с таким email уже существует');
+      } else {
+        setServerError(json.error?.message ?? 'Что-то пошло не так');
+      }
+      return;
+    }
+    router.push('/login?registered=1');
   }
 
   return (
@@ -52,13 +72,29 @@ export default function RegisterPage() {
           {...register('email')}
         />
 
+        <Input
+          label="Пароль"
+          type="password"
+          autoComplete="new-password"
+          error={errors.password?.message}
+          {...register('password')}
+        />
+
+        <Input
+          label="Повторить пароль"
+          type="password"
+          autoComplete="new-password"
+          error={errors.confirmPassword?.message}
+          {...register('confirmPassword')}
+        />
+
         <Button
           type="submit"
           variant="accent"
           fullWidth
           loading={isSubmitting}
         >
-          Регистрация
+          Зарегистрироваться
         </Button>
       </form>
 

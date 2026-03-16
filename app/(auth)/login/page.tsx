@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,8 +17,10 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const registered = searchParams.get('registered') === '1';
   const [authError, setAuthError] = useState('');
   const {
     register,
@@ -49,6 +51,12 @@ export default function LoginPage() {
       <h1 className="mb-8 text-center text-3xl font-bold leading-tight text-text-primary">
         Войти в Таймтуаск
       </h1>
+
+      {registered && (
+        <p className="mb-4 rounded-lg bg-accent/10 p-3 text-sm text-text-primary text-center">
+          Аккаунт создан. Войдите, чтобы продолжить.
+        </p>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
         <Input
@@ -84,5 +92,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
