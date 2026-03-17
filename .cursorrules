@@ -1,42 +1,56 @@
-# АРХИТЕКТУРНЫЙ КОНТРАКТ
+# ЗАПРЕТ НА САМОДЕЯТЕЛЬНОСТЬ
+- НЕ переименовывать файлы если это не указано в задаче
+- НЕ менять структуру папок если это не указано в задаче
+- НЕ обновлять пакеты и зависимости если это не указано в задаче
+- НЕ рефакторить код который не связан с задачей
+- НЕ менять middleware.ts если задача не про роутинг и редиректы
+- НЕ менять lib/prisma.ts, lib/redis.ts, lib/auth.ts никогда
+- НЕ менять instrumentation.ts если это не указано в задаче
+- НЕ менять prisma/schema.prisma если это не указано в задаче
+- НЕ трогать modules/ при UI-задачах
+- НЕ трогать adapters/ при UI-задачах
+- НЕ трогать core/ при UI-задачах
+- При UI-задачах менять ТОЛЬКО файлы в: components/, app/, hooks/, config/
+- Если задача не требует — НЕ трогать файлы которые не упомянуты в промте
 
-Route Handler ≤ 10 строк. Логика только в modules/*.service.ts.
-Middleware — только cookie + редиректы. Без Prisma/Redis/логики.
+# АРХИТЕКТУРНЫЙ КОНТРАКТ
+Route Handler — максимум 10 строк. Логика только в modules/*.service.ts.
+Middleware — только cookie-проверка и редиректы. Без Prisma, Redis, бизнес-логики.
 
 # ЗАПРЕТЫ
 - new PrismaClient() — только в lib/prisma.ts
-- import 'next'/'next/server'/'next-auth'/'react' в modules/ — ЗАПРЕЩЁН
-- Prisma/Redis в middleware.ts — ЗАПРЕЩЁН (Edge Runtime)
-- Бизнес-логика в route.ts — ЗАПРЕЩЁН
-- prisma.balance.update() вне tx — ЗАПРЕЩЁН
-- in-memory счётчики (let counter, Map) — ЗАПРЕЩЁН, только Redis INCR/DECR
-- ToolRegistry.initialize()/cleanupStaleJobs() вне instrumentation.ts — ЗАПРЕЩЁН
-- ^ и ~ в версиях пакетов — ЗАПРЕЩЁН
-- next-auth v5 beta — ЗАПРЕЩЁН, только v4 stable
-- Логировать API-ключи/пароли/секреты — ЗАПРЕЩЁН
-- Хардкод цветов (bg-[#xxx], style={{color}}) — ЗАПРЕЩЁН, только CSS-переменные
-- fetch/axios внутри компонентов — ЗАПРЕЩЁН, только через hooks/
-- Хардкод инструментов в Sidebar — ЗАПРЕЩЁН, только useTools()
+- import next/next-server/next-auth/react в modules/ — запрещён
+- Prisma и Redis в middleware.ts — запрещён (Edge Runtime)
+- Бизнес-логика в route.ts — запрещена
+- prisma.balance.update() вне транзакции — запрещён
+- In-memory счётчики (let counter, Map) — запрещены, только Redis INCR/DECR
+- ToolRegistry.initialize() и cleanupStaleJobs() вне instrumentation.ts — запрещены
+- Символы ^ и ~ в версиях пакетов — запрещены, только точные версии
+- next-auth v5 beta — запрещён, только v4 stable
+- Логирование API-ключей, паролей и секретов — запрещено
+- Хардкод цветов (bg-[#xxx], style={{color}}) — запрещён, только CSS-переменные
+- fetch и axios внутри компонентов — запрещены, только через hooks/
+- Хардкод инструментов в Sidebar — запрещён, только useTools()
 
 # ЗАВИСИМОСТИ (строго сверху вниз)
 core → adapters → modules → plugins → apps
 
 # БИЛЛИНГ
-reserve → execute → finalize/rollback, всегда Serializable tx.
+Паттерн: reserve → execute → finalize/rollback. Всегда Serializable транзакция.
 idempotency_key обязателен. releaseSlot() всегда в finally.
 
 # ИНСТРУМЕНТ = 7 файлов
-manifest.json, schema.ts (.describe() обязателен), prompt.ts, handler.ts (чистая функция, без API/Prisma), index.ts, example.json, smoke.test.ts
+manifest.json, schema.ts (каждое поле с .describe()), prompt.ts, handler.ts (чистая функция без API и Prisma), index.ts, example.json, smoke.test.ts
 
 # РЕЕСТР
-resolve(): Cache(30s) → FS(schema+handler) → DB(prompt+model+status). БД побеждает.
-После PATCH admin/tools → invalidateCache().
+resolve(): Cache (30 сек) → FS (schema + handler) → DB (prompt + model + status). БД побеждает.
+После PATCH admin/tools — вызвать invalidateCache().
 
 # API ОТВЕТЫ
 Успех: { data: T }
 Ошибка: { error: { code, message, statusCode } }
 
 # ФРОНТЕНД
-4 состояния данных: loading(skeleton) → empty → error(toast+retry) → filled
-sync → SSE → <StreamResult />, async → jobId+polling → <JobProgress />
-Формы только через <AutoForm schema={} />
+Четыре состояния данных обязательны: loading (skeleton) → empty → error (toast + retry) → filled.
+sync → SSE → StreamResult, async → jobId + polling → JobProgress.
+Формы инструментов только через AutoForm schema.
