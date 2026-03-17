@@ -20,14 +20,16 @@ export function NavItem({ icon, label, href, badge }: NavItemProps) {
     <Link
       href={href}
       className={cn(
-        'flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors',
+        'flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-2 text-sm font-normal transition-colors',
         isActive
-          ? 'bg-accent text-text-primary'
-          : 'text-text-secondary hover:bg-[var(--color-border)] hover:text-text-primary',
+          ? 'bg-accent'
+          : 'hover:bg-[var(--color-border)]',
       )}
     >
       <span className="shrink-0 [&>svg]:size-[18px]">{icon}</span>
-      <span className="truncate">{label}</span>
+      <span className="truncate" style={{ color: '#171717' }}>
+        {label.charAt(0).toUpperCase() + label.slice(1)}
+      </span>
       {badge && (
         <Badge
           className="ml-auto border-transparent bg-accent text-text-primary text-[10px] px-1.5 py-0"

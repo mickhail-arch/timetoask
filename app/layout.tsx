@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: 'TimeToAsk',
+  title: 'Timetoask',
   description: 'AI-powered marketing tools',
 };
 

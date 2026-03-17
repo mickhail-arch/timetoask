@@ -12,6 +12,8 @@ const prisma = new PrismaClient({ adapter } as any);
 async function main() {
   console.log('🌱 Starting seed...');
 
+  await prisma.tool.deleteMany({ where: { slug: 'text-rewriter' } });
+
   // ─── 1. План Free ───────────────────────────────────────────────
   // Единственный план. Нет Pro и нет подписок.
   // Пользователь просто пополняет баланс токенами через ЮKassa.
@@ -60,28 +62,6 @@ async function main() {
   });
 
   console.log(`✅ Admin created: ${admin.email}`);
-
-  // ─── 3. Тестовый инструмент (disabled) ──────────────────────────
-  // Инструменты обычно регистрируются через ToolRegistry.initialize()
-  // при старте приложения из папки plugins/.
-  // Здесь — только пример, чтобы БД не была пустой.
-  const exampleTool = await prisma.tool.upsert({
-    where: { slug: 'text-rewriter' },
-    update: {},
-    create: {
-      slug: 'text-rewriter',
-      name: 'Рерайтер текста',
-      description: 'Переписывает текст в нужном тоне',
-      model: 'openai/gpt-4o-mini',
-      promptText: 'Ты профессиональный редактор. Перепиши текст в указанном тоне.',
-      status: 'disabled',
-      executionMode: 'sync',
-      tokenCost: 50,
-      freeUsesLimit: 5,
-    },
-  });
-
-  console.log(`✅ Tool created: ${exampleTool.name} (${exampleTool.status})`);
 
   console.log('\n🎉 Seed completed successfully!');
   console.log('─────────────────────────────────');
