@@ -11,15 +11,28 @@ export default function middleware(request: NextRequest) {
 
   const token = request.cookies.get('next-auth.session-token');
 
+  if (pathname === '/') {
+    return NextResponse.redirect(
+      new URL(token ? '/tools' : '/login', request.url),
+    );
+  }
+
   const isAuthPage =
     pathname === '/login' ||
     pathname.startsWith('/register');
 
   if (isAuthPage && token) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/tools', request.url));
   }
 
-  if (pathname.startsWith('/dashboard') && !token) {
+  const isProtected =
+    pathname.startsWith('/tools') ||
+    pathname.startsWith('/billing') ||
+    pathname.startsWith('/profile') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/settings');
+
+  if (isProtected && !token) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

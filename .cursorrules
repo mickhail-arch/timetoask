@@ -1,297 +1,42 @@
-# ПРАВИЛА РАЗРАБОТКИ — БРАУЗЕРНЫЙ SAAS-ВРАППЕР
+# АРХИТЕКТУРНЫЙ КОНТРАКТ
 
-# ══════════════════════════════════════
-# ГЛАВНОЕ ПРАВИЛО
-# ══════════════════════════════════════
-Route Handler = 10 строк максимум.
-Вся логика — только в modules/*.service.ts.
-Middleware — только cookie-проверка и редиректы.
-Это не стиль — это архитектурный контракт.
+Route Handler ≤ 10 строк. Логика только в modules/*.service.ts.
+Middleware — только cookie + редиректы. Без Prisma/Redis/логики.
 
-# ══════════════════════════════════════
-# АБСОЛЮТНЫЕ ЗАПРЕТЫ
-# ══════════════════════════════════════
-- new PrismaClient() ЗАПРЕЩЁН везде кроме lib/prisma.ts
-- import from 'next' ЗАПРЕЩЁН в modules/
-- import from 'next/server' ЗАПРЕЩЁН в modules/
-- import from 'next-auth' ЗАПРЕЩЁН напрямую в modules/
-- import from 'react' ЗАПРЕЩЁН в modules/
-- Prisma ЗАПРЕЩЕНА в middleware.ts (Edge Runtime)
-- Redis ЗАПРЕЩЁН в middleware.ts (Edge Runtime)
-- Бизнес-логика ЗАПРЕЩЕНА в route.ts
-- prisma.balance.update() ЗАПРЕЩЁН вне транзакции tx
-- in-memory счётчики конкурентности ЗАПРЕЩЕНЫ (let counter, Map)
-- ToolRegistry.initialize() ЗАПРЕЩЁН вне instrumentation.ts
-- cleanupStaleJobs() ЗАПРЕЩЁН вне instrumentation.ts
-- ^ и ~ ЗАПРЕЩЕНЫ в версиях пакетов — только точные версии
-- next-auth v5 beta ЗАПРЕЩЁН — только v4 stable
-- Логировать API-ключи ЗАПРЕЩЕНО — только payloadHash
+# ЗАПРЕТЫ
+- new PrismaClient() — только в lib/prisma.ts
+- import 'next'/'next/server'/'next-auth'/'react' в modules/ — ЗАПРЕЩЁН
+- Prisma/Redis в middleware.ts — ЗАПРЕЩЁН (Edge Runtime)
+- Бизнес-логика в route.ts — ЗАПРЕЩЁН
+- prisma.balance.update() вне tx — ЗАПРЕЩЁН
+- in-memory счётчики (let counter, Map) — ЗАПРЕЩЁН, только Redis INCR/DECR
+- ToolRegistry.initialize()/cleanupStaleJobs() вне instrumentation.ts — ЗАПРЕЩЁН
+- ^ и ~ в версиях пакетов — ЗАПРЕЩЁН
+- next-auth v5 beta — ЗАПРЕЩЁН, только v4 stable
+- Логировать API-ключи/пароли/секреты — ЗАПРЕЩЁН
+- Хардкод цветов (bg-[#xxx], style={{color}}) — ЗАПРЕЩЁН, только CSS-переменные
+- fetch/axios внутри компонентов — ЗАПРЕЩЁН, только через hooks/
+- Хардкод инструментов в Sidebar — ЗАПРЕЩЁН, только useTools()
 
-# ══════════════════════════════════════
-# ПОРЯДОК ЗАВИСИМОСТЕЙ (строго сверху вниз)
-# ══════════════════════════════════════
-core/       — ничего не импортирует из проекта
-adapters/   — только из core/
-modules/    — только из core/ + adapters/
-plugins/    — только из core/ + modules/
-apps/       — из всего выше
+# ЗАВИСИМОСТИ (строго сверху вниз)
+core → adapters → modules → plugins → apps
 
-Проверка: grep -r "from 'next'" modules/ должна быть пустой.
+# БИЛЛИНГ
+reserve → execute → finalize/rollback, всегда Serializable tx.
+idempotency_key обязателен. releaseSlot() всегда в finally.
 
-# ══════════════════════════════════════
-# ROUTE HANDLER — ШАБЛОН (копировать)
-# ══════════════════════════════════════
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json(
-    { error: { code: 'UNAUTHORIZED', statusCode: 401 } }, { status: 401 }
-  );
-  const body = schema.parse(await req.json());
-  const result = await Service.method(session.user.id, body);
-  return NextResponse.json({ data: result });
-}
+# ИНСТРУМЕНТ = 7 файлов
+manifest.json, schema.ts (.describe() обязателен), prompt.ts, handler.ts (чистая функция, без API/Prisma), index.ts, example.json, smoke.test.ts
 
-# ══════════════════════════════════════
-# MIDDLEWARE — ТОЛЬКО ЭТО
-# ══════════════════════════════════════
-export default function middleware(request: NextRequest) {
-  const token = request.cookies.get('next-auth.session-token');
-  if (request.nextUrl.pathname.startsWith('/dashboard') && !token) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-  return NextResponse.next();
-}
-Никакого Prisma, Redis, бизнес-логики в middleware.ts.
+# РЕЕСТР
+resolve(): Cache(30s) → FS(schema+handler) → DB(prompt+model+status). БД побеждает.
+После PATCH admin/tools → invalidateCache().
 
-# ══════════════════════════════════════
-# PRISMA — СТРОГИЕ ПРАВИЛА
-# ══════════════════════════════════════
-Единственный импорт: import { prisma } from '@/lib/prisma'
-Prisma 7: обязателен @prisma/adapter-pg
-Output: generated/prisma (не node_modules)
-previewFeatures: ["driverAdapters"]
-ESM: "type": "module" в package.json
+# API ОТВЕТЫ
+Успех: { data: T }
+Ошибка: { error: { code, message, statusCode } }
 
-# ══════════════════════════════════════
-# БИЛЛИНГ — ПАТТЕРН Reserve → Execute → Finalize
-# ══════════════════════════════════════
-ВСЕГДА через prisma.$transaction({ isolationLevel: 'Serializable', timeout: 10000 })
-НИКОГДА отдельные prisma.balance.update() вне транзакции.
-
-Паттерн:
-1. Reserve: reserved += cost (внутри tx)
-2. Execute: вызов инструмента (внутри tx)
-3. Finalize: amount -= cost, reserved -= cost (внутри tx)
-4. Rollback при ошибке: только reserved -= cost
-
-Free-режим:
-- Считать от FREE_USES_START_OF_TIME = new Date(0)
-- После лимита при нулевом балансе → HTTP 402, FREE_LIMIT_EXHAUSTED
-
-Идемпотентность:
-- idempotency_key обязателен в usage_log
-- Webhook: проверить providerPaymentId перед начислением
-- Checkout key: checkout:{userId}:{amount}:{windowMin}
-
-# ══════════════════════════════════════
-# КОНКУРЕНТНОСТЬ — ТОЛЬКО REDIS
-# ══════════════════════════════════════
-Счётчики ТОЛЬКО через Redis INCR/DECR (атомарный Lua-скрипт).
-При hot-reload in-memory счётчики сбрасываются — это баг.
-
-MAX_CONCURRENT_GLOBAL=20    — глобальный потолок
-MAX_CONCURRENT_PER_USER=2   — лимит на пользователя
-MAX_CONCURRENT_ASYNC=5      — отдельный счётчик async-задач
-MAX_EXECUTION_TIMEOUT_MS=120000
-
-releaseSlot() вызывается ВСЕГДА в finally — без исключений.
-При перегрузе → HTTP 429, не 500.
-
-# ══════════════════════════════════════
-# ИНСТРУМЕНТЫ — КОНТРАКТ 7 ФАЙЛОВ
-# ══════════════════════════════════════
-Каждый инструмент = папка с ровно 7 файлами:
-manifest.json  — id, model, executionMode, token_cost, status
-schema.ts      — Zod inputSchema + outputSchema, каждое поле с .describe()
-prompt.ts      — системный промпт (без упоминания guard)
-handler.ts     — buildUserMessage(input): string — ТОЛЬКО строки, без API
-index.ts       — точка входа ITool, копировать из _template
-example.json   — golden sample обязателен перед мержем
-smoke.test.ts  — без API: schema + buildUserMessage + manifest
-
-handler.ts: ЗАПРЕЩЕНЫ API-вызовы, Prisma, Redis, побочные эффекты.
-schema.ts: КАЖДОЕ поле обязательно с .describe() — это label в форме.
-manifest.json: status всегда 'disabled' в _template.
-
-executionMode:
-  sync  — SSE-стрим, ответ < 30 сек
-  async — jobId + polling GET /api/jobs/:id/status каждые 2 сек
-
-# ══════════════════════════════════════
-# РЕЕСТР ИНСТРУМЕНТОВ
-# ══════════════════════════════════════
-ToolRegistry.initialize() — ТОЛЬКО в instrumentation.ts.
-При upsert update: { version } — ТОЛЬКО version, не перезаписывать
-  model, promptText, status, executionMode, config из БД.
-resolve(): 1.Кэш(30сек) → 2.Файлы(schema+handler) → 3.БД(prompt+model+status)
-БД всегда побеждает файлы при конфликте.
-После PATCH /admin/tools/:id → вызвать invalidateCache(toolId).
-
-# ══════════════════════════════════════
-# INSTRUMENTATION.TS
-# ══════════════════════════════════════
-Всё что запускается при старте — ТОЛЬКО здесь:
-- ToolRegistry.initialize()
-- cleanupStaleReserves()
-- cleanupStaleJobs()
-- setInterval для cleanup каждые 5 мин
-
-Защита от hot-reload дублирования:
-if (g.__cleanupInterval) clearInterval(g.__cleanupInterval)
-
-# ══════════════════════════════════════
-# ФОРМАТ ОТВЕТОВ API
-# ══════════════════════════════════════
-Успех:  { data: T }
-Ошибка: { error: { code: string, message: string, statusCode: number } }
-
-Коды ошибок:
-UNAUTHORIZED        401
-FORBIDDEN           403
-VALIDATION_ERROR    400
-INSUFFICIENT_BALANCE 402
-FREE_LIMIT_EXHAUSTED 402
-TOO_MANY_REQUESTS   429
-LLM_UNAVAILABLE     503
-INTERNAL_ERROR      500
-
-# ══════════════════════════════════════
-# БЕЗОПАСНОСТЬ
-# ══════════════════════════════════════
-Webhook ЮKassa: HMAC-SHA256 верификация ДО любой обработки.
-При невалидной подписи: HTTP 400, никакой дальнейшей обработки.
-Prompt injection: wrapSystemPrompt() в modules/llm/prompt-guard.ts.
-Пароли: bcryptjs, BCRYPT_ROUNDS=10 (dev/test: 4).
-Логин: блокировка после 10 попыток (счётчик в Redis).
-
-# ══════════════════════════════════════
-# ВЕРСИИ ПАКЕТОВ — ТОЧНЫЕ, БЕЗ ^ И ~
-# ══════════════════════════════════════
-next: 16.1.x
-react: 19.2.x
-react-dom: 19.2.x
-next-auth: 4.x stable (НЕ v5 beta)
-prisma: 7.x
-@prisma/client: 7.x
-@prisma/adapter-pg: обязателен
-@openrouter/ai-sdk-provider: официальный пакет
-tailwindcss: 4.x
-ioredis: последняя стабильная
-bcryptjs: последняя стабильная
-
-# ══════════════════════════════════════
-# ЛОГИРОВАНИЕ
-# ══════════════════════════════════════
-ЗАПРЕЩЕНО логировать: пароли, API-ключи, NEXTAUTH_SECRET,
-  тело webhook целиком, токены сброса пароля.
-МОЖНО логировать: userId, toolId, statusCode, payloadHash.
-error — необработанные исключения
-warn  — невалидная подпись, retry LLM, зависший резерв
-info  — успешный запуск инструмента, пополнение баланса
-debug — только dev, никогда в production
-
-# ══════════════════════════════════════
-# FRONTEND — ТАЙМТУАСК
-# Полная документация: UI_TOKENS.md, UI_COMPONENTS.md,
-# UI_PAGES.md, UX_SCENARIOS.md, FRONTEND_ONBOARDING.md
-# ══════════════════════════════════════
-
-# СТЕК ФРОНТЕНДА
-Tailwind CSS 4, shadcn/ui, next/font (Inter)
-react-hook-form + zod, sonner (toast)
-Хуки: useBalance, useTools, useJobStatus, useToolExecution
-
-# ФАЙЛОВАЯ СТРУКТУРА
-app/(dashboard)/    — страницы кабинета (защищены сессией)
-app/(auth)/         — вход/регистрация (без оболочки)
-components/ui/      — базовые примитивы (Button, Input, Badge...)
-components/app/     — составные компоненты (Sidebar, Header, AutoForm...)
-hooks/              — вся логика запросов только здесь
-config/nav.ts       — только статичные пункты меню
-
-# АБСОЛЮТНЫЕ ЗАПРЕТЫ ФРОНТЕНДА
-- Хардкод цветов ЗАПРЕЩЁН: bg-[#A6E800], style={{color:'#fff'}}
-- ТОЛЬКО CSS-переменные через Tailwind-алиасы: bg-accent, text-primary
-- fetch/axios внутри компонентов ЗАПРЕЩЁН — только через хуки
-- Хардкод инструментов в Sidebar ЗАПРЕЩЁН — только useTools() → GET /api/tools
-- Кастомная форма инструмента ЗАПРЕЩЕНА — только <AutoForm schema={plugin.inputSchema} />
-- config/nav.ts — инструменты не добавлять, только статичные пункты
-
-# ОБЯЗАТЕЛЬНЫЕ ПАТТЕРНЫ
-
-Каждый блок с данными — 4 состояния обязательны:
-  loading → Skeleton (не спиннер на всю страницу)
-  empty   → Иконка + текст + кнопка действия
-  error   → Toast error + кнопка «Повторить»
-  filled  → Контент
-
-Добавить страницу в кабинет = 4 шага:
-  1. app/(dashboard)/[name]/page.tsx
-  2. Добавить в config/nav.ts
-  3. Описать в UI_PAGES.md
-  4. Всё остальное работает автоматически
-
-AutoForm инструмента:
-  <AutoForm
-    schema={plugin.inputSchema}
-    onSubmit={handleExecute}
-    loading={isExecuting}
-    tokenCost={plugin.token_cost}
-    freeUsesLeft={freeUsesLeft}
-  />
-  Маппинг Zod → поля: UI_COMPONENTS.md раздел 4.2
-
-Выполнение инструмента:
-  sync  → SSE-стрим → <StreamResult />
-  async → jobId + polling 2s → <JobProgress /> → <JobResult />
-  Режим определяется по plugin.executionMode
-
-Защита маршрутов:
-  (dashboard)/* → getServerSession → redirect(/login) если нет сессии
-  /admin        → role === 'admin' → иначе redirect(/dashboard)
-  (auth)/*      → если сессия есть → redirect(/dashboard)
-
-# ТОКЕНЫ (справочник)
-accent         = #A6E800
-bg-page        = #FFFFFF
-bg-sidebar     = #F5F5F5
-border         = #E0E0E0
-text-primary   = #1A1A1A
-text-secondary = #6B6B6B
-text-link      = #007AFF
-error          = #FF3B30
-success        = #34C759
-
-Sidebar = 220px, Header = 52px, ContentArea padding = 24px (p-6)
-radius-sm=6px (badge), radius-md=10px (кнопки/инпуты), radius-lg=12px (карточки)
-z: sidebar=10, header=20, dropdown=30, modal=50, toast=60
-
-# ХУКИ
-useBalance()        → { balance, reserved, isLoading }  polling 30s
-useTools()          → { tools, isLoading }               кеш 5 мин
-useJobStatus(jobId) → { status, steps, result, error }  polling 2s
-useToolExecution()  → { execute, streamContent, isExecuting, jobId, error }
-
-# РОЛИ
-user:  стандартный доступ
-admin: + /admin, + «Админка» в UserMenu, + колонка «Стоимость $» в логах
-
-Server Component: const session = await getServerSession(authOptions)
-Client Component: const { data: session } = useSession()
-Условный рендер:  {session?.user?.role === 'admin' && <AdminLink />}
-
-# ТЕКСТЫ ОШИБОК (точные, из макета)
-Login:           «Неверный email или пароль»
-Register пароль: «Пароль слишком простой. Используйте не менее 8 символов, включая буквы и цифры»
-Register repeat: «Пароли не совпадают. Проверьте введённые данные»
-Register код:    «Неверный код»
+# ФРОНТЕНД
+4 состояния данных: loading(skeleton) → empty → error(toast+retry) → filled
+sync → SSE → <StreamResult />, async → jobId+polling → <JobProgress />
+Формы только через <AutoForm schema={} />

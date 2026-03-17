@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, ChevronRight, FolderOpen } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { BalanceWidget } from '@/components/app/balance-widget';
 import { UserMenu } from '@/components/app/user-menu';
 
@@ -19,25 +19,32 @@ const SEGMENT_LABELS: Record<string, string> = {
 function Breadcrumb() {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
+  const currentSegment = segments[segments.length - 1];
+  const currentLabel =
+    !currentSegment || currentSegment === 'tools'
+      ? null
+      : (SEGMENT_LABELS[currentSegment] ?? decodeURIComponent(currentSegment));
 
   return (
-    <div className="flex items-center gap-[14px] text-sm text-text-secondary">
-      <FolderOpen size={16} className="shrink-0" />
-      {segments.map((seg, i) => {
-        const label = SEGMENT_LABELS[seg] ?? decodeURIComponent(seg);
-        const isLast = i === segments.length - 1;
-        return (
-          <span key={i} className="flex items-center gap-[14px]">
-            <ChevronRight size={14} className="shrink-0" />
-            <span
-              style={isLast ? { color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' } : undefined}
-            >
-              {label}
-            </span>
+    <nav className="flex items-center gap-2">
+      <Link
+        href="/tools"
+        className="transition-colors hover:opacity-80"
+        style={{ color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}
+      >
+        Инструменты
+      </Link>
+      {currentLabel && (
+        <>
+          <span style={{ color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}>
+            {'>'}
           </span>
-        );
-      })}
-    </div>
+          <span style={{ color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}>
+            {currentLabel}
+          </span>
+        </>
+      )}
+    </nav>
   );
 }
 
@@ -58,9 +65,9 @@ function IdCopyButton({ id }: { id: string }) {
         type="button"
         onClick={handleClick}
         className="cursor-pointer border-0 bg-transparent p-0"
-        style={{ color: '#B4B4B4', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}
+        style={{ color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}
       >
-        ID {id}
+        ID: {id}
       </button>
 
       {copied && (
@@ -87,22 +94,22 @@ export function Header() {
       </div>
 
       {/* Right: actions group */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
         <BalanceWidget />
 
         <Link
           href="/billing"
-          className="inline-flex h-8 items-center rounded-[var(--radius-md)] bg-accent px-[17px] transition-colors hover:bg-accent-hover"
+          className="inline-flex h-8 items-center rounded-[var(--radius-md)] bg-[#a6e800] px-[17px] transition-colors hover:bg-[#E8E8E8]"
           style={{ color: '#171717', fontWeight: 400, fontSize: '13px', fontFamily: 'Inter, sans-serif' }}
         >
           Пополнить
         </Link>
 
         <a
-          href="#"
+          href="https://t.me/timetoask_support"
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-3 flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1 transition-colors hover:bg-[#F5F5F5]"
+          className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1 transition-colors hover:bg-[#E8E8E8]"
           style={{ color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}
         >
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -120,15 +127,6 @@ export function Header() {
             />
 
             <IdCopyButton id={session.user.id?.slice(0, 6) ?? ''} />
-
-            {/* <button
-              type="button"
-              onClick={() => signOut({ callbackUrl: '/login' })}
-              className="rounded-[var(--radius-md)] p-1.5 text-text-secondary transition-colors hover:bg-[var(--color-border)] hover:text-text-primary"
-              aria-label="Выйти"
-            >
-              <LogOut size={18} />
-            </button> */}
           </>
         )}
       </div>

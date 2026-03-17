@@ -51,7 +51,7 @@ function ShareButton() {
     <button
       type="button"
       onClick={handleShare}
-      className="flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-[var(--color-border)] hover:text-text-primary"
+      className="flex w-full items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-[#E8E8E8] hover:text-text-primary"
     >
       <Share2 size={18} />
       Поделиться
@@ -66,7 +66,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-[220px] shrink-0 flex-col border-r border-border bg-bg-sidebar z-sidebar">
       {/* Logo + collapse */}
       <div className="flex items-center justify-between px-5 py-4">
-        <Link href="/dashboard">
+        <Link href="/tools">
           <Image
             src="/logo.svg"
             alt="Таймтуаск"

@@ -43,12 +43,12 @@ export function UserMenu({ email, role }: UserMenuProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1 transition-colors hover:bg-[var(--color-border)]"
+        className="flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-1 transition-colors hover:bg-[#E8E8E8]"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-sm font-bold text-text-primary">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#a6e800] text-sm font-bold text-text-primary">
           {initial}
         </span>
-        <span className="text-sm text-text-primary">{email}</span>
+        <span className="text-sm" style={{ color: '#171717', fontFamily: 'Inter, sans-serif' }}>{email}</span>
       </button>
 
       {open && (
@@ -61,7 +61,7 @@ export function UserMenu({ email, role }: UserMenuProps) {
           <Link
             href="/profile"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-[var(--color-border)] transition-colors"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-[#E8E8E8] transition-colors"
           >
             <User size={16} />
             Профиль
@@ -71,7 +71,7 @@ export function UserMenu({ email, role }: UserMenuProps) {
             <Link
               href="/admin"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-[var(--color-border)] transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-[#E8E8E8] transition-colors"
             >
               <Shield size={16} />
               Админка
@@ -81,7 +81,7 @@ export function UserMenu({ email, role }: UserMenuProps) {
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: '/login' })}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-[var(--color-border)] transition-colors"
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-[#E8E8E8] transition-colors"
           >
             <LogOut size={16} />
             Выйти

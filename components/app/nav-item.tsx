@@ -23,7 +23,7 @@ export function NavItem({ icon, label, href, badge }: NavItemProps) {
         'flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-2 text-sm font-normal transition-colors',
         isActive
           ? 'bg-accent'
-          : 'hover:bg-[var(--color-border)]',
+          : 'hover:bg-[#E8E8E8]',
       )}
     >
       <span className="shrink-0 [&>svg]:size-[18px]">{icon}</span>
