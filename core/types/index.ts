@@ -14,6 +14,22 @@ export type ExecutionMode = 'sync' | 'async';
 export type ToolStatus = 'active' | 'disabled' | 'beta';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
+/** Маппинг "шаг пайплайна → модель OpenRouter". Ключи — логические имена шагов. */
+export type StepModelsConfig = Record<string, string>;
+
+/** Полная конфигурация плагина из manifest.json поле config */
+export interface ToolConfig {
+  models?: StepModelsConfig;
+  pricing?: {
+    base: number;
+    perCharBlock: number;
+    perImage: number;
+    perFaq: number;
+    charBlockSize: number;
+  };
+  [key: string]: unknown;
+}
+
 export interface ResolvedTool {
   id: string;
   name: string;
@@ -24,6 +40,7 @@ export interface ResolvedTool {
   executionMode: ExecutionMode;
   tokenCost: number;
   freeUsesLimit: number;
+  config: ToolConfig | null;
   inputSchema: ZodType;
   outputSchema: ZodType;
   buildUserMessage: (input: Record<string, unknown>) => string;

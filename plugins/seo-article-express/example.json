@@ -1,0 +1,19 @@
+{
+  "input": {
+    "target_query": "как выбрать кофемашину для дома",
+    "keywords": "кофемашина для дома\nрожковая кофемашина\nкакую кофемашину купить\nкапсульная или рожковая",
+    "intent": "informational",
+    "target_char_count": 8000,
+    "image_count": 2,
+    "tone_of_voice": "expert",
+    "target_audience": { "gender": "all", "age": ["all"] },
+    "geo_location": "Москва",
+    "image_style": ["realistic"],
+    "faq_count": 5,
+    "brand": "",
+    "cta": "",
+    "own_sources": "",
+    "forbidden_words": "",
+    "legal_restrictions": ""
+  }
+}

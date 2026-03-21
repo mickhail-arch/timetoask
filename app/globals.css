@@ -69,6 +69,23 @@
   --z-dropdown: 30;
   --z-modal: 50;
   --z-toast: 60;
+
+  /* SEO-инструмент: шаги */
+  --color-step-done: #34C759;
+  --color-step-running: #A6E800;
+  --color-step-pending: #D4D4D4;
+  --color-step-error: #FF3B30;
+
+  /* SEO-инструмент: метрики */
+  --color-metric-green: #34C759;
+  --color-metric-yellow: #E5A100;
+  --color-metric-red: #FF3B30;
+
+  /* SEO-инструмент: UI */
+  --color-brief-bg: #FAFFF0;
+  --color-warn-bg: #FFF8E1;
+  --color-warn-border: #F5E6A3;
+  --color-warn-text: #B8860B;
 }
 
 body {

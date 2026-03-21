@@ -1,0 +1,32 @@
+/* components/seo-article/tokens.css — токены SEO-инструмента */
+/* Ссылаются на глобальные переменные. Менять тему = менять этот файл. */
+
+:root {
+  /* Кнопки */
+  --seo-btn-primary-bg: var(--color-accent);
+  --seo-btn-primary-text: #1A1A1A;
+  --seo-btn-default-bg: #fff;
+  --seo-btn-default-border: var(--color-border);
+
+  /* Карточки */
+  --seo-card-bg: var(--color-bg-surface);
+  --seo-card-border: var(--color-border);
+
+  /* Инпуты */
+  --seo-input-border: var(--color-border);
+  --seo-input-focus: var(--color-accent);
+  --seo-input-placeholder: #BFBFBF;
+
+  /* Бейджи заголовков */
+  --seo-badge-h1: #1A1A1A;
+  --seo-badge-h2: var(--color-accent);
+  --seo-badge-h3: #F5F5F5;
+
+  /* Выбранные элементы (tone, аудитория) */
+  --seo-selected-bg: #1A1A1A;
+  --seo-selected-text: #fff;
+
+  /* Акцентные стили (image_style) */
+  --seo-accent-selected-bg: var(--color-accent);
+  --seo-accent-selected-text: #1A1A1A;
+}

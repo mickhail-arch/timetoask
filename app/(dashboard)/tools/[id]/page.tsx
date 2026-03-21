@@ -11,7 +11,7 @@ interface Manifest {
 }
 
 async function getTool(id: string) {
-  const tool = await prisma.tool.findUnique({ where: { id } });
+  const tool = await prisma.tool.findUnique({ where: { slug: id } });
   if (!tool || tool.status === 'disabled') return null;
 
   let outputFormat = 'json';

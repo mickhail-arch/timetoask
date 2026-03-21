@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { prisma } from '@/lib/prisma';
 import { redis } from '@/lib/redis';
 import { TOOL_CACHE_TTL_SEC } from '@/core/constants';
-import type { ResolvedTool, ToolStatus, ExecutionMode } from '@/core/types';
+import type { ResolvedTool, ToolStatus, ExecutionMode, ToolConfig } from '@/core/types';
 
 const PLUGINS_DIR = join(process.cwd(), 'plugins');
 const CACHE_PREFIX = 'tool:';
@@ -17,6 +17,7 @@ interface Manifest {
   free_uses_limit: number;
   output_format: string;
   status: string;
+  config?: Record<string, unknown>;
 }
 
 export class ToolRegistry {
@@ -57,6 +58,7 @@ export class ToolRegistry {
           executionMode: manifest.executionMode,
           tokenCost: manifest.token_cost,
           freeUsesLimit: manifest.free_uses_limit,
+          config: manifest.config ?? null,
           version: 1,
         },
         update: {
@@ -110,6 +112,7 @@ export class ToolRegistry {
       executionMode: dbTool.executionMode as ExecutionMode,
       tokenCost: dbTool.tokenCost,
       freeUsesLimit: dbTool.freeUsesLimit,
+      config: (dbTool.config as ToolConfig) ?? null,
       inputSchema: fsModule.inputSchema,
       outputSchema: fsModule.outputSchema,
       buildUserMessage: fsModule.buildUserMessage,
@@ -125,6 +128,7 @@ export class ToolRegistry {
       executionMode: resolved.executionMode,
       tokenCost: resolved.tokenCost,
       freeUsesLimit: resolved.freeUsesLimit,
+      config: resolved.config,
     };
     await redis.setex(cacheKey, TOOL_CACHE_TTL_SEC, JSON.stringify(serializable));
 
