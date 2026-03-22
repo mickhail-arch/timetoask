@@ -21,15 +21,28 @@ interface ExportPanelProps {
   onDownloadHtml: () => void;
   onDownloadDocx: () => void;
   onDownloadMetadata: () => void;
+  onNewArticle: () => void;
 }
 
-export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata }: ExportPanelProps) {
+export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle }: ExportPanelProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    onCopyArticle();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [onCopyArticle]);
+
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
       <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Экспорт статьи</div>
       <div className="space-y-1.5">
-        <button onClick={onCopyArticle} className="w-full rounded-[var(--radius-md)] bg-[var(--seo-selected-bg)] py-2.5 text-[13px] font-medium text-[var(--seo-selected-text)] transition-colors hover:opacity-90">
-          Скопировать статью
+        <button onClick={handleCopy} className={`w-full rounded-[var(--radius-md)] py-2.5 text-[13px] font-medium transition-all ${
+          copied
+            ? 'bg-[var(--color-step-done)] text-white'
+            : 'bg-[var(--seo-selected-bg)] text-[var(--seo-selected-text)] hover:opacity-90'
+        }`}>
+          {copied ? '✓ Текст скопирован' : 'Скопировать статью'}
         </button>
         <div className="flex gap-1.5">
           <button onClick={onDownloadHtml} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Скачать .html</button>
@@ -38,6 +51,10 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
         <button onClick={onDownloadMetadata} className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Метаданные .docx</button>
       </div>
       <div className="mt-2 text-center text-[11px] text-[var(--color-step-pending)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>
+      <button onClick={onNewArticle}
+        className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]">
+        Создать новую статью
+      </button>
     </div>
   );
 }

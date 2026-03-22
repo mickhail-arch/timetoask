@@ -34,7 +34,7 @@ export function MetadataPanel({ pageName, slug, breadcrumb, altTexts, jsonLd }: 
           <span className="text-[11px] text-[var(--color-text-secondary)]">JSON-LD Schema</span>
           <CopyButton text={jsonLd} />
         </div>
-        <div className="max-h-20 overflow-y-auto rounded-[var(--radius-sm)] border border-[#F0F0F0] bg-[#FAFAFA] px-2.5 py-2 font-mono text-[11px] text-[#444] break-all">{jsonLd}</div>
+        <div className="max-h-20 overflow-y-auto rounded-[var(--radius-sm)] border border-[#F0F0F0] bg-[#FAFAFA] px-2.5 py-2 font-mono text-[11px] text-[#444] break-words whitespace-pre-wrap">{jsonLd}</div>
       </div>
     </div>
   );
@@ -43,7 +43,7 @@ export function MetadataPanel({ pageName, slug, breadcrumb, altTexts, jsonLd }: 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between border-b border-[#F0F0F0] py-2">
-      <div className="flex-1"><div className="text-[11px] text-[var(--color-text-secondary)]">{label}</div><div className="text-[13px] break-all">{value}</div></div>
+      <div className="flex-1"><div className="text-[11px] text-[var(--color-text-secondary)]">{label}</div><div className="text-[13px] break-words">{value}</div></div>
       <CopyButton text={value} />
     </div>
   );

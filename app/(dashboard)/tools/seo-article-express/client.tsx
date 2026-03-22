@@ -49,7 +49,24 @@ export function SeoArticleExpressClient() {
     }
 
     if ((jobState.status === 'completed' || jobState.progress >= 100) && screen === 'progress_generation') {
-      setResult(jobState.result ?? null);
+      const raw = jobState.result as Record<string, unknown> ?? {};
+      const assembly = raw.assembly as Record<string, unknown> ?? {};
+      const aiRevisions = raw.ai_detect_revisions as Record<string, unknown> ?? {};
+
+      const flatResult = {
+        article_html: (assembly.article_html as string) ?? '',
+        article_docx_base64: (assembly.article_docx_base64 as string) ?? '',
+        metadata: (assembly.metadata as Record<string, unknown>) ?? {},
+        quality_metrics: (assembly.qualityMetrics as Record<string, number>)
+          ?? (aiRevisions.qualityMetrics as Record<string, number>)
+          ?? {},
+        warnings: [
+          ...((assembly.warnings as string[]) ?? []),
+          ...((aiRevisions.warnings as string[]) ?? []),
+        ],
+      };
+
+      setResult(flatResult);
       setScreen('result');
     }
   }, [jobState, screen]);
@@ -178,6 +195,7 @@ export function SeoArticleExpressClient() {
           onDownloadHtml={() => downloadHTML((result as any).article_html ?? '', (result as any).metadata?.slug ?? 'article')}
           onDownloadDocx={() => downloadDOCX((result as any).article_docx_base64 ?? '', (result as any).metadata?.file_name ?? 'article.docx')}
           onDownloadMetadata={() => downloadMetadata('', (result as any).metadata?.metadata_file_name ?? 'metadata.docx')}
+          onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); }}
         />
       )}
     </div>

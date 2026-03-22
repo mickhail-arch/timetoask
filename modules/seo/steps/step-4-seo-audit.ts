@@ -81,8 +81,9 @@ export async function executeSeoAudit(
   }
 
   // --- FAQ ---
-  const faqH2 = html.match(/<h2[^>]*>.*(?:FAQ|часто задаваемые|вопрос).*<\/h2>/gi) ?? [];
-  if (faqCount > 0 && faqH2.length === 0) addIssue('faq', 'warning', 'FAQ-блок не найден', 'Добавить H2 с FAQ');
+  const faqSectionMatch = html.match(/<h2[^>]*>.*?(?:FAQ|часто задаваемые|вопрос)[\s\S]*?(?=<h2[\s>]|$)/i);
+  const faqH3Count = faqSectionMatch ? (faqSectionMatch[0].match(/<h3[\s>]/gi) ?? []).length : 0;
+  if (faqCount > 0 && faqH3Count === 0) addIssue('faq', 'warning', 'FAQ-блок не найден', 'Добавить H2 с FAQ');
 
   // --- Запрещённые слова ---
   for (const fw of forbiddenWords) {
@@ -151,7 +152,7 @@ export async function executeSeoAudit(
     h2_count: h2s.length,
     h3_count: h3s.length,
     image_count: imgTags.length || (html.match(/\[IMAGE_\d+\]/g) ?? []).length,
-    faq_count: faqH2.length,
+    faq_count: faqH3Count,
   };
 
   return {

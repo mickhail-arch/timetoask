@@ -52,19 +52,19 @@ export async function executeAssembly(
 
   const h1Match = articleHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   const h1Text = h1Match ? h1Match[1].replace(/<[^>]*>/g, '').trim() : targetQuery;
-  const title = h1Text.length <= 60 ? h1Text : h1Text.slice(0, 57) + '...';
+  const title = h1Text;
 
   const plainText = articleHtml.replace(/<[^>]*>/g, '');
   const firstSentences = plainText.split(/[.!?]/).filter(s => s.trim().length > 10).slice(0, 2).join('. ').trim();
-  let description = firstSentences.length > 160
-    ? firstSentences.slice(0, 157) + '...'
-    : firstSentences + '.';
-  if (description.length < 140) {
+  let description = firstSentences.endsWith('.') ? firstSentences : firstSentences + '.';
+  if (description.length < 50) {
     description = `${mainKeyword}. ${description}`;
   }
 
   const slug = transliterate(h1Text).slice(0, 60);
-  const breadcrumb = targetQuery.split(' ').slice(0, 5).join(' ');
+  const breadcrumb = h1Text.length > 40
+    ? h1Text.split(' ').slice(0, 5).join(' ')
+    : h1Text;
 
   // 7.2 — Schema JSON-LD
   const schemas: Record<string, unknown>[] = [];
@@ -108,7 +108,10 @@ export async function executeAssembly(
   const styledHtml = wrapWithInlineStyles(articleHtml, addDisclaimer, legalRestrictions);
 
   // 7.5 — Именование файлов
-  const fileBaseName = transliterate(targetQuery);
+  const fileBaseName = slug || transliterate(targetQuery);
+
+  const faqSection = styledHtml.match(/<h2[^>]*>.*?(?:FAQ|часто задаваемые|вопрос)[\s\S]*?(?=<h2[\s>]|<\/article>|$)/i);
+  const actualFaqCount = faqSection ? (faqSection[0].match(/<h3[\s>]/gi) ?? []).length : 0;
 
   const metadata = {
     title,
@@ -117,6 +120,7 @@ export async function executeAssembly(
     breadcrumb,
     alt_texts: altTexts,
     json_ld: jsonLd,
+    actual_faq_count: actualFaqCount,
     file_name: `${fileBaseName}.docx`,
     metadata_file_name: `${fileBaseName}_metadannye.docx`,
   };
@@ -151,7 +155,7 @@ function transliterate(text: string): string {
     .join('')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-    .slice(0, 60);
+    .slice(0, 50);
 }
 
 function extractFAQ(html: string): Array<{ question: string; answer: string }> {
