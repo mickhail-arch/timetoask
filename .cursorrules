@@ -54,3 +54,33 @@ resolve(): Cache (30 сек) → FS (schema + handler) → DB (prompt + model + 
 Четыре состояния данных обязательны: loading (skeleton) → empty → error (toast + retry) → filled.
 sync → SSE → StreamResult, async → jobId + polling → JobProgress.
 Формы инструментов только через AutoForm schema.
+
+## SEO-инструмент (seo-article-express)
+
+### Архитектура
+- modules/seo/ — ядро пайплайна. НЕ импортирует Next.js.
+- adapters/moderation/, adapters/ai-detection/ — изолированные адаптеры. Без БД.
+- plugins/seo-article-express/ — контракт плагина. handler.ts — чистая функция.
+- components/seo-article/ — UI-компоненты. Используют ТОЛЬКО переменные из tokens.css.
+
+### Шаги пайплайна
+- Каждый шаг возвращает StepResult { success, data, error?, durationMs }.
+- Каждый шаг читает модель через getStepModel(config, stepName, fallback).
+- Данные между шагами — через ctx.data[stepName]. Шаг не знает про другие шаги.
+- Redis для polling (TTL 2ч), PG для персистенции.
+
+### Биллинг
+- Динамическая цена: reserve при "Создать статью", не при confirm.
+- Формула: base + ceil(chars/charBlockSize)*perCharBlock + images*perImage + faq*perFaq.
+- Конфиг цен — в manifest.json config.pricing → БД.
+
+### UI
+- 5 экранов: ScreenInput → ScreenProgress (анализ) → ScreenBrief → ScreenProgress (генерация) → ScreenResult.
+- Хардкод цветов запрещён — только CSS-переменные из tokens.css и globals.css.
+- Выбранные элементы (tone, аудитория): --seo-selected-bg/#1A1A1A + белый текст.
+- Акцентные (стили картинок): --seo-accent-selected-bg/зелёный.
+
+### Формат статьи
+- HTML с inline-стилями для портативности.
+- Картинки в base64 внутри <figure><img>.
+- Schema JSON-LD: Article (всегда), FAQPage (если faq≥1), HowTo (если intent=educational).

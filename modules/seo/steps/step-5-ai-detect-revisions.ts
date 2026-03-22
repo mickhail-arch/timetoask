@@ -97,14 +97,16 @@ ${issuesList}
       systemPrompt: revisionsPrompt,
       userMessage: articleHtml,
     });
+    // Очистить markdown-обёртки от LLM
+    const cleanRevised = revised.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
     // Проверка после правок
-    const revisedH1 = (revised.match(/<h1[\s>]/gi) ?? []).length;
-    const revisedH2 = (revised.match(/<h2[\s>]/gi) ?? []).length;
+    const revisedH1 = (cleanRevised.match(/<h1[\s>]/gi) ?? []).length;
+    const revisedH2 = (cleanRevised.match(/<h2[\s>]/gi) ?? []).length;
     const originalH2 = (articleHtml.match(/<h2[\s>]/gi) ?? []).length;
-    const revisedText = revised.replace(/<[^>]*>/g, '');
+    const revisedText = cleanRevised.replace(/<[^>]*>/g, '');
     const originalText = articleHtml.replace(/<[^>]*>/g, '');
-    const revisedMarkers = (revised.match(/\[IMAGE_\d+\]/g) ?? []).length;
+    const revisedMarkers = (cleanRevised.match(/\[IMAGE_\d+\]/g) ?? []).length;
     const originalMarkers = (articleHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
 
     const rollback =
@@ -116,7 +118,7 @@ ${issuesList}
     if (rollback) {
       console.warn('[step-5] Revision validation failed, rolling back to original');
     } else {
-      articleHtml = revised;
+      articleHtml = cleanRevised;
     }
   } catch (err) {
     console.warn('[step-5] Revision LLM error, keeping original text:', err);

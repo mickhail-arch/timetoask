@@ -12,11 +12,11 @@
       "moderation": "google/gemini-2.5-flash",
       "brief": "google/gemini-2.5-flash",
       "moderation_headings": "google/gemini-2.5-flash",
-      "draft": "anthropic/claude-sonnet-4-5",
+      "draft": "google/gemini-2.5-flash",
       "image_prompt": "google/gemini-2.5-flash",
-      "image_gen": "bytedance/seedream-4.5",
-      "ai_detect": "anthropic/claude-sonnet-4-5",
-      "revisions": "anthropic/claude-sonnet-4-5"
+      "image_gen": "google/gemini-2.5-flash",
+      "ai_detect": "google/gemini-2.5-flash",
+      "revisions": "google/gemini-2.5-flash"
     },
     "pricing": {
       "base": 100,
