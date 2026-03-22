@@ -5,6 +5,7 @@ import { executeModerationHeadings } from './step-2-5-moderation-headings';
 import { executeDraft } from './step-3-draft';
 import { executeSeoAudit } from './step-4-seo-audit';
 import { executeAiDetectRevisions } from './step-5-ai-detect-revisions';
+import { executeTargetedRewrite } from './step-5-5-targeted-rewrite';
 import { executeImages } from './step-6-images';
 import { executeAssembly } from './step-7-assembly';
 
@@ -47,6 +48,11 @@ export const seoExpressSteps: StepDefinition[] = [
     name: 'ai_detect_revisions',
     displayName: 'Финальные улучшения',
     execute: executeAiDetectRevisions,
+  },
+  {
+    name: 'targeted_rewrite',
+    displayName: 'Точечный рерайт',
+    execute: executeTargetedRewrite,
   },
   {
     name: 'images',

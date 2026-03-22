@@ -22,7 +22,8 @@ const STEP_PROGRESS: Record<string, [number, number]> = {
   'moderation_headings': [15, 20],
   'draft': [20, 55],
   'seo_audit': [55, 65],
-  'ai_detect_revisions': [65, 90],
+  'ai_detect_revisions': [65, 82],
+  'targeted_rewrite': [82, 90],
   'images': [90, 97],
   'assembly': [97, 100],
 };
@@ -126,6 +127,7 @@ export async function runPipeline(
           brief,
           calculatedPrice: price.total,
           priceBreakdown: price,
+          originalInput: input,
         });
 
         await updateJobStep(jobId, {
@@ -211,7 +213,7 @@ export async function resumePipeline(
   const ctx: PipelineContext = {
     jobId,
     userId,
-    input: state.result ?? {},
+    input: state.originalInput ?? state.result ?? {},
     config,
     data: { ...state.result, confirmation: { brief: updatedBrief, user_edited: true } },
   };

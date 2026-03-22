@@ -54,7 +54,9 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   "h2_list": [
     {
       "text": "заголовок H2",
-      "h3s": ["заголовок H3", "заголовок H3"]
+      "h3s": ["заголовок H3", "заголовок H3"],
+      "thesis": "краткий тезис: о чём писать в этом разделе (1 предложение)",
+      "facts": ["конкретный факт или цифра для раздела", "пример или кейс"]
     }
   ],
   "subtopics": ["подтема 1", "подтема 2"],
@@ -70,6 +72,8 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
 - Основной ключ: если запрос ≤5 слов — целиком, если >5 — ВЧ-ядро 2-5 слов
 - H1 содержит основной ключ
 - LSI: 2-4 уникальных на каждые 2000 символов, не дублировать keywords
+- thesis: для каждого H2 — одно предложение, объясняющее что именно раскрывать в разделе
+- facts: 1-2 конкретных факта, цифры, примера или кейса которые должны быть упомянуты в разделе. Не выдумывай — предлагай реалистичные данные по теме
 - Макс доп. ключей: ${maxKeywords}
 - Если faq_count > 0: последний H2 = "Часто задаваемые вопросы" с H3 для каждого вопроса`;
 
@@ -89,7 +93,12 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 
     const brief: BriefData = {
       h1: parsed.h1 ?? '',
-      h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list : [],
+      h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
+        text: (h2.text as string) ?? '',
+        h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
+        thesis: (h2.thesis as string) ?? '',
+        facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
+      })) : [],
       subtopics: Array.isArray(parsed.subtopics) ? parsed.subtopics : [],
       lsi_keywords: Array.isArray(parsed.lsi_keywords) ? parsed.lsi_keywords : [],
       featured_snippet_spec: parsed.featured_snippet_spec,
@@ -127,7 +136,12 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 
       const brief: BriefData = {
         h1: parsed.h1 ?? '',
-        h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list : [],
+        h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
+          text: (h2.text as string) ?? '',
+          h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
+          thesis: (h2.thesis as string) ?? '',
+          facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
+        })) : [],
         subtopics: Array.isArray(parsed.subtopics) ? parsed.subtopics : [],
         lsi_keywords: Array.isArray(parsed.lsi_keywords) ? parsed.lsi_keywords : [],
         featured_snippet_spec: parsed.featured_snippet_spec,

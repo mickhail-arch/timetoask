@@ -52,7 +52,7 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
       </div>
       <div className="mt-2 text-center text-[11px] text-[var(--color-step-pending)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>
       <button onClick={onNewArticle}
-        className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]">
+        className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-[13px] text-black transition-colors hover:brightness-90">
         Создать новую статью
       </button>
     </div>

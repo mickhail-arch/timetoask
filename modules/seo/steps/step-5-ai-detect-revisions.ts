@@ -6,10 +6,10 @@ import { generateText } from '@/adapters/llm/openrouter.adapter';
 import type { ToolConfig } from '@/core/types';
 
 /**
- * Шаг 5: AI-детект + правки (всегда 1 итерация) + повторный детект (если первый >35%).
+ * Шаг 5: AI-детект + правки (до 2 итераций) + повторный детект (если первый >35%).
  * 5.1 — AI-детект
  * 5.2 — Объединение seo_issues + ai_issues
- * 5.3 — Правки (всегда)
+ * 5.3 — Правки (до 2 итераций) + мини-аудит после каждой
  * 5.4 — Повторный AI-детект (только если 5.1 >35%)
  */
 export async function executeAiDetectRevisions(
@@ -18,8 +18,8 @@ export async function executeAiDetectRevisions(
   const start = Date.now();
 
   const config = ctx.config as ToolConfig | null;
-  const aiModel = getStepModel(config, 'ai_detect', 'anthropic/claude-sonnet-4-5');
-  const revisionsModel = getStepModel(config, 'revisions', 'anthropic/claude-sonnet-4-5');
+  const aiModel = getStepModel(config, 'ai_detect', 'google/gemini-2.5-flash');
+  const revisionsModel = getStepModel(config, 'revisions', 'google/gemini-2.5-flash');
 
   // Получить текст статьи из предыдущего шага
   const draftData = ctx.data.draft as Record<string, unknown>
@@ -60,16 +60,46 @@ export async function executeAiDetectRevisions(
     ? allIssues.filter(i => i.severity === 'critical' || i.severity === 'warning').slice(0, 15)
     : allIssues.filter(i => i.severity !== 'info');
 
-  // 5.3 — Правки (ВСЕГДА выполняются)
-  const issuesList = issuesToFix.length > 0
-    ? issuesToFix.map((iss, i) => `${i + 1}. [${iss.severity}] ${iss.message}${iss.fix_instruction ? ` → ${iss.fix_instruction}` : ''}`).join('\n')
-    : '';
+  // Оригинальные метрики для валидации
+  const originalH2Count = (articleHtml.match(/<h2[\s>]/gi) ?? []).length;
+  const originalTextLength = articleHtml.replace(/<[^>]*>/g, '').length;
+  const originalMarkerCount = (articleHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
+  const criticalSeoIssues = seoIssues.filter(i => i.severity === 'critical');
+  const warnings: string[] = [];
 
-  const revisionsPrompt = issuesToFix.length > 0
-    ? `Ты — SEO-редактор. Внеси правки в статью по списку проблем.
+  function miniAudit(html: string): boolean {
+    const h1 = (html.match(/<h1[\s>]/gi) ?? []).length;
+    const h2 = (html.match(/<h2[\s>]/gi) ?? []).length;
+    const textLen = html.replace(/<[^>]*>/g, '').length;
+    const markers = (html.match(/\[IMAGE_\d+\]/g) ?? []).length;
+    return (
+      h1 !== 1 ||
+      h2 !== originalH2Count ||
+      textLen < originalTextLength * 0.8 ||
+      textLen > originalTextLength * 1.2 ||
+      (originalMarkerCount > 0 && markers < originalMarkerCount)
+    );
+  }
+
+  function buildRevisionsPrompt(issues: SeoIssue[]): string {
+    if (issues.length === 0) {
+      return `Ты — SEO-редактор. Проведи финальную полировку статьи:
+- Улучши 2–3 перехода между разделами.
+- Разнообразь начала абзацев (факт/вопрос/пример).
+- Добавь 1–2 конкретных детали (число, дата, пример).
+- Измени не более 5–7% текста.
+- Не раздувай FAQ-ответы, держи каждый в пределах 150-300 символов.
+- Сохрани все заголовки H1/H2/H3, маркеры [IMAGE_N], формат HTML.
+
+Верни ТОЛЬКО отредактированный HTML статьи, без пояснений.`;
+    }
+    const list = issues.map((iss, i) =>
+      `${i + 1}. [${iss.severity}] ${iss.message}${iss.fix_instruction ? ` → ${iss.fix_instruction}` : ''}`,
+    ).join('\n');
+    return `Ты — SEO-редактор. Внеси правки в статью по списку проблем.
 
 ПРОБЛЕМЫ:
-${issuesList}
+${list}
 
 ПРАВИЛА:
 - Исправь каждую проблему из списка.
@@ -77,51 +107,78 @@ ${issuesList}
 - Сохрани все заголовки H1/H2/H3 на месте.
 - Сохрани все маркеры [IMAGE_N] и [IMAGE_N_DESC] на месте.
 - Объём может измениться не более чем на ±15%.
-- Формат: HTML (h1, h2, h3, p, strong, em).
+- Формат: HTML (h1, h2, h3, p). Не добавляй <strong>, <em>, <b>, <i>.
+- FAQ-ответы: не длиннее 300 символов каждый. Если ответ длиннее — сократи.
 
-Верни ТОЛЬКО исправленный HTML статьи, без пояснений.`
-    : `Ты — SEO-редактор. Проведи финальную полировку статьи:
-- Улучши 2–3 перехода между разделами.
-- Разнообразь начала абзацев (факт/вопрос/пример).
-- Добавь 1–2 конкретных детали (число, дата, пример).
-- Измени не более 5–7% текста.
-- Сохрани все заголовки H1/H2/H3, маркеры [IMAGE_N], формат HTML.
+Верни ТОЛЬКО исправленный HTML статьи, без пояснений.`;
+  }
 
-Верни ТОЛЬКО отредактированный HTML статьи, без пояснений.`;
+  async function executeRevisionIteration(
+    currentHtml: string,
+    issues: SeoIssue[],
+    iterationLabel: string,
+  ): Promise<string> {
+    const prompt = buildRevisionsPrompt(issues);
+    try {
+      const revised = await generateText({
+        model: revisionsModel,
+        systemPrompt: prompt,
+        userMessage: currentHtml,
+      });
+      const cleanRevised = revised.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
+      const revisedH1 = (cleanRevised.match(/<h1[\s>]/gi) ?? []).length;
+      const revisedH2 = (cleanRevised.match(/<h2[\s>]/gi) ?? []).length;
+      const revisedText = cleanRevised.replace(/<[^>]*>/g, '');
+      const currentText = currentHtml.replace(/<[^>]*>/g, '');
+      const revisedMarkers = (cleanRevised.match(/\[IMAGE_\d+\]/g) ?? []).length;
+      const currentMarkers = (currentHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
+
+      const rollback =
+        revisedH1 !== 1 ||
+        revisedH2 !== originalH2Count ||
+        revisedText.length < currentText.length * 0.85 ||
+        revisedMarkers < currentMarkers;
+
+      if (rollback) {
+        console.warn(`[step-5] Revision ${iterationLabel} validation failed, rolling back`);
+        return currentHtml;
+      }
+      return cleanRevised;
+    } catch (err) {
+      console.warn(`[step-5] Revision ${iterationLabel} LLM error, keeping current text:`, err);
+      return currentHtml;
+    }
+  }
+
+  // 5.3 — Правки (до 2 итераций)
   const articleBefore = articleHtml;
 
-  try {
-    const revised = await generateText({
-      model: revisionsModel,
-      systemPrompt: revisionsPrompt,
-      userMessage: articleHtml,
-    });
-    // Очистить markdown-обёртки от LLM
-    const cleanRevised = revised.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  // --- Итерация 1 ---
+  articleHtml = await executeRevisionIteration(articleHtml, issuesToFix, 'iteration 1');
 
-    // Проверка после правок
-    const revisedH1 = (cleanRevised.match(/<h1[\s>]/gi) ?? []).length;
-    const revisedH2 = (cleanRevised.match(/<h2[\s>]/gi) ?? []).length;
-    const originalH2 = (articleHtml.match(/<h2[\s>]/gi) ?? []).length;
-    const revisedText = cleanRevised.replace(/<[^>]*>/g, '');
-    const originalText = articleHtml.replace(/<[^>]*>/g, '');
-    const revisedMarkers = (cleanRevised.match(/\[IMAGE_\d+\]/g) ?? []).length;
-    const originalMarkers = (articleHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
+  // Мини-аудит после итерации 1
+  if (miniAudit(articleHtml) && articleHtml !== articleBefore) {
+    articleHtml = articleBefore;
+    warnings.push('Правки откачены: нарушена структура');
+    console.warn('[step-5] Mini-audit failed after iteration 1, rolled back');
+  }
 
-    const rollback =
-      revisedH1 !== 1 ||
-      revisedH2 !== originalH2 ||
-      revisedText.length < originalText.length * 0.85 ||
-      revisedMarkers < originalMarkers;
+  console.info(`[step-5] Revision iteration 1 done, critical remaining: ${criticalSeoIssues.length}`);
 
-    if (rollback) {
-      console.warn('[step-5] Revision validation failed, rolling back to original');
-    } else {
-      articleHtml = cleanRevised;
+  // --- Итерация 2: только critical SEO issues (не ai_issues) ---
+  if (criticalSeoIssues.length > 0) {
+    const articleBeforeIter2 = articleHtml;
+
+    articleHtml = await executeRevisionIteration(articleHtml, criticalSeoIssues, 'iteration 2');
+
+    if (miniAudit(articleHtml) && articleHtml !== articleBeforeIter2) {
+      articleHtml = articleBeforeIter2;
+      warnings.push('Правки откачены: нарушена структура (итерация 2)');
+      console.warn('[step-5] Mini-audit failed after iteration 2, rolled back');
     }
-  } catch (err) {
-    console.warn('[step-5] Revision LLM error, keeping original text:', err);
+
+    console.info(`[step-5] Revision iteration 2 done, critical remaining: ${criticalSeoIssues.length}`);
   }
 
   // 5.4 — Повторный AI-детект (только если первый был >35%)
@@ -144,7 +201,6 @@ ${issuesList}
     ai_score: finalAiScore,
   };
 
-  const warnings: string[] = [];
   if (articleHtml === articleBefore && issuesToFix.length > 0) {
     warnings.push('Правки откачены — использован текст до правок');
   }

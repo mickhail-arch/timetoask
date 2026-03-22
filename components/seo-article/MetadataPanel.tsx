@@ -34,7 +34,7 @@ export function MetadataPanel({ pageName, slug, breadcrumb, altTexts, jsonLd }: 
           <span className="text-[11px] text-[var(--color-text-secondary)]">JSON-LD Schema</span>
           <CopyButton text={jsonLd} />
         </div>
-        <div className="max-h-20 overflow-y-auto rounded-[var(--radius-sm)] border border-[#F0F0F0] bg-[#FAFAFA] px-2.5 py-2 font-mono text-[11px] text-[#444] break-words whitespace-pre-wrap">{jsonLd}</div>
+        <div className="min-h-[80px] max-h-[300px] overflow-y-auto rounded-[var(--radius-sm)] border border-[#F0F0F0] bg-[#FAFAFA] px-2.5 py-2 font-mono text-[11px] text-[#444] break-words whitespace-pre-wrap" style={{ resize: 'vertical' }}>{jsonLd}</div>
       </div>
     </div>
   );

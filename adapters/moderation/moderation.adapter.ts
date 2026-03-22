@@ -61,7 +61,8 @@ OK — чистый контент без ограничений.
 
     clearTimeout(timeout);
 
-    const parsed = JSON.parse(result);
+    const cleaned = result.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(cleaned);
     return {
       category: parsed.category ?? 'OK',
       reason: parsed.reason,

@@ -1,7 +1,7 @@
 {
   "id": "seo-article-express",
   "name": "Express SEO",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "google/gemini-2.5-flash",
   "executionMode": "async",
   "token_cost": 200,
   "free_uses_limit": 1,
@@ -9,14 +9,15 @@
   "status": "enabled",
   "config": {
     "models": {
-      "moderation": "google/gemini-2.5-flash",
       "brief": "google/gemini-2.5-flash",
-      "moderation_headings": "google/gemini-2.5-flash",
       "draft": "google/gemini-2.5-flash",
-      "image_prompt": "google/gemini-2.5-flash",
-      "image_gen": "google/gemini-2.5-flash",
       "ai_detect": "google/gemini-2.5-flash",
-      "revisions": "google/gemini-2.5-flash"
+      "image_gen": "google/gemini-3.1-flash-image-preview",
+      "revisions": "google/gemini-2.5-flash",
+      "assembly": "google/gemini-2.5-flash",
+      "moderation": "google/gemini-2.5-flash",
+      "image_prompt": "google/gemini-2.5-flash",
+      "moderation_headings": "google/gemini-2.5-flash"
     },
     "pricing": {
       "base": 100,

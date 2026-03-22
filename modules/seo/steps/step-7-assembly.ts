@@ -1,5 +1,8 @@
 // modules/seo/steps/step-7-assembly.ts — сборка HTML + .docx + метаданные + панель качества
 import type { StepResult, PipelineContext, QualityMetrics } from '../types';
+import type { ToolConfig } from '@/core/types';
+import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { getStepModel } from '../config';
 
 /**
  * Шаг 7: финальная сборка.
@@ -52,19 +55,89 @@ export async function executeAssembly(
 
   const h1Match = articleHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   const h1Text = h1Match ? h1Match[1].replace(/<[^>]*>/g, '').trim() : targetQuery;
-  const title = h1Text;
 
   const plainText = articleHtml.replace(/<[^>]*>/g, '');
-  const firstSentences = plainText.split(/[.!?]/).filter(s => s.trim().length > 10).slice(0, 2).join('. ').trim();
-  let description = firstSentences.endsWith('.') ? firstSentences : firstSentences + '.';
-  if (description.length < 50) {
-    description = `${mainKeyword}. ${description}`;
+
+  let title: string;
+  let description: string;
+
+  try {
+    const metaModel = getStepModel(
+      ctx.config as ToolConfig | null,
+      'assembly',
+      'google/gemini-2.5-flash',
+    );
+
+    const raw = await generateText({
+      model: metaModel,
+      systemPrompt: [
+        'Ты — SEO-специалист. Сгенерируй meta title и meta description для статьи.',
+        'Верни ТОЛЬКО JSON без markdown: {"title": "...", "description": "..."}',
+        '',
+        'Правила для title:',
+        '- 55-60 символов',
+        '- Содержит основной ключ в первых 40 символах',
+        '- Не обрезанное предложение',
+        '- Привлекает клики',
+        '',
+        'Правила для description:',
+        '- 150-160 символов строго',
+        '- Содержит основной ключ + 1 дополнительный',
+        '- Законченное предложение',
+        '- Улучшает seo',
+      ].join('\n'),
+      userMessage: [
+        `H1: ${h1Text}`,
+        `Основной ключ: ${mainKeyword}`,
+        `Intent: ${intent}`,
+        `Начало статьи: ${plainText.slice(0, 500)}`,
+      ].join('\n'),
+      temperature: 0.4,
+      maxOutputTokens: 256,
+    });
+
+    const cleaned = raw.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(cleaned) as { title: string; description: string };
+    title = parsed.title;
+    description = parsed.description;
+  } catch {
+    title = h1Text.length <= 60
+      ? h1Text
+      : h1Text.slice(0, 60).replace(/\s\S*$/, '').trimEnd();
+
+    const sentences = plainText.match(/[^.!?]+[.!?]+/g) ?? [];
+    description = '';
+    for (const s of sentences) {
+      const trimmed = s.trim();
+      const candidate = description ? description + ' ' + trimmed : trimmed;
+      if (candidate.length >= 150 && candidate.length <= 160) {
+        description = candidate;
+        break;
+      }
+      if (candidate.length > 160) {
+        description = candidate.slice(0, 155).replace(/\s\S*$/, '').trimEnd();
+        if (!/[.!?]$/.test(description)) description += '.';
+        break;
+      }
+      description = candidate;
+    }
+    if (!description) {
+      description = plainText.slice(0, 155).replace(/\s\S*$/, '').trimEnd();
+      if (!/[.!?]$/.test(description)) description += '.';
+    }
+    if (description.length < 150) {
+      description = `${mainKeyword}. ${description}`;
+      if (description.length > 160) {
+        description = description.slice(0, 155).replace(/\s\S*$/, '').trimEnd();
+        if (!/[.!?]$/.test(description)) description += '.';
+      }
+    }
   }
 
-  const slug = transliterate(h1Text).slice(0, 60);
-  const breadcrumb = h1Text.length > 40
-    ? h1Text.split(' ').slice(0, 5).join(' ')
-    : h1Text;
+  description = description.replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
+  const slug = buildSlug(targetQuery);
+  const breadcrumb = title;
 
   // 7.2 — Schema JSON-LD
   const schemas: Record<string, unknown>[] = [];
@@ -76,6 +149,9 @@ export async function executeAssembly(
     description,
     datePublished: new Date().toISOString().split('T')[0],
     inLanguage: 'ru-RU',
+    ...(altTexts.length > 0 && { image: altTexts.map(alt => ({ '@type': 'ImageObject', description: alt })) }),
+    publisher: { '@type': 'Organization', name: (input.brand as string) || 'Publisher' },
+    author: { '@type': 'Organization', name: (input.brand as string) || 'Publisher' },
   });
 
   if (faqCount > 0) {
@@ -92,6 +168,15 @@ export async function executeAssembly(
       });
     }
   }
+
+  schemas.push({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    'itemListElement': [
+      { '@type': 'ListItem', position: 1, name: 'Главная', item: '/' },
+      { '@type': 'ListItem', position: 2, name: breadcrumb },
+    ],
+  });
 
   if (intent === 'educational') {
     schemas.push({
@@ -154,8 +239,37 @@ function transliterate(text: string): string {
     .map(c => map[c] ?? c)
     .join('')
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 50);
+    .replace(/^-|-$/g, '');
+}
+
+function buildSlug(query: string): string {
+  const stopWords = new Set([
+    'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'к', 'за', 'о', 'об',
+    'у', 'до', 'при', 'не', 'что', 'как', 'это', 'все', 'или', 'но',
+    'а', 'же', 'ли', 'бы', 'то', 'так', 'уже', 'ещё', 'еще',
+  ]);
+
+  const words = query
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9\s-]/gi, '')
+    .split(/\s+/)
+    .filter(w => w && !stopWords.has(w));
+
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const w of words) {
+    const t = transliterate(w);
+    if (seen.has(t)) continue;
+    seen.add(t);
+    unique.push(t);
+    if (unique.length >= 5) break;
+  }
+
+  let slug = unique.join('-');
+  if (slug.length > 75) {
+    slug = slug.slice(0, 75).replace(/-[^-]*$/, '');
+  }
+  return slug;
 }
 
 function extractFAQ(html: string): Array<{ question: string; answer: string }> {
@@ -170,7 +284,7 @@ function extractFAQ(html: string): Array<{ question: string; answer: string }> {
     const question = match[1].replace(/<[^>]*>/g, '').trim();
     const answer = match[2].replace(/<[^>]*>/g, '').trim();
     if (question && answer) {
-      questions.push({ question, answer });
+      questions.push({ question, answer: answer.slice(0, 500) });
     }
   }
 

@@ -19,6 +19,8 @@ export interface BriefData {
   h2_list: Array<{
     text: string;
     h3s: string[];
+    thesis: string;
+    facts: string[];
   }>;
   subtopics: string[];
   lsi_keywords: string[];
@@ -80,6 +82,7 @@ export interface PipelineState {
   moderationCategory?: 'A' | 'B' | 'C' | 'OK';
   qualityMetrics?: QualityMetrics;
   warnings?: string[];
+  originalInput?: Record<string, unknown>;
 }
 
 export interface PriceBreakdown {

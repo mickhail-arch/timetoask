@@ -40,7 +40,7 @@ async function main() {
         keywords: 'тестовый ключ\nвторой ключ',
         intent: 'informational',
         target_char_count: 4000,
-        image_count: 0,
+        image_count: 2,
         tone_of_voice: 'expert',
         target_audience: { gender: 'all', age: ['all'] },
         faq_count: 3,
@@ -88,12 +88,12 @@ async function main() {
 
     // 5. Poll until completed
     console.log('\n--- Step 5: Polling (generation) ---');
-    state = await pollUntil(BASE, headers, jobId, ['completed', 'failed']);
+    state = await pollUntil(BASE, headers, jobId, ['completed', 'failed'], 120, 3000);
     console.log('Status:', state.status, '| Step:', state.stepName, '| Progress:', state.progress + '%');
   }
 
   if (state.status === 'completed') {
-    console.log('\n--- ✅ Pipeline COMPLETED ---');
+    console.log('\n--- Pipeline COMPLETED ---');
     const result = state.result as any;
     const assembly = result?.assembly;
     if (assembly) {
@@ -102,11 +102,34 @@ async function main() {
       console.log('Slug:', assembly.metadata?.slug);
       console.log('AI score:', assembly.qualityMetrics?.ai_score);
       console.log('Warnings:', assembly.warnings);
+
+      // Image checks
+      const images = result?.images;
+      console.log('\n--- Image Results ---');
+      console.log('images_generated:', images?.images_generated ?? 'N/A');
+      console.log('images_total:', images?.images_total ?? 'N/A');
+      const altTexts = images?.alt_texts as string[] | undefined;
+      if (altTexts?.length) {
+        console.log('alt_texts:');
+        for (const alt of altTexts) console.log('  ', alt.slice(0, 100));
+      }
+
+      const html = assembly.article_html as string ?? '';
+      const figureCount = (html.match(/<figure/gi) ?? []).length;
+      const imgCount = (html.match(/<img/gi) ?? []).length;
+      console.log('\n--- HTML Image Tags ---');
+      console.log('<figure> tags:', figureCount);
+      console.log('<img> tags:', imgCount);
+      if (figureCount === 0 && imgCount === 0) {
+        console.log('WARN: No image tags found in final article_html');
+      } else {
+        console.log('OK: Image tags present in article');
+      }
     } else {
       console.log('Result keys:', Object.keys(result ?? {}));
     }
   } else {
-    console.log('❌ Pipeline failed:', state.error);
+    console.log('FAIL: Pipeline failed:', state.error);
   }
 }
 
