@@ -12,7 +12,7 @@ async function main() {
   const articleHtml = buildMockArticle();
   const originalLength = articleHtml.replace(/<[^>]*>/g, '').length;
   console.log('Original article text length:', originalLength, 'chars');
-  console.log('Models: ai_detect=google/gemini-2.5-flash, revisions=google/gemini-2.5-flash');
+  console.log('Models: ai_detect=anthropic/claude-opus-4.6, revisions=anthropic/claude-opus-4.6');
   console.log('');
 
   const ctx: import('@/modules/seo/types').PipelineContext = {
@@ -28,8 +28,8 @@ async function main() {
     },
     config: {
       models: {
-        ai_detect: 'google/gemini-2.5-flash',
-        revisions: 'google/gemini-2.5-flash',
+        ai_detect: 'anthropic/claude-opus-4.6',
+        revisions: 'anthropic/claude-opus-4.6',
       },
     },
     data: {

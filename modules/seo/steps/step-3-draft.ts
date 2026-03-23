@@ -13,7 +13,7 @@ export async function executeDraft(
   const model = getStepModel(
     ctx.config as ToolConfig | null,
     'draft',
-    'google/gemini-2.5-flash',
+    'anthropic/claude-opus-4.6',
   );
 
   const brief = (ctx.data.confirmation as Record<string, unknown>)?.brief as BriefData
@@ -59,7 +59,7 @@ export async function executeDraft(
   const h2Count = brief?.h2_list?.length ?? Math.round(charCount / 2000);
   const introBudget = 300;
   const conclusionBudget = 400;
-  const faqBudget = faqCount * 200;
+  const faqBudget = faqCount * 120;
   const remainingForH2 = charCount - introBudget - conclusionBudget - faqBudget;
   const perH2Budget = Math.round(remainingForH2 / h2Count);
 
@@ -81,7 +81,7 @@ ${legalRestrictions ? `Юр. ограничения: ${legalRestrictions}` : ''}
 СТРУКТУРА (строго, не добавляй новых):
 ${structureLines.join('\n')}
 
-БЮДЖЕТ: ввод ~${introBudget}с, каждый H2 ~${perH2Budget}с, FAQ ~${faqBudget}с, заключение ~${conclusionBudget}с.
+БЮДЖЕТ: ввод ~${introBudget}с, каждый H2 ~${perH2Budget}с, FAQ ~${faqBudget}с (~120 на вопрос+ответ, ответ 80-150 символов), заключение ~${conclusionBudget}с.
 ${imageCount > 0 ? `\nМАРКЕРЫ КАРТИНОК: вставь ровно ${imageCount} маркеров [IMAGE_N] (N от 1 до ${imageCount}). После каждого: [IMAGE_N_DESC: описание сцены]. Первый после вводного абзаца, остальные по H2-блокам.` : ''}
 ${cta ? `\nCTA: ${cta}${input.cta_url ? ` (ссылка: ${input.cta_url})` : ''}` : ''}
 ${allLinks.length > 0 ? `\nСсылки (вставь как <a href="URL" target="_blank">анкор</a> в релевантных местах, макс 1 на H2-блок):\n${allLinks.map(l => `${l.url} → ${l.anchor}`).join('\n')}` : ''}

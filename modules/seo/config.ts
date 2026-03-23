@@ -6,7 +6,7 @@ import type { ToolConfig } from '@/core/types';
  * Если шаг не найден или config отсутствует — вернуть fallback.
  *
  * Использование в шагах пайплайна:
- *   const model = getStepModel(config, 'draft', 'deepseek/deepseek-v3.2');
+ *   const model = getStepModel(config, 'draft', 'anthropic/claude-opus-4.6');
  */
 export function getStepModel(
   config: ToolConfig | null,
@@ -22,12 +22,12 @@ export function getStepModel(
  */
 export const DEFAULT_STEP_MODELS: Record<string, string> = {
   moderation: 'google/gemini-2.5-flash',
-  brief: 'google/gemini-2.5-flash',
+  brief: 'anthropic/claude-opus-4.6',
   moderation_headings: 'google/gemini-2.5-flash',
-  draft: 'google/gemini-2.5-flash',
+  draft: 'anthropic/claude-opus-4.6',
   image_prompt: 'google/gemini-2.5-flash',
   image_gen: 'google/gemini-3.1-flash-image-preview',
-  ai_detect: 'google/gemini-2.5-flash',
-  revisions: 'google/gemini-2.5-flash',
-  assembly: 'google/gemini-2.5-flash',
+  ai_detect: 'anthropic/claude-opus-4.6',
+  revisions: 'anthropic/claude-opus-4.6',
+  assembly: 'anthropic/claude-opus-4.6',
 };

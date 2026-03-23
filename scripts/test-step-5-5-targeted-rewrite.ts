@@ -40,7 +40,7 @@ async function main() {
       target_query: 'poizon что это',
     },
     config: {
-      models: { revisions: 'google/gemini-2.5-flash' },
+      models: { revisions: 'anthropic/claude-opus-4.6' },
     },
     data: {
       ai_detect_revisions: {
@@ -51,7 +51,7 @@ async function main() {
   };
 
   const lengthBefore = MOCK_ARTICLE_HTML.length;
-  console.log('Model: google/gemini-2.5-flash');
+  console.log('Model: anthropic/claude-opus-4.6');
   console.log('AI score: 55');
   console.log('Article length before:', lengthBefore);
   console.log('');

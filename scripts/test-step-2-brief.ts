@@ -22,13 +22,13 @@ async function main() {
       tone_of_voice: 'expert',
     },
     config: {
-      models: { brief: 'google/gemini-2.5-flash' },
+      models: { brief: 'anthropic/claude-opus-4.6' },
     },
     data: {},
   };
 
   console.log('Target query:', ctx.input.target_query);
-  console.log('Model: google/gemini-2.5-flash');
+  console.log('Model: anthropic/claude-opus-4.6');
   console.log('Char count:', ctx.input.target_char_count);
   console.log('');
 

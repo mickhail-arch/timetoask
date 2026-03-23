@@ -47,7 +47,7 @@ async function main() {
       cta_url: 'https://testbrand.ru/buy',
     },
     config: {
-      models: { assembly: 'google/gemini-2.5-flash' },
+      models: { assembly: 'anthropic/claude-opus-4.6' },
     },
     data: {
       moderation: { category: 'OK', add_disclaimer: false },

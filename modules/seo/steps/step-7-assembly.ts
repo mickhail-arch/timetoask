@@ -60,19 +60,20 @@ export async function executeAssembly(
 
   let title: string;
   let description: string;
+  let slug: string = buildSlug(targetQuery, h1Text);
 
   try {
     const metaModel = getStepModel(
       ctx.config as ToolConfig | null,
       'assembly',
-      'google/gemini-2.5-flash',
+      'anthropic/claude-opus-4.6',
     );
 
     const raw = await generateText({
       model: metaModel,
       systemPrompt: [
-        'Ты — SEO-специалист. Сгенерируй meta title и meta description для статьи.',
-        'Верни ТОЛЬКО JSON без markdown: {"title": "...", "description": "..."}',
+        'Ты — SEO-специалист. Сгенерируй meta title, meta description и slug для статьи.',
+        'Верни ТОЛЬКО JSON без markdown: {"title": "...", "description": "...", "slug": "..."}',
         '',
         'Правила для title:',
         '- 55-60 символов',
@@ -85,6 +86,21 @@ export async function executeAssembly(
         '- Содержит основной ключ + 1 дополнительный',
         '- Законченное предложение',
         '- Улучшает seo',
+        '',
+        'Правила для slug (ЧПУ URL):',
+        '- Транслитерация с русского на латиницу',
+        '- Основной ключ в начале URL',
+        '- 3-5 слов через дефис',
+        '- 30-60 символов',
+        '- Только строчные латинские буквы, цифры и дефисы',
+        '- Без дубликатов слов',
+        '- Без предлогов и союзов (и, в, на, с, по, для, от, из, к, за, о, у, до, при, а, но)',
+        '- Вопросительные слова ОСТАВЛЯТЬ (что=chto, как=kak, где=gde, почему=pochemu, какой=kakoy)',
+        '- Указательные слова ОСТАВЛЯТЬ (это=eto, такое=takoe, такой=takoy)',
+        '- Если ключ содержит бренд/название — оно идёт первым',
+        "- Пример: запрос 'poizon что это' -> slug 'poizon-chto-eto-obzor-platformy'",
+        "- Пример: запрос 'как выбрать кофемашину для дома' -> slug 'kak-vybrat-kofemashinu-doma'",
+        "- Пример: запрос 'лучшие ноутбуки 2025' -> slug 'luchshie-noutbuki-2025-reyting'",
       ].join('\n'),
       userMessage: [
         `H1: ${h1Text}`,
@@ -97,9 +113,10 @@ export async function executeAssembly(
     });
 
     const cleaned = raw.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(cleaned) as { title: string; description: string };
+    const parsed = JSON.parse(cleaned) as { title: string; description: string; slug: string };
     title = parsed.title;
     description = parsed.description;
+    if (parsed.slug && isValidSlug(parsed.slug)) slug = parsed.slug;
   } catch {
     title = h1Text.length <= 60
       ? h1Text
@@ -136,7 +153,6 @@ export async function executeAssembly(
 
   description = description.replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-  const slug = buildSlug(targetQuery);
   const breadcrumb = title;
 
   // 7.2 — Schema JSON-LD
@@ -254,27 +270,41 @@ function transliterate(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function buildSlug(query: string): string {
+function isValidSlug(slug: string): boolean {
+  if (!slug || slug.length > 75) return false;
+  if (/[а-яёА-ЯЁ]/.test(slug)) return false;
+  if (/\s/.test(slug)) return false;
+  return /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug);
+}
+
+function buildSlug(query: string, h1Fallback?: string): string {
   const stopWords = new Set([
     'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'к', 'за', 'о', 'об',
-    'у', 'до', 'при', 'не', 'что', 'как', 'это', 'все', 'или', 'но',
-    'а', 'же', 'ли', 'бы', 'то', 'так', 'уже', 'ещё', 'еще',
+    'у', 'до', 'при', 'а', 'но', 'же', 'бы', 'ли', 'или', 'ни',
   ]);
 
-  const words = query
-    .toLowerCase()
-    .replace(/[^a-zа-яё0-9\s-]/gi, '')
-    .split(/\s+/)
-    .filter(w => w && !stopWords.has(w));
+  const buildFromSource = (source: string) => {
+    const words = source
+      .toLowerCase()
+      .replace(/[^a-zа-яё0-9\s-]/gi, '')
+      .split(/\s+/)
+      .filter(w => w && !stopWords.has(w));
 
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const w of words) {
-    const t = transliterate(w);
-    if (seen.has(t)) continue;
-    seen.add(t);
-    unique.push(t);
-    if (unique.length >= 5) break;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const w of words) {
+      const t = transliterate(w);
+      if (seen.has(t)) continue;
+      seen.add(t);
+      result.push(t);
+      if (result.length >= 5) break;
+    }
+    return result;
+  };
+
+  let unique = buildFromSource(query);
+  if (unique.length < 2 && h1Fallback) {
+    unique = buildFromSource(h1Fallback);
   }
 
   let slug = unique.join('-');

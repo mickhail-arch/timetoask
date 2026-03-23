@@ -18,8 +18,8 @@ export async function executeAiDetectRevisions(
   const start = Date.now();
 
   const config = ctx.config as ToolConfig | null;
-  const aiModel = getStepModel(config, 'ai_detect', 'google/gemini-2.5-flash');
-  const revisionsModel = getStepModel(config, 'revisions', 'google/gemini-2.5-flash');
+  const aiModel = getStepModel(config, 'ai_detect', 'anthropic/claude-opus-4.6');
+  const revisionsModel = getStepModel(config, 'revisions', 'anthropic/claude-opus-4.6');
 
   // Получить текст статьи из предыдущего шага
   const draftData = ctx.data.draft as Record<string, unknown>

@@ -33,7 +33,7 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   const model = getStepModel(
     ctx.config as import('@/core/types').ToolConfig | null,
     'brief',
-    'google/gemini-2.5-flash',
+    'anthropic/claude-opus-4.6',
   );
 
   const chars = (ctx.input.target_char_count as number) ?? 8000;

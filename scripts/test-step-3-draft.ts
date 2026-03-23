@@ -53,14 +53,14 @@ async function main() {
       ],
     },
     config: {
-      models: { draft: 'anthropic/claude-sonnet-4' },
+      models: { draft: 'anthropic/claude-opus-4.6' },
     },
     data: {
       confirmation: { brief, user_edited: false },
     },
   };
 
-  console.log('Model: anthropic/claude-sonnet-4');
+  console.log('Model: anthropic/claude-opus-4.6');
   console.log('Target chars:', ctx.input.target_char_count);
   console.log('Image count:', ctx.input.image_count);
   console.log('');

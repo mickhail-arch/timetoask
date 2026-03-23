@@ -1,7 +1,7 @@
 {
   "id": "seo-article-express",
   "name": "Express SEO",
-  "model": "google/gemini-2.5-flash",
+  "model": "anthropic/claude-opus-4.6",
   "executionMode": "async",
   "token_cost": 200,
   "free_uses_limit": 1,
@@ -9,12 +9,12 @@
   "status": "enabled",
   "config": {
     "models": {
-      "brief": "google/gemini-2.5-flash",
-      "draft": "google/gemini-2.5-flash",
-      "ai_detect": "google/gemini-2.5-flash",
+      "brief": "anthropic/claude-opus-4.6",
+      "draft": "anthropic/claude-opus-4.6",
+      "ai_detect": "anthropic/claude-opus-4.6",
       "image_gen": "google/gemini-3.1-flash-image-preview",
-      "revisions": "google/gemini-2.5-flash",
-      "assembly": "google/gemini-2.5-flash",
+      "revisions": "anthropic/claude-opus-4.6",
+      "assembly": "anthropic/claude-opus-4.6",
       "moderation": "google/gemini-2.5-flash",
       "image_prompt": "google/gemini-2.5-flash",
       "moderation_headings": "google/gemini-2.5-flash"
