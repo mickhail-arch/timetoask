@@ -43,6 +43,14 @@ async function main() {
       image_count: 2,
       faq_count: 3,
       tone_of_voice: 'expert',
+      brand: 'CoffeeShop.ru',
+      brand_url: 'https://coffeeshop.ru',
+      brand_description: 'Интернет-магазин кофемашин с доставкой по России',
+      cta: 'Подберите кофемашину в каталоге',
+      cta_url: 'https://coffeeshop.ru/catalog',
+      external_links: [
+        { url: 'https://example.com/research', anchor: 'исследование рынка кофемашин' },
+      ],
     },
     config: {
       models: { draft: 'anthropic/claude-sonnet-4' },
@@ -81,6 +89,9 @@ async function main() {
     console.log(`\n[IMAGE_1] found: ${marker1 ? 'OK' : 'FAIL'}`);
     console.log(`[IMAGE_2] found: ${marker2 ? 'OK' : 'FAIL'}`);
     console.log(`Image markers found: ${(data.image_markers as number) ?? 0}`);
+
+    const hasAnchorTag = /<a\s+href/i.test(html);
+    console.log(`\n<a href> (brand link) found: ${hasAnchorTag ? 'OK' : 'FAIL'}`);
 
     const warnings = data.warnings as string[];
     if (warnings?.length) {

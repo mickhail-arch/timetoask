@@ -20,8 +20,14 @@ export const inputSchema = z.object({
 
   faq_count: z.number().min(0).max(10).default(5).describe('Количество FAQ-вопросов'),
   brand: z.string().max(100).optional().describe('Бренд'),
+  brand_url: z.string().url().max(300).optional().describe('Ссылка на бренд'),
+  brand_description: z.string().max(300).optional().describe('Краткое описание компании/бренда'),
   cta: z.string().max(500).optional().describe('CTA в конце статьи'),
-  own_sources: z.string().optional().describe('Ссылки на собственные источники (по одному URL на строку)'),
+  cta_url: z.string().url().max(300).optional().describe('Ссылка в CTA'),
+  external_links: z.array(z.object({
+    url: z.string().url(),
+    anchor: z.string().max(100),
+  })).max(5).optional().describe('Внешние ссылки с анкорами'),
   forbidden_words: z.string().optional().describe('Запрещённые слова (по одному на строку)'),
   legal_restrictions: z.string().max(500).optional().describe('Юридические ограничения'),
 });

@@ -41,8 +41,14 @@ async function main() {
       target_char_count: 5000,
       image_count: 2,
       faq_count: 3,
+      brand: 'TestBrand',
+      brand_url: 'https://testbrand.ru',
+      cta: 'Купите сейчас',
+      cta_url: 'https://testbrand.ru/buy',
     },
-    config: null,
+    config: {
+      models: { assembly: 'google/gemini-2.5-flash' },
+    },
     data: {
       moderation: { category: 'OK', add_disclaimer: false },
       images: {
@@ -118,6 +124,32 @@ async function main() {
       const s = schema as Record<string, unknown>;
       console.log(`  Schema: ${s['@type']}`);
     }
+
+    const hasBreadcrumb = schemas.some(
+      (s) => (s as Record<string, unknown>)['@type'] === 'BreadcrumbList',
+    );
+    console.log(`BreadcrumbList in schemas: ${hasBreadcrumb ? 'OK' : 'FAIL'}`);
+
+    console.log('\n--- Validation ---');
+    const titleLen = (metadata.title as string).length;
+    const titleOk = titleLen >= 55 && titleLen <= 60;
+    console.log(`title length: ${titleLen} chars ${titleOk ? 'OK (55-60)' : 'FAIL (expected 55-60)'}`);
+
+    const desc = metadata.description as string;
+    const descLen = desc.length;
+    const descOk = descLen >= 150 && descLen <= 160;
+    console.log(`description length: ${descLen} chars ${descOk ? 'OK (150-160)' : 'FAIL (expected 150-160)'}`);
+
+    const descHasNewline = desc.includes('\n');
+    console.log(`description contains \\n: ${descHasNewline ? 'FAIL' : 'OK'}`);
+
+    const slug = metadata.slug as string;
+    const slugNotEmpty = slug && slug.length > 0;
+    const slugWords = slug.split('-');
+    const slugHasDupes = slugWords.length !== new Set(slugWords).size;
+    console.log(`slug: "${slug}"`);
+    console.log(`slug not empty: ${slugNotEmpty ? 'OK' : 'FAIL'}`);
+    console.log(`slug no duplicate words: ${slugHasDupes ? 'FAIL' : 'OK'}`);
 
     const html = data.article_html as string;
     console.log('\n--- HTML ---');

@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from 'react';
 import { calculatePriceClient } from '@/lib/seo-article/price-calculator';
 import type { PricingConfig } from '@/lib/seo-article/price-calculator';
 import { frontFilterClient } from '@/lib/seo-article/front-filter';
+import { searchGeo } from '@/core/constants';
+import { formatUrlInput, getUrlError } from '@/core/utils';
 import '@/components/seo-article/tokens.css';
 
 const MAX_IMAGES: Record<number, number> = {
@@ -54,24 +56,42 @@ export function ScreenInput({ onSubmit, pricingConfig }: ScreenInputProps) {
   const [geo, setGeo] = useState('');
   const [imageStyles, setImageStyles] = useState<string[]>(['Реалистичные']);
 
+  const [geoFocused, setGeoFocused] = useState(false);
+
   const [accordionOpen, setAccordionOpen] = useState(false);
+  const [faqEnabled, setFaqEnabled] = useState(true);
   const [faqCount, setFaqCount] = useState(5);
   const [brand, setBrand] = useState('');
+  const [brandUrl, setBrandUrl] = useState('');
+  const [brandDescription, setBrandDescription] = useState('');
   const [cta, setCta] = useState('');
-  const [ownSources, setOwnSources] = useState('');
+  const [ctaUrl, setCtaUrl] = useState('');
+  const [externalLinks, setExternalLinks] = useState<Array<{url: string; anchor: string}>>([{ url: '', anchor: '' }]);
   const [forbiddenWords, setForbiddenWords] = useState('');
   const [legalRestrictions, setLegalRestrictions] = useState('');
 
   const [filterWarning, setFilterWarning] = useState(false);
 
   const maxImages = useMemo(() => getMaxImages(charCount), [charCount]);
+  const maxLinks = charCount <= 5000 ? 2 : charCount <= 10000 ? 3 : charCount <= 15000 ? 4 : 5;
 
   const price = useMemo(
-    () => calculatePriceClient(charCount, imageCount, faqCount, pricingConfig),
-    [charCount, imageCount, faqCount, pricingConfig],
+    () => calculatePriceClient(charCount, imageCount, faqEnabled ? faqCount : 0, pricingConfig),
+    [charCount, imageCount, faqCount, faqEnabled, pricingConfig],
   );
 
-  const canSubmit = targetQuery.trim().length >= 3 && keywords.trim().length > 0 && !filterWarning;
+  const geoSuggestions = useMemo(() => {
+    if (!geoFocused) return [];
+    return searchGeo(geo, 7);
+  }, [geo, geoFocused]);
+
+  const canSubmit =
+    targetQuery.trim().length >= 3 &&
+    keywords.trim().length > 0 &&
+    !filterWarning &&
+    getUrlError(brandUrl) === null &&
+    getUrlError(ctaUrl) === null &&
+    externalLinks.every(l => getUrlError(l.url) === null);
 
   const checkForbidden = useCallback((text: string) => {
     const allText = `${targetQuery} ${keywords} ${text}`;
@@ -112,6 +132,18 @@ export function ScreenInput({ onSubmit, pricingConfig }: ScreenInputProps) {
     });
   }, []);
 
+  const updateExternalLink = useCallback((index: number, field: 'url' | 'anchor', value: string) => {
+    setExternalLinks(prev => prev.map((l, i) => i === index ? { ...l, [field]: value } : l));
+  }, []);
+
+  const removeExternalLink = useCallback((index: number) => {
+    setExternalLinks(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addExternalLink = useCallback(() => {
+    setExternalLinks(prev => [...prev, { url: '', anchor: '' }]);
+  }, []);
+
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
     onSubmit({
@@ -133,14 +165,19 @@ export function ScreenInput({ onSubmit, pricingConfig }: ScreenInputProps) {
       },
       geo_location: geo || undefined,
       image_style: imageCount > 0 ? imageStyles.map(s => s.toLowerCase()) : undefined,
-      faq_count: faqCount,
+      faq_count: faqEnabled ? faqCount : 0,
       brand: brand || undefined,
+      brand_url: brand && brandUrl ? brandUrl : undefined,
+      brand_description: brand && brandDescription ? brandDescription : undefined,
       cta: cta || undefined,
-      own_sources: ownSources || undefined,
+      cta_url: cta && ctaUrl ? ctaUrl : undefined,
+      external_links: externalLinks.filter(l => l.url && l.anchor).length > 0
+        ? externalLinks.filter(l => l.url && l.anchor)
+        : undefined,
       forbidden_words: forbiddenWords || undefined,
       legal_restrictions: legalRestrictions || undefined,
     });
-  }, [canSubmit, targetQuery, keywords, intent, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqCount, brand, cta, ownSources, forbiddenWords, legalRestrictions, onSubmit]);
+  }, [canSubmit, targetQuery, keywords, intent, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqEnabled, faqCount, brand, brandUrl, brandDescription, cta, ctaUrl, externalLinks, forbiddenWords, legalRestrictions, onSubmit]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
@@ -278,10 +315,40 @@ export function ScreenInput({ onSubmit, pricingConfig }: ScreenInputProps) {
           </div>
         </div>
 
-        <div>
+        <div className="relative">
           <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Гео</label>
           <input type="text" value={geo} onChange={e => setGeo(e.target.value)} placeholder="Москва, Санкт-Петербург, Новосибирск..."
+            onFocus={() => setGeoFocused(true)}
+            onBlur={() => setTimeout(() => setGeoFocused(false), 200)}
             className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]" />
+          {geoSuggestions.length > 0 && geoFocused && (
+            <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-[220px] overflow-hidden overflow-y-auto rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white shadow-md">
+              {geoSuggestions.map(city => {
+                const q = geo.trim().toLowerCase();
+                let content: React.ReactNode = city;
+                if (q) {
+                  const idx = city.toLowerCase().indexOf(q);
+                  if (idx !== -1) {
+                    content = (
+                      <>
+                        {city.slice(0, idx)}
+                        <strong>{city.slice(idx, idx + q.length)}</strong>
+                        {city.slice(idx + q.length)}
+                      </>
+                    );
+                  }
+                }
+                return (
+                  <button
+                    key={city}
+                    type="button"
+                    onMouseDown={() => { setGeo(city); setGeoFocused(false); }}
+                    className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[#F5F5F5]"
+                  >{content}</button>
+                );
+              })}
+            </div>
+          )}
           <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Город или регион. Пустое — вся Россия</div>
         </div>
       </div>
@@ -290,37 +357,94 @@ export function ScreenInput({ onSubmit, pricingConfig }: ScreenInputProps) {
       <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5">
         <button onClick={() => setAccordionOpen(v => !v)} className="flex w-full items-center justify-between">
           <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Дополнительные настройки</span>
-          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">6 полей {accordionOpen ? '▴' : '▾'}</span>
+          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">8 полей {accordionOpen ? '▴' : '▾'}</span>
         </button>
         {accordionOpen && (
           <div className="mt-4 space-y-4">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">FAQ-вопросов</label>
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)] cursor-pointer">
+                <input type="checkbox" checked={faqEnabled} onChange={e => setFaqEnabled(e.target.checked)}
+                  className="accent-[var(--color-accent)]" />
+                Включить FAQ-блок
+              </label>
+              {faqEnabled && (
                 <div className="flex items-center gap-3">
-                  <input type="range" min={0} max={10} step={1} value={faqCount} onChange={e => setFaqCount(Number(e.target.value))}
+                  <input type="range" min={1} max={10} step={1} value={faqCount} onChange={e => setFaqCount(Number(e.target.value))}
                     className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
                   <span className="min-w-[24px] text-right text-sm font-medium">{faqCount}</span>
                 </div>
-              </div>
+              )}
+            </div>
+            <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Бренд</label>
-                <input type="text" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100} placeholder="CoffeeShop.ru"
+                <input type="text" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100} placeholder="Старбакс"
                   className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Пусто → без упоминания</div>
               </div>
+              <div className="flex-1">
+                <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Ссылка на бренд</label>
+                <input type="url" value={brandUrl} onChange={e => setBrandUrl(e.target.value)} onBlur={() => setBrandUrl(v => formatUrlInput(v))} placeholder="https://brand.ru" disabled={!brand}
+                  className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!brand ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                {getUrlError(brandUrl) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(brandUrl)}</div>}
+                <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Станет анкором бренда в тексте</div>
+              </div>
             </div>
             <div>
-              <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">CTA в конце статьи</label>
-              <textarea value={cta} onChange={e => setCta(e.target.value)} maxLength={500} rows={2} placeholder="Подберите кофемашину в нашем каталоге →"
-                className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
-              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Пусто → без CTA-блока</div>
+              <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">О компании</label>
+              <textarea value={brandDescription} onChange={e => setBrandDescription(e.target.value)} maxLength={300} rows={2} placeholder="Интернет-магазин кофемашин с доставкой по России" disabled={!brand}
+                className={`w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!brand ? 'opacity-50 cursor-not-allowed' : ''}`} />
+              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Помогает органично встроить бренд в текст</div>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">CTA в конце статьи</label>
+                <textarea value={cta} onChange={e => setCta(e.target.value)} maxLength={500} rows={2} placeholder="Подберите кофемашину в нашем каталоге →"
+                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Пусто → без CTA-блока</div>
+              </div>
+              <div className="flex-1">
+                <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Ссылка в CTA</label>
+                <input type="url" value={ctaUrl} onChange={e => setCtaUrl(e.target.value)} onBlur={() => setCtaUrl(v => formatUrlInput(v))} placeholder="https://site.ru/catalog" disabled={!cta}
+                  className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!cta ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                {getUrlError(ctaUrl) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(ctaUrl)}</div>}
+                <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Станет ссылкой в CTA-блоке</div>
+              </div>
             </div>
             <div>
-              <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Ссылки на собственные источники</label>
-              <textarea value={ownSources} onChange={e => setOwnSources(e.target.value)} rows={2} placeholder={'https://site.ru/research\nhttps://site.ru/review'}
-                className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
-              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">URL ваших материалов, по одному на строку. Усиливает EEAT</div>
+              <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
+                Ссылки на источники
+                <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxLinks})</span>
+              </label>
+              <div className="space-y-2">
+                {externalLinks.map((link, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <div className="grid flex-1 grid-cols-2 gap-3">
+                      <div>
+                        <input type="url" value={link.url} onChange={e => updateExternalLink(i, 'url', e.target.value)} onBlur={() => updateExternalLink(i, 'url', formatUrlInput(link.url))} placeholder="https://site.ru/page"
+                          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                        {getUrlError(link.url) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(link.url)}</div>}
+                      </div>
+                      <input type="text" value={link.anchor} onChange={e => updateExternalLink(i, 'anchor', e.target.value)} placeholder="текст ссылки" disabled={!link.url}
+                        className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                    </div>
+                    {externalLinks.length > 1 && (
+                      <button type="button" onClick={() => removeExternalLink(i)}
+                        className="mt-1.5 cursor-pointer text-lg leading-none text-[var(--color-text-secondary)] hover:text-[#DC2626]">×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addExternalLink}
+                disabled={externalLinks.length >= maxLinks || !(externalLinks[externalLinks.length - 1]?.url && externalLinks[externalLinks.length - 1]?.anchor)}
+                className={`mt-2 cursor-pointer text-[13px] ${
+                  externalLinks.length >= maxLinks || !(externalLinks[externalLinks.length - 1]?.url && externalLinks[externalLinks.length - 1]?.anchor)
+                    ? 'text-[var(--color-text-secondary)] opacity-50 !cursor-not-allowed'
+                    : 'text-[var(--color-accent)] hover:underline'
+                }`}
+              >+ Добавить ссылку</button>
             </div>
             <div className="flex gap-3">
               <div className="flex-1">

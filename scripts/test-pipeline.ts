@@ -44,6 +44,12 @@ async function main() {
         tone_of_voice: 'expert',
         target_audience: { gender: 'all', age: ['all'] },
         faq_count: 3,
+        brand: 'TestBrand',
+        brand_url: 'https://testbrand.ru',
+        brand_description: 'Тестовый бренд для проверки',
+        cta: 'Посетите наш сайт',
+        cta_url: 'https://testbrand.ru',
+        external_links: [{ url: 'https://example.com/source', anchor: 'полезный источник' }],
       },
     }),
   });
@@ -125,6 +131,16 @@ async function main() {
       } else {
         console.log('OK: Image tags present in article');
       }
+
+      console.log('\n--- Post-pipeline Checks ---');
+      const schemasArr = assembly.schemas as unknown[] | undefined;
+      console.log('schemas count:', schemasArr?.length ?? 0);
+
+      const hasAnchor = /<a\s+href/i.test(html);
+      console.log(`<a href> in article_html: ${hasAnchor ? 'OK' : 'FAIL'}`);
+
+      console.log(`<figure> in article_html: ${figureCount > 0 ? 'OK' : 'FAIL'}`);
+      console.log(`<img> in article_html: ${imgCount > 0 ? 'OK' : 'FAIL'}`);
     } else {
       console.log('Result keys:', Object.keys(result ?? {}));
     }

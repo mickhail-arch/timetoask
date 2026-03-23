@@ -30,7 +30,10 @@ export async function executeDraft(
   const geo = (input.geo_location as string) ?? '';
   const brand = (input.brand as string) ?? '';
   const cta = (input.cta as string) ?? '';
-  const ownSources = (input.own_sources as string) ?? '';
+  const allLinks: Array<{url: string; anchor: string}> = [];
+  if (brand && input.brand_url) allLinks.push({ url: input.brand_url as string, anchor: brand });
+  const extLinks = (input.external_links as Array<{url: string; anchor: string}>) ?? [];
+  allLinks.push(...extLinks);
   const forbiddenWords = (input.forbidden_words as string) ?? '';
   const legalRestrictions = (input.legal_restrictions as string) ?? '';
 
@@ -69,8 +72,9 @@ Intent: ${intent} | Tone: ${tone}
 Ключи: ${keywords}
 Основной ключ: ${mainKeywordMin}-${mainKeywordMax} вхождений
 LSI: ${brief?.lsi_keywords?.join(', ') ?? 'сгенерируй'}
-FAQ: ${faqCount} | Изображений: ${imageCount}
-${geo ? `Гео: ${geo}` : ''}${brand ? ` | Бренд: ${brand}` : ''}
+${faqCount > 0 ? `FAQ: ${faqCount} | ` : ''}Изображений: ${imageCount}
+${faqCount === 0 ? 'FAQ-блок не нужен. Не добавляй раздел FAQ в статью.' : ''}
+${geo ? `Гео: ${geo}` : ''}${brand ? `Бренд: ${brand}` : ''}${brand && input.brand_url ? ` | Ссылка: ${input.brand_url}` : ''}${brand && input.brand_description ? ` | О компании: ${input.brand_description}` : ''}
 ${forbiddenWords ? `Запрещённые слова: ${forbiddenWords}` : ''}
 ${legalRestrictions ? `Юр. ограничения: ${legalRestrictions}` : ''}
 
@@ -79,8 +83,9 @@ ${structureLines.join('\n')}
 
 БЮДЖЕТ: ввод ~${introBudget}с, каждый H2 ~${perH2Budget}с, FAQ ~${faqBudget}с, заключение ~${conclusionBudget}с.
 ${imageCount > 0 ? `\nМАРКЕРЫ КАРТИНОК: вставь ровно ${imageCount} маркеров [IMAGE_N] (N от 1 до ${imageCount}). После каждого: [IMAGE_N_DESC: описание сцены]. Первый после вводного абзаца, остальные по H2-блокам.` : ''}
-${cta ? `\nCTA: ${cta}` : ''}
-${ownSources ? `\nИсточники:\n${ownSources}` : ''}
+${cta ? `\nCTA: ${cta}${input.cta_url ? ` (ссылка: ${input.cta_url})` : ''}` : ''}
+${allLinks.length > 0 ? `\nСсылки (вставь как <a href="URL" target="_blank">анкор</a> в релевантных местах, макс 1 на H2-блок):\n${allLinks.map(l => `${l.url} → ${l.anchor}`).join('\n')}` : ''}
+${cta && input.cta_url ? `CTA ссылка: ${input.cta_url}` : ''}
 
 Формат: HTML (h1, h2, h3, p). Без strong и em тегов в абзацах.`;
 

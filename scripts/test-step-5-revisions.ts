@@ -61,7 +61,13 @@ async function main() {
     console.log('Change:', revisedLength - originalLength, 'chars');
     console.log(`Change %: ${(((revisedLength - originalLength) / originalLength) * 100).toFixed(1)}%`);
 
+    const isRollback = revisedLength === originalLength;
+    console.log(`\nRollback: ${isRollback ? 'YES (article unchanged)' : 'NO (article modified)'}`);
+
     const warnings = data.warnings as string[];
+    const rollbackIterations = warnings?.filter(w => w.includes('Правки откачены')).length ?? 0;
+    console.log(`Rollback iterations (warnings "Правки откачены"): ${rollbackIterations}`);
+
     if (warnings?.length) {
       console.log('\nWarnings:');
       for (const w of warnings) console.log('  WARN:', w);

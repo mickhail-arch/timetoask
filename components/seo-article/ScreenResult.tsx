@@ -52,7 +52,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
           <button onClick={() => setTab('code')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'code' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>HTML-код</button>
         </div>
         {tab === 'preview' ? (
-          <div className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed" style={{ resize: 'vertical' }} dangerouslySetInnerHTML={{ __html: result.article_html }} />
+          <div className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed" style={{ resize: 'vertical' }} dangerouslySetInnerHTML={{ __html: `<style>.seo-preview a[href]{position:relative;cursor:pointer}.seo-preview a[href]:hover::before{content:attr(href);position:absolute;bottom:100%;left:0;background:#fff;border:1px solid #E0E0E0;border-radius:6px;padding:4px 8px;font-size:11px;color:#666;white-space:nowrap;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.08);pointer-events:none}</style>${result.article_html}` }} />
         ) : (
           <pre className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4 font-mono text-xs leading-relaxed text-[#444] whitespace-pre-wrap break-all" style={{ resize: 'vertical' }}>
             {result.article_html}

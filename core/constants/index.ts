@@ -11,3 +11,6 @@ export const DELETED_ACCOUNT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const TOOL_CACHE_TTL_SEC = 30;
 export const MAX_CONCURRENT_GLOBAL = 50;
 export const MAX_CONCURRENT_PER_USER = 5;
+
+export { RUSSIAN_CITIES, RUSSIAN_REGIONS, searchCities, searchRegions, searchGeo } from './russian-geo';
+

@@ -190,7 +190,19 @@ export async function executeAssembly(
   const jsonLd = schemas.map(s => JSON.stringify(s)).join('\n');
 
   // 7.3 — HTML с inline-стилями
-  const styledHtml = wrapWithInlineStyles(articleHtml, addDisclaimer, legalRestrictions);
+  const brand = (input.brand as string) ?? '';
+  const brandUrl = (input.brand_url as string) ?? '';
+  const ctaUrl = (input.cta_url as string) ?? '';
+
+  let processedHtml = articleHtml;
+  if (brand && brandUrl) {
+    processedHtml = ensureBrandLinks(processedHtml, brand, brandUrl);
+  }
+  if (ctaUrl) {
+    processedHtml = ensureCtaLink(processedHtml, ctaUrl);
+  }
+
+  const styledHtml = wrapWithInlineStyles(processedHtml, addDisclaimer, legalRestrictions);
 
   // 7.5 — Именование файлов
   const fileBaseName = slug || transliterate(targetQuery);
@@ -291,6 +303,48 @@ function extractFAQ(html: string): Array<{ question: string; answer: string }> {
   return questions;
 }
 
+function ensureBrandLinks(html: string, brand: string, brandUrl: string): string {
+  if (html.includes(brandUrl)) return html;
+
+  const escapedBrand = brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const textNodeRegex = new RegExp(`(>)([^<]*?)(${escapedBrand})([^<]*?)(<)`, 'gi');
+  let match;
+  while ((match = textNodeRegex.exec(html)) !== null) {
+    const before = html.slice(0, match.index);
+    if (/<a\b[^>]*>[^<]*$/i.test(before)) continue;
+    if (/<h[1-3]\b[^>]*>[^<]*$/i.test(before)) continue;
+
+    const after = html.slice(match.index + match[0].length);
+    const link = `<a href="${brandUrl}" target="_blank" style="color:#2563EB;text-decoration:underline">${match[3]}</a>`;
+    return `${before}${match[1]}${match[2]}${link}${match[4]}${match[5]}${after}`;
+  }
+
+  return html;
+}
+
+function ensureCtaLink(html: string, ctaUrl: string): string {
+  if (html.includes(ctaUrl)) return html;
+
+  let lastIdx = -1;
+  let lastFullMatch = '';
+  let lastInner = '';
+  let lastPTag = '';
+  const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  let m;
+  while ((m = pRegex.exec(html)) !== null) {
+    lastIdx = m.index;
+    lastFullMatch = m[0];
+    lastPTag = m[0].match(/<p[^>]*>/i)![0];
+    lastInner = m[1];
+  }
+
+  if (lastIdx < 0 || !lastInner.trim()) return html;
+  if (lastInner.includes('<a ')) return html;
+
+  const linked = `${lastPTag}<a href="${ctaUrl}" target="_blank" style="color:#2563EB;text-decoration:underline">${lastInner.trim()}</a></p>`;
+  return html.slice(0, lastIdx) + linked + html.slice(lastIdx + lastFullMatch.length);
+}
+
 function wrapWithInlineStyles(
   html: string,
   addDisclaimer: boolean,
@@ -302,7 +356,8 @@ function wrapWithInlineStyles(
     .replace(/<h3([^>]*)>/gi, '<h3$1 style="font-size:18px;font-weight:600;margin:20px 0 8px;line-height:1.3;color:#1a1a1a">')
     .replace(/<p([^>]*)>/gi, '<p$1 style="font-size:16px;line-height:1.7;margin:0 0 12px;color:#333">')
     .replace(/<figure([^>]*)>/gi, '<figure$1 style="margin:20px 0;text-align:center">')
-    .replace(/<img([^>]*)>/gi, '<img$1 style="max-width:100%;height:auto;border-radius:8px">');
+    .replace(/<img([^>]*)>/gi, '<img$1 style="max-width:100%;height:auto;border-radius:8px">')
+    .replace(/<a([^>]*)>/gi, '<a$1 style="color:#2563EB;text-decoration:underline">');
 
   if (addDisclaimer && legalRestrictions) {
     const disclaimer = `<p style="font-size:13px;line-height:1.5;color:#666;padding:12px;background:#f9f9f9;border-radius:6px;margin:16px 0"><em>Дисклеймер: ${legalRestrictions}</em></p>`;
