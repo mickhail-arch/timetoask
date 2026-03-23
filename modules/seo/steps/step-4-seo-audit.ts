@@ -131,9 +131,9 @@ export async function executeSeoAudit(
   };
 
   // --- Структура ---
-  const h1s = html.match(/<h1[\s>][\s\S]*?<\/h1>/gi) ?? [];
-  const h2s = html.match(/<h2[\s>][\s\S]*?<\/h2>/gi) ?? [];
-  const h3s = html.match(/<h3[\s>][\s\S]*?<\/h3>/gi) ?? [];
+  const h1s: string[] = html.match(/<h1[\s>][\s\S]*?<\/h1>/gi) ?? [];
+  const h2s: string[] = html.match(/<h2[\s>][\s\S]*?<\/h2>/gi) ?? [];
+  const h3s: string[] = html.match(/<h3[\s>][\s\S]*?<\/h3>/gi) ?? [];
 
   if (h1s.length !== 1) addIssue('structure', 'critical', `H1: найдено ${h1s.length}, ожидается 1`, 'Оставить ровно один H1');
 
@@ -150,8 +150,7 @@ export async function executeSeoAudit(
   const mainKeyword = targetQuery.length <= 30 ? targetQuery.toLowerCase() : targetQuery.toLowerCase().split(' ').slice(0, 4).join(' ');
   const textLower = text.toLowerCase();
   const keywordRegex = new RegExp(mainKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-  const keywordMatches = text.match(keywordRegex) ?? [];
-  const keywordCount = keywordMatches.length;
+  const keywordCount = (text.match(keywordRegex) ?? []).length;
   const density = charCount > 0 ? (keywordCount * mainKeyword.length / charCount) * 100 : 0;
 
   if (density < 0.5) addIssue('keyword', 'critical', `Плотность основного ключа ${density.toFixed(2)}% (мин 0.5%)`, 'Добавить вхождения ключа');
@@ -160,7 +159,7 @@ export async function executeSeoAudit(
   const first300 = textLower.slice(0, 300);
   if (!first300.includes(mainKeyword)) addIssue('keyword', 'critical', 'Основной ключ не в первых 300 символах', 'Добавить ключ в начало текста');
 
-  if (h1s.length > 0 && !h1s[0].toLowerCase().includes(mainKeyword)) {
+  if (h1s.length > 0 && !h1s[0].replace(/<[^>]*>/g, '').toLowerCase().includes(mainKeyword)) {
     addIssue('keyword', 'critical', 'Основной ключ отсутствует в H1', 'Добавить ключ в H1');
   }
 
