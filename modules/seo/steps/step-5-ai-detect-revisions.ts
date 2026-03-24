@@ -27,6 +27,11 @@ export async function executeAiDetectRevisions(
     ?? {};
   let articleHtml = (draftData.article_html as string) ?? '';
 
+  // Получить brief для правил ревизий
+  const confirmationData = ctx.data.confirmation as Record<string, unknown> | undefined;
+  const briefData = (confirmationData?.brief ?? ctx.data.brief) as
+    { main_keyword: string; lsi_keywords?: string[] } | null ?? null;
+
   // Получить SEO issues из шага 4
   const auditData = ctx.data.seo_audit as Record<string, unknown>
     ?? ctx.data.step_4 as Record<string, unknown>
@@ -81,34 +86,57 @@ export async function executeAiDetectRevisions(
     );
   }
 
-  function buildRevisionsPrompt(issues: SeoIssue[]): string {
+  function buildRevisionsPrompt(
+    issues: SeoIssue[],
+    input: Record<string, unknown>,
+    brief: { main_keyword: string; lsi_keywords?: string[] } | null,
+  ): string {
+    const mainKeyword = brief?.main_keyword ?? (input.target_query as string) ?? '';
+    const keywords = ((input.keywords as string) ?? '').split('\n').filter(Boolean);
+    const forbiddenWords = (input.forbidden_words as string) ?? '';
+
+    const rulesBlock = `ПРАВИЛА (нарушение любого = брак):
+- Формат: HTML (h1, h2, h3, p). Без strong, em, b, i внутри абзацев.
+- Сохрани ВСЕ заголовки H1/H2/H3 — не удаляй, не добавляй, не переименовывай.
+- Сохрани ВСЕ маркеры [IMAGE_N] и [IMAGE_N_DESC] на своих местах.
+- Объём может измениться не более чем на ±15%.
+- FAQ-ответы: 80-150 символов каждый. Если длиннее — сократи.
+
+КЛЮЧЕВЫЕ СЛОВА — не ломать при правках:
+- Основной ключ "${mainKeyword}" — должен остаться в H1, первых 300 символах, одном H2, заключении.
+- Два ключа в одном предложении — запрещено.
+- Ключ в первом слове после заголовка — запрещено.
+- Основной ключ в точной форме 2 раза в радиусе 500 символов — запрещено.
+${keywords.length > 0 ? `- Дополнительные ключи: ${keywords.join(', ')} — не удалять из текста.` : ''}
+
+АНТИДЕТЕКТ — соблюдать при правках:
+- Чередуй короткие (5-10 слов) и длинные (15-25 слов) предложения.
+- Каждый абзац начинай с разной конструкции.
+- Запрещённые конструкции: «В настоящее время», «Стоит отметить», «Как известно», «На сегодняшний день», «Важно отметить», «Следует подчеркнуть», «Необходимо учитывать», «Таким образом», «Давайте разберёмся», «Не секрет, что», «В современном мире».
+${forbiddenWords ? `\nЗАПРЕЩЁННЫЕ СЛОВА (включая морфоформы): ${forbiddenWords}` : ''}`;
+
     if (issues.length === 0) {
       return `Ты — SEO-редактор. Проведи финальную полировку статьи:
-- Улучши 2–3 перехода между разделами.
-- Разнообразь начала абзацев (факт/вопрос/пример).
-- Добавь 1–2 конкретных детали (число, дата, пример).
-- Измени не более 5–7% текста.
-- Не раздувай FAQ-ответы, держи каждый в пределах 150-300 символов.
-- Сохрани все заголовки H1/H2/H3, маркеры [IMAGE_N], формат HTML.
+- Улучши 2-3 перехода между разделами.
+- Разнообразь начала абзацев (факт/вопрос/пример/число).
+- Добавь 1-2 конкретных детали (число, дата, пример).
+- Измени не более 5-7% текста.
+
+${rulesBlock}
 
 Верни ТОЛЬКО отредактированный HTML статьи, без пояснений.`;
     }
+
     const list = issues.map((iss, i) =>
       `${i + 1}. [${iss.severity}] ${iss.message}${iss.fix_instruction ? ` → ${iss.fix_instruction}` : ''}`,
     ).join('\n');
+
     return `Ты — SEO-редактор. Внеси правки в статью по списку проблем.
 
 ПРОБЛЕМЫ:
 ${list}
 
-ПРАВИЛА:
-- Исправь каждую проблему из списка.
-- НЕ создавай новых проблем (не ставь два ключа в одно предложение, не добавляй AI-маркеры).
-- Сохрани все заголовки H1/H2/H3 на месте.
-- Сохрани все маркеры [IMAGE_N] и [IMAGE_N_DESC] на месте.
-- Объём может измениться не более чем на ±15%.
-- Формат: HTML (h1, h2, h3, p). Не добавляй <strong>, <em>, <b>, <i>.
-- FAQ-ответы: не длиннее 300 символов каждый. Если ответ длиннее — сократи.
+${rulesBlock}
 
 Верни ТОЛЬКО исправленный HTML статьи, без пояснений.`;
   }
@@ -118,7 +146,7 @@ ${list}
     issues: SeoIssue[],
     iterationLabel: string,
   ): Promise<string> {
-    const prompt = buildRevisionsPrompt(issues);
+    const prompt = buildRevisionsPrompt(issues, ctx.input, briefData);
     try {
       const revised = await generateText({
         model: revisionsModel,

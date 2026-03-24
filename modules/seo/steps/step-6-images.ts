@@ -5,6 +5,35 @@ import { generateText, generateImage } from '@/adapters/llm/openrouter.adapter';
 import type { ToolConfig } from '@/core/types';
 
 /**
+ * Для каждого маркера [IMAGE_N] находит ближайший H2 после маркера
+ * и первый абзац этого H2-блока. Возвращает контекст для промпта.
+ */
+function extractMarkerContext(
+  html: string,
+  markerNum: string,
+): string {
+  const markerPos = html.indexOf(`[IMAGE_${markerNum}]`);
+  if (markerPos < 0) return '';
+
+  const afterMarker = html.slice(markerPos);
+  const h2Match = afterMarker.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+  if (!h2Match) return '';
+
+  const h2Text = h2Match[1].replace(/<[^>]*>/g, '').trim();
+
+  const h2End = afterMarker.indexOf('</h2>');
+  if (h2End < 0) return h2Text;
+
+  const afterH2 = afterMarker.slice(h2End);
+  const pMatch = afterH2.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+  const pText = pMatch ? pMatch[1].replace(/<[^>]*>/g, '').trim() : '';
+
+  return pText
+    ? `Section: ${h2Text}. Content: ${pText.slice(0, 300)}`
+    : `Section: ${h2Text}`;
+}
+
+/**
  * Шаг 6: генерация изображений.
  * Картинки генерируются ПОСЛЕ всех правок, по финальному тексту.
  * Если image_count=0 → пропуск.
@@ -87,11 +116,17 @@ export async function executeImages(
 
     const descPromises = markers.map(async (num) => {
       try {
+        const h2Matches = [...articleHtml.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+        const h2Index = Math.min(parseInt(num) - 1, h2Matches.length - 1);
+        const nearestH2 = h2Index >= 0 && h2Matches[h2Index]
+          ? h2Matches[h2Index][1].replace(/<[^>]*>/g, '').trim()
+          : '';
+
         const desc = await generateText({
           model: promptModel,
           systemPrompt:
-            'Describe a suitable visual scene for an article illustration in 1-2 sentences in English. Output ONLY the scene description, nothing else.',
-          userMessage: `Article topic: ${targetQuery}\nThis is image ${num} of ${imageCount} total images for this article. Describe a unique, relevant scene.`,
+            'Describe a suitable visual scene for an article illustration in 1-2 sentences in English. The scene must match the article section topic. Output ONLY the scene description, nothing else.',
+          userMessage: `Article topic: ${targetQuery}\nSection: ${nearestH2 || targetQuery}\nImage ${num} of ${imageCount}. Style: ${styleEN}. Describe a unique, relevant scene that visually represents the section topic.`,
         });
         descriptions[num] = desc.trim();
       } catch {
@@ -115,10 +150,23 @@ export async function executeImages(
 
     try {
       // 6.1: Gemini Flash создаёт детальный промпт
+      const sectionContext = fallbackMode
+        ? ''
+        : extractMarkerContext(articleHtml, markerNum);
+
       const detailedPrompt = await generateText({
         model: promptModel,
-        systemPrompt: 'Generate a detailed image generation prompt in English. Output ONLY the prompt text, nothing else. Max 200 words.',
-        userMessage: `Scene description: ${desc}\nStyle: ${styleEN}\nTopic: ${targetQuery}`,
+        systemPrompt: `Generate a detailed image generation prompt in English for an AI image generator. Output ONLY the prompt text, nothing else. Max 200 words.
+
+Rules:
+- The image must visually match the article section it illustrates.
+- Include specific visual details: composition, lighting, colors, perspective.
+- Style requirements are mandatory — follow them precisely.
+- No text, watermarks, logos, or UI elements in the image.
+- No people's faces (use silhouettes, back views, or hands if people are needed).`,
+        userMessage: `Scene description: ${desc}
+Style: ${styleEN}
+Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionContext}` : ''}`,
       });
 
       // 6.2: Seedream генерирует картинку
@@ -176,16 +224,13 @@ export async function executeImages(
       // Собираем точки вставки (позиция = конец </p>)
       const insertions: Array<{ pos: number; html: string }> = [];
 
-      // Первая картинка — после первого </p> за <h1>
+      // Первая картинка — сразу после </h1>, перед вводным абзацем
       const h1End = articleHtml.indexOf('</h1>');
       if (h1End >= 0) {
-        const firstP = articleHtml.indexOf('</p>', h1End);
-        if (firstP >= 0) {
-          insertions.push({
-            pos: firstP + '</p>'.length,
-            html: buildFigure(successfulImages[0]),
-          });
-        }
+        insertions.push({
+          pos: h1End + '</h1>'.length,
+          html: buildFigure(successfulImages[0]),
+        });
       }
 
       // Остальные — равномерно после </p> в h2-блоках
