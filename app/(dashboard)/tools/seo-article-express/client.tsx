@@ -13,16 +13,16 @@ import '@/components/seo-article/tokens.css';
 type Screen = 'input' | 'progress_analysis' | 'brief' | 'progress_generation' | 'result';
 
 const ANALYSIS_STEPS: ProgressStep[] = [
-  { name: 'Модерация', description: 'Проверка контента...', status: 'pending', timeLabel: '~2 сек' },
-  { name: 'Формирование ТЗ', description: 'Структура H1/H2/H3, LSI-ключи...', status: 'pending', timeLabel: '~12 сек' },
+  { name: 'Модерация', description: 'Проверка контента...', status: 'pending', timeLabel: '~5 сек' },
+  { name: 'Формирование ТЗ', description: 'Структура H1/H2/H3, LSI-ключи...', status: 'pending', timeLabel: '~20 сек' },
 ];
 
 const GENERATION_STEPS: ProgressStep[] = [
-  { name: 'Модерация заголовков', description: 'Проверка структуры...', status: 'pending', timeLabel: '~1 сек' },
-  { name: 'Написание статьи', description: 'Генерация чистовика...', status: 'pending', timeLabel: '~50 сек' },
+  { name: 'Модерация заголовков', description: 'Проверка структуры...', status: 'pending', timeLabel: '~5 сек' },
+  { name: 'Написание статьи', description: 'Генерация текста...', status: 'pending', timeLabel: '~70 сек' },
   { name: 'Проверка качества', description: 'SEO-аудит, AI-детект, правки...', status: 'pending', timeLabel: '~35 сек' },
-  { name: 'Генерация изображений', description: 'Создание картинок...', status: 'pending', timeLabel: '~20 сек' },
-  { name: 'Сборка и метаданные', description: 'HTML, Schema, мета-теги...', status: 'pending', timeLabel: '~3 сек' },
+  { name: 'Генерация изображений', description: 'Создание картинок...', status: 'pending', timeLabel: '~70 сек' },
+  { name: 'Сборка и метаданные', description: 'HTML, Schema, мета-теги...', status: 'pending', timeLabel: '~20 сек' },
 ];
 
 export function SeoArticleExpressClient() {
@@ -34,6 +34,7 @@ export function SeoArticleExpressClient() {
   const [calculatedPrice, setCalculatedPrice] = useState(0);
   const [startTime, setStartTime] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [savedImages, setSavedImages] = useState<Record<string, unknown> | null>(null);
 
   const { state: jobState } = useSeoJobPolling(
     screen !== 'input' && screen !== 'result' ? jobId : null,
@@ -51,6 +52,8 @@ export function SeoArticleExpressClient() {
     if ((jobState.status === 'completed' || jobState.progress >= 100) && screen === 'progress_generation') {
       const raw = jobState.result as Record<string, unknown> ?? {};
       const assembly = raw.assembly as Record<string, unknown> ?? {};
+      const imagesData = raw.images as Record<string, unknown> ?? {};
+      setSavedImages(imagesData);
       const aiRevisions = raw.ai_detect_revisions as Record<string, unknown> ?? {};
 
       const flatResult = {
@@ -110,6 +113,33 @@ export function SeoArticleExpressClient() {
       console.error('Confirm error:', err);
     }
   }, [jobId]);
+
+  const handleRegenerate = useCallback(async () => {
+    if (!jobId || !brief) return;
+    setResult(null);
+    setStartTime(Date.now());
+    setScreen('progress_generation');
+
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brief,
+          savedImages: savedImages ?? null,
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (json.data?.jobId) setJobId(json.data.jobId);
+    } catch (err) {
+      console.error('Regenerate error:', err);
+      setScreen('result');
+    }
+  }, [jobId, brief, savedImages]);
 
   const handleCancel = useCallback(() => {
     setJobId(null);
@@ -196,6 +226,7 @@ export function SeoArticleExpressClient() {
           onDownloadDocx={() => downloadDOCX((result as any).article_docx_base64 ?? '', (result as any).metadata?.file_name ?? 'article.docx')}
           onDownloadMetadata={() => downloadMetadata('', (result as any).metadata?.metadata_file_name ?? 'metadata.docx')}
           onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); }}
+          onRegenerate={handleRegenerate}
         />
       )}
     </div>

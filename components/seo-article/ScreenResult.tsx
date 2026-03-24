@@ -23,9 +23,10 @@ interface ScreenResultProps {
   onDownloadDocx: () => void;
   onDownloadMetadata: () => void;
   onNewArticle: () => void;
+  onRegenerate?: () => void;
 }
 
-export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle }: ScreenResultProps) {
+export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate }: ScreenResultProps) {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const m = result.quality_metrics;
 
@@ -62,7 +63,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
 
       <MetadataPanel pageName={query} slug={result.metadata.slug} breadcrumb={result.metadata.breadcrumb} altTexts={result.metadata.alt_texts} jsonLd={result.metadata.json_ld} />
 
-      <ExportPanel onCopyArticle={onCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} />
+      <ExportPanel onCopyArticle={onCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
 
       <div className="text-center text-[11px] text-[var(--color-step-pending)]">Сгенерировано за {duration} сек · {stepCount} шагов</div>
     </div>

@@ -27,6 +27,141 @@ function getSeoLimits(chars: number) {
   return SEO_TABLE[best];
 }
 
+const INTENT_STRUCTURES: Record<string, string> = {
+  informational: 'определение/вводная → разбор основных аспектов → примеры/кейсы → вывод. Первый H2 — ответ на запрос напрямую.',
+  educational: 'вводная (зачем это нужно) → пошаговые этапы → советы/лайфхаки → типичные ошибки. Каждый H2 — отдельный шаг или этап.',
+  commercial: 'проблема/боль читателя → решение → преимущества → сравнение с альтернативами. Первый H2 — проблема, последний перед FAQ — почему это решение лучше.',
+  comparative: 'критерии выбора → сравнение вариантов по критериям → рекомендация. Первый H2 — на что обращать внимание, далее H2 по каждому варианту или критерию.',
+  review: 'что это и для кого → ключевые характеристики → плюсы и минусы → вердикт. Структура от общего к частному.',
+  news: 'контекст/предыстория → суть события → последствия/прогнозы. Первый H2 — что произошло.',
+  problem_solution: 'описание проблемы → причины → конкретные решения с примерами. Каждый H2-решение — отдельный подход.',
+};
+
+function buildBriefPrompt(
+  input: Record<string, unknown>,
+  chars: number,
+  limits: { h2: [number, number]; h3: [number, number] },
+  maxKeywords: number,
+  faqCount: number,
+): string {
+  const intent = (input.intent as string) ?? 'informational';
+  const geo = (input.geo_location as string) ?? '';
+  const brand = (input.brand as string) ?? '';
+  const intentStructure = INTENT_STRUCTURES[intent] ?? INTENT_STRUCTURES.informational;
+
+  let prompt = `Ты — SEO-архитектор. Создай структуру статьи на русском языке.
+
+Верни ТОЛЬКО валидный JSON (без markdown, без \`\`\`):
+{
+  "h1": "заголовок H1 (содержит основной ключ, до 60-70 символов)",
+  "h2_list": [
+    {
+      "text": "заголовок H2",
+      "h3s": ["заголовок H3"],
+      "thesis": "о чём писать в разделе (1 предложение)",
+      "facts": ["конкретный факт или цифра", "пример или кейс"],
+      "target_keywords": ["какие ключи из списка раскрыть в этом разделе"]
+    }
+  ],
+  "subtopics": ["подтема 1", "подтема 2"],
+  "lsi_keywords": ["LSI-ключ 1", "LSI-ключ 2"],
+  "featured_snippet_spec": "формат рекомендуемого Featured Snippet (параграф/список/таблица)",
+  "main_keyword": "извлечённый основной ключ (2-5 слов)"
+}
+
+=== СТРУКТУРА ===
+- H2: от ${limits.h2[0]} до ${limits.h2[1]} штук (1 на каждые 1500-2000 символов)
+- H3: от ${limits.h3[0]} до ${limits.h3[1]} штук (только внутри H2, 0-2 на H2)
+- H2 и H3 не совпадают более чем на 60%
+- H2-заголовки должны полностью покрывать тему. Читатель после прочтения всех H2 должен получить исчерпывающий ответ на запрос.
+- Каждый H2 раскрывает отдельный аспект темы, без пересечений.
+
+=== INTENT: ${intent.toUpperCase()} ===
+Логика структуры: ${intentStructure}
+Подбирай H2-заголовки так, чтобы они следовали этой логике изложения.
+
+=== ОСНОВНОЙ КЛЮЧ ===
+- Если запрос ≤5 слов — целиком. Если >5 — извлеки ВЧ-ядро 2-5 слов.
+- H1 обязательно содержит основной ключ.
+- Один H2 содержит основной ключ (в разбавленной форме).
+
+=== ДОПОЛНИТЕЛЬНЫЕ КЛЮЧИ ===
+- Макс ключей: ${maxKeywords}
+- В поле target_keywords для каждого H2 укажи 1-${Math.min(3, Math.ceil(maxKeywords / limits.h2[0]))} ключа из списка пользователя, которые логически относятся к этому разделу.
+- Каждый ключ должен быть назначен ровно одному H2. Не дублируй ключи между разделами.
+- 30-50% H2 содержат доп.ключ прямо в заголовке.
+
+=== LSI ===
+- 2-4 уникальных LSI на каждые 2000 символов (итого ${Math.max(2, Math.floor(chars / 2000) * 2)}-${Math.floor(chars / 2000) * 4}).
+- Не дублируй keywords. LSI — это синонимы, связанные понятия, профессиональные термины по теме.
+
+=== ТЕЗИСЫ И ФАКТЫ ===
+- thesis: одно предложение — что именно раскрывать в разделе, какой вопрос читателя он закрывает.
+- facts: 1-2 конкретных факта, цифры, примера или кейса. Должны быть реалистичными и проверяемыми. Не выдумывай — если точная цифра неизвестна, предложи формулировку "по данным исследований..." или "в среднем по рынку...".`;
+
+  if (geo) {
+    prompt += `\n\n=== ГЕО ===\nРегион: ${geo}. Учитывай региональную специфику в тезисах и фактах где уместно.`;
+  }
+
+  if (brand) {
+    prompt += `\n\n=== БРЕНД ===\nБренд "${brand}" — не включай в H1 (если не часть ключа). Допустим в 1 H2-заголовке. Учти в тезисах: один H2 может содержать упоминание бренда в контексте.`;
+  }
+
+  if (faqCount > 0) {
+    prompt += `\n\n=== FAQ ===\nПоследний H2 = "Часто задаваемые вопросы" с ${faqCount} H3 (каждый H3 = конкретный вопрос, 5-10 слов).
+Вопросы должны быть реальными — то, что люди спрашивают по теме. 1-2 вопроса содержат основной ключ.
+Не дублируй содержание основных H2. FAQ закрывает вопросы, не раскрытые в основном тексте.`;
+  } else {
+    prompt += `\n\n=== FAQ ===\nFAQ-блок не нужен. Не добавляй H2 с вопросами.`;
+  }
+
+  prompt += `\n\n=== FEATURED SNIPPET ===
+Определи, какой формат Featured Snippet подойдёт для этого запроса:
+- "paragraph" — если запрос "что такое X", "как работает X"
+- "list" — если запрос "как сделать X", "этапы X", "лучшие X"
+- "table" — если запрос сравнительный или содержит "vs", "сравнение"
+Укажи в featured_snippet_spec.`;
+
+  return prompt;
+}
+
+function parseBriefResponse(
+  raw: string,
+  ctx: PipelineContext,
+  chars: number,
+  maxKeywords: number,
+  mainKeywordMin: number,
+  mainKeywordMax: number,
+): BriefData {
+  const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  const parsed = JSON.parse(cleaned);
+
+  return {
+    h1: parsed.h1 ?? '',
+    h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
+      text: (h2.text as string) ?? '',
+      h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
+      thesis: (h2.thesis as string) ?? '',
+      facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
+      target_keywords: Array.isArray(h2.target_keywords) ? h2.target_keywords as string[] : [],
+    })) : [],
+    subtopics: Array.isArray(parsed.subtopics) ? parsed.subtopics : [],
+    lsi_keywords: Array.isArray(parsed.lsi_keywords) ? parsed.lsi_keywords : [],
+    featured_snippet_spec: parsed.featured_snippet_spec,
+    main_keyword: parsed.main_keyword ?? String(ctx.input.target_query),
+    main_keyword_min: mainKeywordMin,
+    main_keyword_max: mainKeywordMax,
+    keys_per_section: Math.ceil(maxKeywords / Math.max(1, (parsed.h2_list?.length ?? 3))),
+    cta_position: ctx.input.cta ? 'after_conclusion' : undefined,
+    brand_mentions: ctx.input.brand
+      ? (ctx.input.intent === 'commercial' ? 3 : 2)
+      : 0,
+    geo_mentions: ctx.input.geo_location
+      ? (String(ctx.input.geo_location).includes(',') ? 4 : 3)
+      : 0,
+  };
+}
+
 export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   const start = Date.now();
 
@@ -46,36 +181,7 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   const mainKeywordMin = Math.max(2, Math.floor(chars / 2500));
   const mainKeywordMax = Math.floor(chars / 1000);
 
-  const systemPrompt = `Ты — SEO-архитектор. Создай структуру статьи на русском языке.
-
-Верни ТОЛЬКО валидный JSON (без markdown, без \`\`\`):
-{
-  "h1": "заголовок H1 (содержит основной ключ, до 60-70 символов)",
-  "h2_list": [
-    {
-      "text": "заголовок H2",
-      "h3s": ["заголовок H3", "заголовок H3"],
-      "thesis": "краткий тезис: о чём писать в этом разделе (1 предложение)",
-      "facts": ["конкретный факт или цифра для раздела", "пример или кейс"]
-    }
-  ],
-  "subtopics": ["подтема 1", "подтема 2"],
-  "lsi_keywords": ["LSI-ключ 1", "LSI-ключ 2"],
-  "featured_snippet_spec": "формат рекомендуемого Featured Snippet",
-  "main_keyword": "извлечённый основной ключ (2-5 слов)"
-}
-
-Правила:
-- H2: от ${limits.h2[0]} до ${limits.h2[1]} штук (1 на каждые 1500-2000 символов)
-- H3: от ${limits.h3[0]} до ${limits.h3[1]} штук (только внутри H2)
-- H2 и H3 не совпадают более чем на 60%
-- Основной ключ: если запрос ≤5 слов — целиком, если >5 — ВЧ-ядро 2-5 слов
-- H1 содержит основной ключ
-- LSI: 2-4 уникальных на каждые 2000 символов, не дублировать keywords
-- thesis: для каждого H2 — одно предложение, объясняющее что именно раскрывать в разделе
-- facts: 1-2 конкретных факта, цифры, примера или кейса которые должны быть упомянуты в разделе. Не выдумывай — предлагай реалистичные данные по теме
-- Макс доп. ключей: ${maxKeywords}
-- Если faq_count > 0: последний H2 = "Часто задаваемые вопросы" с H3 для каждого вопроса`;
+  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount);
 
   const userMessage = `Тема: ${ctx.input.target_query}
 Ключевые слова: ${ctx.input.keywords}
@@ -88,32 +194,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 
   try {
     const raw = await generateText({ model, systemPrompt, userMessage });
-    const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-
-    const brief: BriefData = {
-      h1: parsed.h1 ?? '',
-      h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
-        text: (h2.text as string) ?? '',
-        h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
-        thesis: (h2.thesis as string) ?? '',
-        facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
-      })) : [],
-      subtopics: Array.isArray(parsed.subtopics) ? parsed.subtopics : [],
-      lsi_keywords: Array.isArray(parsed.lsi_keywords) ? parsed.lsi_keywords : [],
-      featured_snippet_spec: parsed.featured_snippet_spec,
-      main_keyword: parsed.main_keyword ?? String(ctx.input.target_query),
-      main_keyword_min: mainKeywordMin,
-      main_keyword_max: mainKeywordMax,
-      keys_per_section: Math.ceil(maxKeywords / Math.max(1, (parsed.h2_list?.length ?? 3))),
-      cta_position: ctx.input.cta ? 'after_conclusion' : undefined,
-      brand_mentions: ctx.input.brand
-        ? (ctx.input.intent === 'commercial' ? 3 : 2)
-        : 0,
-      geo_mentions: ctx.input.geo_location
-        ? (String(ctx.input.geo_location).includes(',') ? 4 : 3)
-        : 0,
-    };
+    const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax);
 
     // Рассчитать цену
     const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
@@ -131,28 +212,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
     // Retry 1 раз
     try {
       const raw = await generateText({ model, systemPrompt, userMessage });
-      const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-
-      const brief: BriefData = {
-        h1: parsed.h1 ?? '',
-        h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
-          text: (h2.text as string) ?? '',
-          h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
-          thesis: (h2.thesis as string) ?? '',
-          facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
-        })) : [],
-        subtopics: Array.isArray(parsed.subtopics) ? parsed.subtopics : [],
-        lsi_keywords: Array.isArray(parsed.lsi_keywords) ? parsed.lsi_keywords : [],
-        featured_snippet_spec: parsed.featured_snippet_spec,
-        main_keyword: parsed.main_keyword ?? String(ctx.input.target_query),
-        main_keyword_min: Math.max(2, Math.floor(chars / 2500)),
-        main_keyword_max: Math.floor(chars / 1000),
-        keys_per_section: Math.ceil(maxKeywords / Math.max(1, (parsed.h2_list?.length ?? 3))),
-        cta_position: ctx.input.cta ? 'after_conclusion' : undefined,
-        brand_mentions: ctx.input.brand ? (ctx.input.intent === 'commercial' ? 3 : 2) : 0,
-        geo_mentions: ctx.input.geo_location ? 3 : 0,
-      };
+      const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax);
 
       const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
         | Partial<PricingConfig> | undefined;

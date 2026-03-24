@@ -3,6 +3,110 @@ import type { StepResult, PipelineContext, QualityMetrics } from '../types';
 import type { ToolConfig } from '@/core/types';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { getStepModel } from '../config';
+import { detectAIByCode } from '@/adapters/ai-detection';
+
+/**
+ * Пересчёт ключевых метрик качества по финальному тексту.
+ * Повторяет логику step-4-seo-audit, но облегчённо.
+ */
+function recalculateMetrics(html: string, input: Record<string, unknown>): Partial<QualityMetrics> {
+  const text = html.replace(/<[^>]*>/g, '');
+  const textLower = text.toLowerCase();
+  const words = text.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+
+  const waterWords = new Set([
+    'также', 'кроме', 'более', 'менее', 'очень', 'достаточно', 'довольно',
+    'весьма', 'вполне', 'просто', 'именно', 'даже', 'уже', 'ещё', 'еще',
+    'только', 'лишь', 'вообще', 'конечно', 'безусловно', 'разумеется',
+    'несомненно', 'естественно', 'действительно', 'возможно', 'вероятно',
+    'является', 'являются', 'данный', 'данная', 'данное', 'данные',
+    'осуществлять', 'обеспечивать', 'представляет', 'абсолютно',
+    'совершенно', 'полностью', 'максимально', 'крайне',
+  ]);
+  let waterCount = 0;
+  for (const w of words) {
+    const wl = w.toLowerCase().replace(/[^а-яёa-z]/g, '');
+    if (waterWords.has(wl)) waterCount++;
+  }
+  const water = wordCount > 0 ? Math.round((waterCount / wordCount) * 100) : 0;
+
+  const targetQuery = ((input.target_query as string) ?? '').toLowerCase();
+  const keywordTokens = new Set<string>();
+  for (const tok of targetQuery.split(/\s+/)) {
+    const clean = tok.replace(/[^а-яёa-z]/g, '');
+    if (clean.length > 0) keywordTokens.add(clean);
+  }
+  const kwStr = ((input.keywords as string) ?? '').toLowerCase();
+  for (const tok of kwStr.split(/[\n\s]+/)) {
+    const clean = tok.replace(/[^а-яёa-z]/g, '');
+    if (clean.length > 0) keywordTokens.add(clean);
+  }
+  const wordFreq: Record<string, number> = {};
+  for (const w of words) {
+    const wl = w.toLowerCase().replace(/[^а-яёa-z]/g, '');
+    if (wl.length > 3 && !keywordTokens.has(wl)) wordFreq[wl] = (wordFreq[wl] ?? 0) + 1;
+  }
+  const totalSig = Object.values(wordFreq).reduce((a, b) => a + b, 0);
+  const repeated = Object.values(wordFreq).filter(c => c > 2).reduce((a, b) => a + b, 0);
+  const spam = totalSig > 0 ? Math.round((repeated / totalSig) * 100) : 0;
+
+  const wordFreqFull: Record<string, number> = {};
+  for (const w of words) {
+    const wl = w.toLowerCase().replace(/[^а-яёa-z]/g, '');
+    if (wl.length > 3) wordFreqFull[wl] = (wordFreqFull[wl] ?? 0) + 1;
+  }
+  const maxFreq = Object.values(wordFreqFull).reduce((a, b) => Math.max(a, b), 0);
+  const nausea_classic = Math.round(Math.sqrt(maxFreq) * 10) / 10;
+  const totalSigFull = Object.values(wordFreqFull).reduce((a, b) => a + b, 0);
+  const nausea_academic = totalSigFull > 0
+    ? Math.round((maxFreq / totalSigFull) * 1000) / 10 : 0;
+
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 5);
+  const sentLengths = sentences.map(s => s.split(/\s+/).filter(Boolean).length);
+  const avgSentLen = sentLengths.length > 0
+    ? sentLengths.reduce((a, b) => a + b, 0) / sentLengths.length : 0;
+  const longSentRatio = sentLengths.length > 0
+    ? sentLengths.filter(l => l > 25).length / sentLengths.length : 0;
+  const complexWordRatio = wordCount > 0
+    ? words.filter(w => (w.toLowerCase().match(/[аеёиоуыэюяaeiouy]/g) ?? []).length > 4).length / wordCount : 0;
+  const stopHits = [
+    'в настоящее время', 'стоит отметить', 'как известно',
+    'на сегодняшний день', 'важно отметить', 'следует подчеркнуть',
+    'необходимо учитывать', 'таким образом',
+  ].filter(sc => textLower.includes(sc)).length;
+  let readability = 10
+    - (avgSentLen > 18 ? (avgSentLen - 18) * 0.15 : 0)
+    - (longSentRatio * 3)
+    - (complexWordRatio * 2)
+    - (stopHits * 0.5)
+    - (water > 20 ? 1 : 0);
+  readability = Math.max(1, Math.min(10, Math.round(readability * 10) / 10));
+
+  const uniqueWords = Object.keys(wordFreqFull).length;
+  const uniqueness = wordCount > 0 ? Math.min(98, Math.round((uniqueWords / wordCount) * 200)) : 85;
+
+  const h2s = (html.match(/<h2[\s>]/gi) ?? []).length;
+  const h3s = (html.match(/<h3[\s>]/gi) ?? []).length;
+  const imgs = (html.match(/<img[\s>]/gi) ?? []).length;
+  const faqSection = html.match(/<h2[^>]*>.*?(?:FAQ|часто задаваемые|вопрос)[\s\S]*?(?=<h2[\s>]|$)/i);
+  const faqH3Count = faqSection ? (faqSection[0].match(/<h3[\s>]/gi) ?? []).length : 0;
+
+  return {
+    water,
+    spam,
+    nausea_classic,
+    nausea_academic,
+    uniqueness,
+    readability,
+    char_count: text.length,
+    word_count: wordCount,
+    h2_count: h2s,
+    h3_count: h3s,
+    image_count: imgs,
+    faq_count: faqH3Count,
+  };
+}
 
 /**
  * Шаг 7: финальная сборка.
@@ -39,9 +143,32 @@ export async function executeAssembly(
     ?? {};
   const baseMetrics = (auditData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
   const revMetrics = (revisionsData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
-  const qualityMetrics: QualityMetrics = { ...baseMetrics, ...revMetrics };
 
   const input = ctx.input;
+
+  // Пересчитать метрики по финальному тексту
+  const freshMetrics = recalculateMetrics(articleHtml, input);
+
+  // Кодовый AI-чекер
+  const plainTextForAI = articleHtml.replace(/<[^>]*>/g, '');
+  const codeAiResult = detectAIByCode(plainTextForAI);
+
+  // ai_score: среднее между LLM-оценкой и кодовой проверкой (LLM весит больше)
+  const llmAiScore = revMetrics.ai_score ?? baseMetrics.ai_score ?? 0;
+  const combinedAiScore = Math.round(llmAiScore * 0.6 + codeAiResult.score * 0.4);
+
+  const qualityMetrics: QualityMetrics = {
+    ...baseMetrics,
+    ...revMetrics,
+    ...freshMetrics,
+    ai_score: combinedAiScore,
+  };
+
+  if (codeAiResult.markers.length > 0) {
+    for (const marker of codeAiResult.markers) {
+      warnings.push(`[ai-code] ${marker}`);
+    }
+  }
   const targetQuery = (input.target_query as string) ?? '';
   const intent = (input.intent as string) ?? 'informational';
   const faqCount = (input.faq_count as number) ?? 0;
@@ -80,9 +207,10 @@ export async function executeAssembly(
         '- Содержит основной ключ в первых 40 символах',
         '- Не обрезанное предложение',
         '- Привлекает клики',
+        `- Текущий год: ${new Date().getFullYear()}. Если используешь год — только текущий, не прошлые.`,
         '',
         'Правила для description:',
-        '- 150-160 символов строго',
+        '- Строго 150-160 символов. Не короче 150 и не длиннее 160. Если получается короче — добавь полезную деталь.',
         '- Содержит основной ключ + 1 дополнительный',
         '- Законченное предложение',
         '- Улучшает seo',
@@ -153,7 +281,24 @@ export async function executeAssembly(
 
   description = description.replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-  const breadcrumb = title;
+  // Если description короче 150 — дополнить из текста
+  if (description.length < 150) {
+    const extraSentences = plainText.match(/[^.!?]+[.!?]+/g) ?? [];
+    for (const s of extraSentences) {
+      const candidate = description + ' ' + s.trim();
+      if (candidate.length >= 150 && candidate.length <= 165) {
+        description = candidate;
+        break;
+      }
+      if (candidate.length > 165) break;
+    }
+  }
+
+  // Breadcrumb: короткая версия title без года и лишних деталей
+  let breadcrumb = title.replace(/\s*\d{4}\s*/g, '').trim();
+  if (breadcrumb.length > 60) {
+    breadcrumb = breadcrumb.slice(0, 57).replace(/\s\S*$/, '').trimEnd() + '...';
+  }
 
   // 7.2 — Schema JSON-LD
   const schemas: Record<string, unknown>[] = [];
@@ -245,7 +390,7 @@ export async function executeAssembly(
       article_docx_base64: '', // TODO: генерация .docx с библиотекой docx
       metadata,
       qualityMetrics,
-      warnings,
+      warnings: [...new Set(warnings)],
       schemas,
     },
     durationMs: Date.now() - start,
@@ -326,7 +471,10 @@ function extractFAQ(html: string): Array<{ question: string; answer: string }> {
     const question = match[1].replace(/<[^>]*>/g, '').trim();
     const answer = match[2].replace(/<[^>]*>/g, '').trim();
     if (question && answer) {
-      questions.push({ question, answer: answer.slice(0, 500) });
+      const cleanAnswer = answer.split(/\n{2,}/)[0].trim().slice(0, 300);
+      if (cleanAnswer.length > 10) {
+        questions.push({ question, answer: cleanAnswer });
+      }
     }
   }
 

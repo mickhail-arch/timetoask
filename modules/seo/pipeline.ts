@@ -299,3 +299,109 @@ export async function resumePipeline(
     endedAt: new Date(),
   });
 }
+
+/**
+ * Перегенерация статьи с тем же brief и input.
+ * Запускает шаги: moderation_headings → draft → seo_audit → ai_detect_revisions → targeted_rewrite → assembly.
+ * Пропускает images — использует savedImages из предыдущего результата.
+ */
+export async function regeneratePipeline(
+  jobId: string,
+  userId: string,
+  brief: BriefData,
+  savedImages: Record<string, unknown> | null,
+  config: Record<string, unknown> | null,
+  steps: StepDefinition[],
+): Promise<void> {
+  const state = await getRedisState(jobId);
+  if (!state) throw new Error('Job state not found in Redis');
+
+  const ctx: PipelineContext = {
+    jobId,
+    userId,
+    input: state.originalInput ?? {},
+    config,
+    data: {
+      confirmation: { brief, user_edited: false },
+      ...(savedImages ? { images: savedImages } : {}),
+    },
+  };
+
+  const regenStepNames = savedImages
+    ? ['moderation_headings', 'draft', 'seo_audit', 'ai_detect_revisions', 'targeted_rewrite', 'assembly']
+    : ['moderation_headings', 'draft', 'seo_audit', 'ai_detect_revisions', 'targeted_rewrite', 'images', 'assembly'];
+
+  const regenSteps = steps.filter(s => regenStepNames.includes(s.name));
+
+  await updateJobStep(jobId, {
+    status: 'processing',
+  });
+
+  for (let i = 0; i < regenSteps.length; i++) {
+    const step = regenSteps[i];
+    const progressRange = STEP_PROGRESS[step.name] ?? [0, 100];
+
+    await saveRedisState(jobId, {
+      jobId,
+      status: 'processing',
+      currentStep: i + 2,
+      totalSteps: steps.length,
+      stepName: step.displayName,
+      progress: progressRange[0],
+    });
+
+    try {
+      const result = await step.execute(ctx);
+      ctx.data[step.name] = result.data;
+
+      await saveRedisState(jobId, {
+        jobId,
+        status: 'processing',
+        currentStep: i + 2,
+        totalSteps: steps.length,
+        stepName: step.displayName,
+        progress: progressRange[1],
+        partialData: typeof result.data?.partial === 'string'
+          ? result.data.partial as string
+          : undefined,
+        qualityMetrics: result.data?.qualityMetrics as PipelineState['qualityMetrics'],
+        warnings: result.data?.warnings as string[],
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await saveRedisState(jobId, {
+        jobId,
+        status: 'failed',
+        currentStep: i + 2,
+        totalSteps: steps.length,
+        stepName: step.displayName,
+        progress: progressRange[0],
+        error: message,
+        failedStep: step.name,
+      });
+      await updateJobStep(jobId, {
+        status: 'failed',
+        error: `Regenerate step "${step.name}" failed: ${message}`,
+        endedAt: new Date(),
+      });
+      return;
+    }
+  }
+
+  await saveRedisState(jobId, {
+    jobId,
+    status: 'completed',
+    currentStep: steps.length - 1,
+    totalSteps: steps.length,
+    stepName: 'done',
+    progress: 100,
+    result: ctx.data,
+    originalInput: state.originalInput,
+  });
+
+  await updateJobStep(jobId, {
+    status: 'completed',
+    output: ctx.data as unknown as Prisma.JsonObject,
+    endedAt: new Date(),
+  });
+}

@@ -335,7 +335,7 @@ export async function executeSeoAudit(
   const totalSignificantFull = Object.values(wordFreqFull).reduce((a, b) => a + b, 0);
 
   // Тошнота классическая
-  const maxFreq = Math.max(...Object.values(wordFreqFull), 0);
+  const maxFreq = Object.values(wordFreqFull).reduce((a, b) => Math.max(a, b), 0);
   const nauseaClassic = Math.round(Math.sqrt(maxFreq) * 10) / 10;
 
   // Тошнота академическая
@@ -355,7 +355,7 @@ export async function executeSeoAudit(
       const bwl = bw.toLowerCase().replace(/[^а-яёa-z]/g, '');
       if (bwl.length > 3) bFreq[bwl] = (bFreq[bwl] ?? 0) + 1;
     }
-    const bMaxFreq = Math.max(...Object.values(bFreq), 0);
+    const bMaxFreq = Object.values(bFreq).reduce((a, b) => Math.max(a, b), 0);
     const blockNausea = Math.round(Math.sqrt(bMaxFreq) * 10) / 10;
     if (blockNausea > 10) {
       addIssue('quality', 'warning', `Высокая тошнота в блоке "${h2Title}": ${blockNausea}`);
@@ -434,7 +434,7 @@ export async function executeSeoAudit(
   if (sentFirstWords.length > 0) {
     const fwFreq: Record<string, number> = {};
     for (const fw of sentFirstWords) fwFreq[fw] = (fwFreq[fw] ?? 0) + 1;
-    const maxFwRatio = Math.max(...Object.values(fwFreq)) / sentFirstWords.length;
+    const maxFwRatio = Object.values(fwFreq).reduce((a, b) => Math.max(a, b), 0) / sentFirstWords.length;
     if (maxFwRatio > 0.3) {
       const topWord = Object.entries(fwFreq).sort((a, b) => b[1] - a[1])[0][0];
       addIssue('quality', 'warning',

@@ -27,6 +27,14 @@ const FAQ_RE = /faq|часто задаваемые|вопрос/i;
 let faqNextId = 500;
 const genFaqId = () => `faq-${faqNextId++}`;
 
+function getMaxFaqForCharCount(charCount: number): number {
+  if (charCount >= 18000) return 10;
+  if (charCount >= 14000) return 8;
+  if (charCount >= 10000) return 7;
+  if (charCount >= 6000) return 5;
+  return 3;
+}
+
 export function ScreenBrief({
   brief,
   charCount,
@@ -45,6 +53,13 @@ export function ScreenBrief({
     return brief.h2_list[faqIdx].h3s.map((q, i) => ({ id: `faq-${i}`, text: q }));
   });
 
+  const [faqHeading, setFaqHeading] = useState<string>(() => {
+    if (faqCount === 0) return 'Часто задаваемые вопросы';
+    const faqIdx = brief.h2_list.findIndex(h2 => FAQ_RE.test(h2.text));
+    return faqIdx !== -1 ? brief.h2_list[faqIdx].text : 'Часто задаваемые вопросы';
+  });
+  const [faqHeadingEditing, setFaqHeadingEditing] = useState(false);
+
   const [h2List, setH2List] = useState<HeadingItem[]>(() =>
     brief.h2_list
       .filter(h2 => !(faqCount > 0 && FAQ_RE.test(h2.text)))
@@ -60,6 +75,9 @@ export function ScreenBrief({
   const [faqEditingId, setFaqEditingId] = useState<string | null>(null);
   const [faqDragIdx, setFaqDragIdx] = useState<number | null>(null);
   const [faqDragOverIdx, setFaqDragOverIdx] = useState<number | null>(null);
+
+  const maxFaqAllowed = getMaxFaqForCharCount(charCount);
+  const faqLimit = Math.min(maxFaqAllowed, 10);
 
   const handleH1Change = useCallback((text: string) => {
     setH1(text);
@@ -79,14 +97,14 @@ export function ScreenBrief({
 
     if (faqCount > 0 && faqQuestions.length > 0) {
       h2ListPlain.push({
-        text: 'Часто задаваемые вопросы',
+        text: faqHeading,
         h3s: faqQuestions.map(q => q.text),
       });
     }
 
     const updatedBrief: BriefData = { ...brief, h1, h2_list: h2ListPlain };
     onConfirm(updatedBrief, edited);
-  }, [brief, h1, h2List, faqQuestions, faqCount, edited, onConfirm]);
+  }, [brief, h1, h2List, faqQuestions, faqCount, faqHeading, edited, onConfirm]);
 
   const faqSaveEdit = useCallback((id: string, text: string) => {
     const val = text.trim() || 'Без названия';
@@ -102,7 +120,7 @@ export function ScreenBrief({
 
   const faqAddAfter = useCallback((idx: number) => {
     setFaqQuestions(prev => {
-      if (prev.length >= faqCount) return prev;
+      if (prev.length >= faqLimit) return prev;
       const id = genFaqId();
       const next = [...prev];
       next.splice(idx + 1, 0, { id, text: 'Новый вопрос' });
@@ -110,17 +128,17 @@ export function ScreenBrief({
       return next;
     });
     setEdited(true);
-  }, [faqCount]);
+  }, [faqLimit]);
 
   const faqAddBottom = useCallback(() => {
     setFaqQuestions(prev => {
-      if (prev.length >= faqCount) return prev;
+      if (prev.length >= faqLimit) return prev;
       const id = genFaqId();
       setFaqEditingId(id);
       return [...prev, { id, text: 'Новый вопрос' }];
     });
     setEdited(true);
-  }, [faqCount]);
+  }, [faqLimit]);
 
   const onFaqDragStart = (idx: number) => setFaqDragIdx(idx);
   const onFaqDragOver = (idx: number) => {
@@ -200,7 +218,7 @@ export function ScreenBrief({
           <strong className="font-medium text-[var(--color-text-primary)]">{h3Count}</strong> подразделов H3
         </span>
         <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
-          <strong className="font-medium text-[var(--color-text-primary)]">{faqQuestions.length}</strong> FAQ
+          <strong className="font-medium text-[var(--color-text-primary)]">{faqQuestions.length}</strong>/{faqLimit} FAQ
         </span>
         <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{calculatedPrice}</strong> токенов
@@ -220,8 +238,41 @@ export function ScreenBrief({
       {faqCount > 0 && (
         <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
           <div className="mb-3 flex items-center justify-between text-xs font-medium text-[var(--color-text-secondary)]">
-            <span>FAQ-вопросы ({faqQuestions.length}/{faqCount})</span>
+            <span>FAQ ({faqQuestions.length}/{faqLimit})</span>
             <span className="font-normal text-[var(--color-step-pending)]">перетаскивайте для изменения порядка</span>
+          </div>
+
+          {/* FAQ H2-заголовок */}
+          <div className="mb-1 flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] px-2.5 py-2">
+            <span className="invisible text-sm">⠿</span>
+            <span className="invisible flex h-[24px] w-[24px] shrink-0" />
+            <span className="shrink-0 rounded bg-[var(--seo-badge-h2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-primary)]">H2</span>
+            {faqHeadingEditing ? (
+              <input
+                autoFocus
+                defaultValue={faqHeading}
+                maxLength={100}
+                onBlur={e => {
+                  setFaqHeading(e.target.value.trim() || 'Часто задаваемые вопросы');
+                  setFaqHeadingEditing(false);
+                  setEdited(true);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    setFaqHeading((e.target as HTMLInputElement).value.trim() || 'Часто задаваемые вопросы');
+                    setFaqHeadingEditing(false);
+                    setEdited(true);
+                  }
+                  if (e.key === 'Escape') setFaqHeadingEditing(false);
+                }}
+                className="min-w-0 flex-1 rounded border border-[var(--seo-input-focus)] px-1.5 py-0.5 text-[13px] outline-none"
+              />
+            ) : (
+              <span className="min-w-0 flex-1 break-words text-[13px] text-[var(--color-text-primary)]" style={{ lineHeight: '1.2' }}>
+                {faqHeading}
+              </span>
+            )}
+            <button onClick={() => setFaqHeadingEditing(true)} className="shrink-0 text-sm text-[var(--color-step-pending)] hover:text-[var(--color-text-primary)]">✏</button>
           </div>
 
           {faqQuestions.map((q, idx) => (
@@ -243,7 +294,7 @@ export function ScreenBrief({
               <span className="cursor-grab text-sm text-[var(--color-step-pending)] active:cursor-grabbing">⠿</span>
               <button
                 onClick={() => faqAddAfter(idx)}
-                disabled={faqQuestions.length >= faqCount}
+                disabled={faqQuestions.length >= faqLimit}
                 className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-running)] disabled:opacity-30 disabled:hover:text-[var(--color-step-pending)]"
               >+</button>
               <span className="shrink-0 rounded bg-[#FFF3E0] px-1.5 py-0.5 text-[10px] font-medium text-[#E65100]">FAQ</span>
@@ -255,7 +306,7 @@ export function ScreenBrief({
 
           <button
             onClick={faqAddBottom}
-            disabled={faqQuestions.length >= faqCount}
+            disabled={faqQuestions.length >= faqLimit}
             className="mt-2 w-full rounded-[var(--radius-md)] border border-dashed border-[var(--seo-card-border)] py-1.5 text-xs text-[var(--color-step-pending)] transition-colors hover:border-[var(--color-step-running)] hover:text-[var(--color-step-running)] disabled:opacity-30 disabled:hover:border-[var(--seo-card-border)] disabled:hover:text-[var(--color-step-pending)]"
           >
             + Добавить вопрос

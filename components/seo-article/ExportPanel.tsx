@@ -22,9 +22,10 @@ interface ExportPanelProps {
   onDownloadDocx: () => void;
   onDownloadMetadata: () => void;
   onNewArticle: () => void;
+  onRegenerate?: () => void;
 }
 
-export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle }: ExportPanelProps) {
+export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate }: ExportPanelProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -51,6 +52,12 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
         <button onClick={onDownloadMetadata} className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Метаданные .docx</button>
       </div>
       <div className="mt-2 text-center text-[11px] text-[var(--color-step-pending)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>
+      {onRegenerate && (
+        <button onClick={onRegenerate}
+          className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]">
+          Перегенерировать текст
+        </button>
+      )}
       <button onClick={onNewArticle}
         className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-[13px] text-black transition-colors hover:brightness-90">
         Создать новую статью

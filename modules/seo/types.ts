@@ -21,6 +21,7 @@ export interface BriefData {
     h3s: string[];
     thesis: string;
     facts: string[];
+    target_keywords?: string[];
   }>;
   subtopics: string[];
   lsi_keywords: string[];
