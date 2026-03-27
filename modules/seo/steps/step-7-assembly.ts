@@ -3,7 +3,7 @@ import type { StepResult, PipelineContext, QualityMetrics } from '../types';
 import type { ToolConfig } from '@/core/types';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { getStepModel } from '../config';
-import { detectAIByCode } from '@/adapters/ai-detection';
+import { detectAIByCode, detectAIWinston } from '@/adapters/ai-detection';
 
 /**
  * Пересчёт ключевых метрик качества по финальному тексту.
@@ -157,10 +157,20 @@ export async function executeAssembly(
   const plainTextForAI = articleHtml.replace(/<[^>]*>/g, '');
   const codeAiResult = detectAIByCode(plainTextForAI);
 
-  // ai_score: среднее между LLM-оценкой и кодовой проверкой (LLM весит больше)
-  // Если есть Winston recheck из targeted_rewrite — он главный
+  let winstonAiScore: number | null = null;
+  try {
+    const winstonResult = await detectAIWinston(plainTextForAI);
+    if (winstonResult.score > 0 || winstonResult.markers.length > 0) {
+      winstonAiScore = winstonResult.score;
+      console.info(`[step-7] Winston final: AI=${winstonAiScore}%`);
+    }
+  } catch {
+    console.warn('[step-7] Winston final check failed, using code score');
+  }
+
   const winstonScore = winstonFinalScore ?? revMetrics.ai_score ?? baseMetrics.ai_score ?? 0;
-  const combinedAiScore = Math.round(winstonScore * 0.7 + codeAiResult.score * 0.3);
+  const baseAiScore = winstonAiScore ?? winstonScore;
+  const combinedAiScore = Math.round(baseAiScore * 0.7 + codeAiResult.score * 0.3);
 
   const qualityMetrics: QualityMetrics = {
     ...baseMetrics,
@@ -168,6 +178,10 @@ export async function executeAssembly(
     ...freshMetrics,
     ai_score: combinedAiScore,
   };
+
+  if (winstonAiScore !== null && winstonAiScore > 35) {
+    warnings.push(`AI-детект ${winstonAiScore}% (Winston) — рекомендуем проверить вручную`);
+  }
 
   if (codeAiResult.markers.length > 0) {
     for (const marker of codeAiResult.markers) {

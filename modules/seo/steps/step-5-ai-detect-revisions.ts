@@ -1,7 +1,7 @@
 // modules/seo/steps/step-5-ai-detect-revisions.ts — AI-детект + правки + повторный детект
 import type { StepResult, PipelineContext, SeoIssue, QualityMetrics } from '../types';
 import { getStepModel } from '../config';
-import { detectAIWinston } from '@/adapters/ai-detection';
+import { detectAIByCode } from '@/adapters/ai-detection';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import type { ToolConfig } from '@/core/types';
 
@@ -18,7 +18,6 @@ export async function executeAiDetectRevisions(
   const start = Date.now();
 
   const config = ctx.config as ToolConfig | null;
-  const aiModel = getStepModel(config, 'ai_detect', 'anthropic/claude-opus-4.6');
   const revisionsModel = getStepModel(config, 'revisions', 'anthropic/claude-opus-4.6');
 
   // Получить текст статьи из предыдущего шага
@@ -39,25 +38,18 @@ export async function executeAiDetectRevisions(
   const seoIssues = (auditData.seo_issues as SeoIssue[]) ?? [];
   let qualityMetrics = (auditData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
 
-  // 5.1 — AI-детект (Winston AI основной, LLM fallback)
+  // 5.1 — AI-детект (кодовая оценка)
   const plainText = articleHtml.replace(/<[^>]*>/g, '');
-  const aiResult = await detectAIWinston(plainText, aiModel);
-  const firstAiScore = aiResult.score;
-
-  const winstonProblematicSentences = aiResult.fix_instructions
-    .map(fi => {
-      const match = fi.match(/Переписать: "(.+?)"/);
-      return match ? match[1] : '';
-    })
-    .filter(Boolean);
+  const codeResult = detectAIByCode(plainText);
+  const firstAiScore = codeResult.score;
 
   // 5.2 — Объединение issues
-  const aiIssues: SeoIssue[] = aiResult.markers.map((marker, i) => ({
+  const aiIssues: SeoIssue[] = codeResult.markers.map((marker, i) => ({
     id: `ai-${i + 1}`,
     group: 'ai_detect',
     severity: 'warning' as const,
     message: marker,
-    fix_instruction: aiResult.fix_instructions[i] ?? 'Переписать для снижения AI-маркеров',
+    fix_instruction: `Исправить: ${marker}`,
   }));
 
   const allIssues = [
@@ -86,9 +78,9 @@ export async function executeAiDetectRevisions(
     const markers = (html.match(/\[IMAGE_\d+\]/g) ?? []).length;
     return (
       h1 !== 1 ||
-      h2 !== originalH2Count ||
-      textLen < originalTextLength * 0.8 ||
-      textLen > originalTextLength * 1.2 ||
+      Math.abs(h2 - originalH2Count) > 1 ||
+      textLen < originalTextLength * 0.7 ||
+      textLen > originalTextLength * 1.3 ||
       (originalMarkerCount > 0 && markers < originalMarkerCount)
     );
   }
@@ -171,8 +163,8 @@ ${rulesBlock}
 
       const rollback =
         revisedH1 !== 1 ||
-        revisedH2 !== originalH2Count ||
-        revisedText.length < currentText.length * 0.85 ||
+        Math.abs(revisedH2 - originalH2Count) > 1 ||
+        revisedText.length < currentText.length * 0.7 ||
         revisedMarkers < currentMarkers;
 
       if (rollback) {
@@ -216,19 +208,8 @@ ${rulesBlock}
     console.info(`[step-5] Revision iteration 2 done, critical remaining: ${criticalSeoIssues.length}`);
   }
 
-  // 5.4 — Повторный AI-детект (только если первый был >35%)
+  // 5.4 — Финальный AI-скор
   let finalAiScore = firstAiScore;
-  if (firstAiScore > 35) {
-    try {
-      const recheck = await detectAIWinston(
-        articleHtml.replace(/<[^>]*>/g, ''),
-        aiModel,
-      );
-      finalAiScore = recheck.score;
-    } catch {
-      console.warn('[step-5] Repeat AI-detect failed, keeping first score');
-    }
-  }
 
   // Обновить qualityMetrics
   qualityMetrics = {
@@ -253,7 +234,7 @@ ${rulesBlock}
       qualityMetrics,
       warnings,
       partial: articleHtml.slice(0, 500),
-      winston_problematic_sentences: winstonProblematicSentences,
+      winston_problematic_sentences: [],
     },
     durationMs: Date.now() - start,
   };

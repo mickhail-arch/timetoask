@@ -22,3 +22,9 @@ llm/           — Запуск инструментов (sync SSE + async pipel
 admin/         — Статистика, управление пользователями и инструментами.
  
 notifications/ — Обёртка над email-адаптером с бизнес-названиями.
+
+seo/           — SEO-генератор статей. Пайплайн из 9 шагов.
+               pipeline.ts — runPipeline, resumePipeline, regeneratePipeline.
+               steps/ — каждый шаг возвращает StepResult.
+               pricing.ts — calculatePrice (динамическая цена).
+               Не импортирует Next.js. Данные между шагами через ctx.data[stepName].

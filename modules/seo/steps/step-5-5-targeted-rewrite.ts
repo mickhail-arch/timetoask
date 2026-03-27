@@ -2,7 +2,7 @@
 import type { StepResult, PipelineContext } from '../types';
 import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
-import { detectAIWinston } from '@/adapters/ai-detection';
+import { detectAIByCode } from '@/adapters/ai-detection';
 import type { ToolConfig } from '@/core/types';
 
 const STOP_STARTS = [
@@ -226,7 +226,7 @@ export async function executeTargetedRewrite(
   let articleHtml = (revData.article_html as string) ?? '';
   const aiScore = (revData.final_ai_score as number) ?? 0;
 
-  if (aiScore <= 25) {
+  if (aiScore <= 15) {
     const skipRecheck = quickSeoRecheck(articleHtml, ctx.input);
     const skipWarnings: string[] = [];
     for (const issue of skipRecheck.issues) {
@@ -250,7 +250,7 @@ export async function executeTargetedRewrite(
 
   const config = ctx.config as ToolConfig | null;
   const model = getStepModel(config, 'revisions', 'google/gemini-2.5-flash');
-  const aiModel = getStepModel(config, 'ai_detect', 'anthropic/claude-sonnet-4');
+
 
   const paragraphs = extractParagraphs(articleHtml);
 
@@ -340,22 +340,10 @@ ${problemList}
     warnings.push('Проблемных абзацев не найдено — рерайт не потребовался');
   }
 
-  // Повторный Winston-детект после рерайта
   let finalAiScore = aiScore;
   if (rewrittenCount > 0) {
-    try {
-      const recheckResult = await detectAIWinston(
-        articleHtml.replace(/<[^>]*>/g, ''),
-        aiModel,
-      );
-      finalAiScore = recheckResult.score;
-      console.info(`[step-5.5] Winston recheck: ${aiScore}% → ${finalAiScore}%`);
-      if (finalAiScore > 35) {
-        warnings.push(`AI-детект после рерайта: ${finalAiScore}% (Winston)`);
-      }
-    } catch {
-      console.warn('[step-5.5] Winston recheck failed');
-    }
+    const recheckCode = detectAIByCode(articleHtml.replace(/<[^>]*>/g, ''));
+    finalAiScore = recheckCode.score;
   }
 
   const recheck = quickSeoRecheck(articleHtml, ctx.input);
@@ -375,7 +363,7 @@ ${problemList}
       warnings,
       recheckMetrics: recheck.metrics,
       final_ai_score: finalAiScore,
-      winston_recheck: rewrittenCount > 0,
+      winston_recheck: false,
       partial: articleHtml.slice(0, 500),
     },
     durationMs: Date.now() - start,

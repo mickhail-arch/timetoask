@@ -1,8 +1,9 @@
 # prisma/ — Схема базы данных
  
-schema.prisma  — 10 таблиц MVP
+schema.prisma  — 12 таблиц
 migrations/	— автогенерация через prisma migrate dev
 seed.ts    	— начальные данные (admin-пользователь, дефолтные tools)
+seed-cleanup.ts — удаление инструментов из БД
  
 Команды:
   pnpm prisma migrate dev   	— создать миграцию

@@ -39,36 +39,56 @@ const IMG_STYLES = ['Реалистичные', 'Абстрактные', '3D', 
 interface ScreenInputProps {
   onSubmit: (input: Record<string, unknown>) => void;
   pricingConfig?: Partial<PricingConfig> | null;
+  initialValues?: Record<string, unknown>;
 }
 
-export function ScreenInput({ onSubmit, pricingConfig }: ScreenInputProps) {
-  const [targetQuery, setTargetQuery] = useState('');
-  const [keywords, setKeywords] = useState('');
-  const [intent, setIntent] = useState('informational');
-  const [charCount, setCharCount] = useState(8000);
-  const [imageCount, setImageCount] = useState(0);
+export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenInputProps) {
+  const iv = initialValues;
 
-  const [tone, setTone] = useState('Экспертный');
-  const [customTone, setCustomTone] = useState('');
-  const [showCustomTone, setShowCustomTone] = useState(false);
-  const [gender, setGender] = useState('Все');
-  const [ages, setAges] = useState<string[]>(['Все']);
-  const [geo, setGeo] = useState('');
-  const [imageStyles, setImageStyles] = useState<string[]>(['Реалистичные']);
+  const toneRevMap: Record<string, string> = { expert: 'Экспертный', casual: 'Разговорный', business: 'Деловой', sales: 'Продающий', scientific: 'Научный', simple: 'Простой' };
+  const ivToneRaw = (iv?.tone_of_voice as string) ?? '';
+  const ivToneDisplay = toneRevMap[ivToneRaw];
+  const ivIsCustomTone = !!ivToneRaw && !ivToneDisplay;
+
+  const genderRevMap: Record<string, string> = { male: 'Мужчины', female: 'Женщины', all: 'Все' };
+  const ageRevMap: Record<string, string> = { all: 'Все', '0-18': '0–18', '18-24': '18–24', '25-34': '25–34', '35-44': '35–44', '45-54': '45–54', '55+': '55+' };
+  const styleRevMap: Record<string, string> = { 'реалистичные': 'Реалистичные', 'абстрактные': 'Абстрактные', '3d': '3D', 'минимализм': 'Минимализм', 'иллюстрации': 'Иллюстрации' };
+  const ta = iv?.target_audience as { gender?: string; age?: string[] } | undefined;
+
+  const [targetQuery, setTargetQuery] = useState((iv?.target_query as string) ?? '');
+  const [keywords, setKeywords] = useState((iv?.keywords as string) ?? '');
+  const [intent, setIntent] = useState((iv?.intent as string) ?? 'informational');
+  const [charCount, setCharCount] = useState((iv?.target_char_count as number) ?? 8000);
+  const [imageCount, setImageCount] = useState((iv?.image_count as number) ?? 0);
+
+  const [tone, setTone] = useState(ivToneDisplay ?? (ivIsCustomTone ? '' : 'Экспертный'));
+  const [customTone, setCustomTone] = useState(ivIsCustomTone ? ivToneRaw : '');
+  const [showCustomTone, setShowCustomTone] = useState(ivIsCustomTone);
+  const [gender, setGender] = useState(genderRevMap[ta?.gender ?? ''] ?? 'Все');
+  const [ages, setAges] = useState<string[]>(ta?.age?.map(a => ageRevMap[a] ?? a) ?? ['Все']);
+  const [geo, setGeo] = useState((iv?.geo_location as string) ?? '');
+  const [imageStyles, setImageStyles] = useState<string[]>(
+    (iv?.image_style as string[])?.map(s => styleRevMap[s] ?? s) ?? ['Реалистичные']
+  );
 
   const [geoFocused, setGeoFocused] = useState(false);
 
-  const [accordionOpen, setAccordionOpen] = useState(false);
-  const [faqEnabled, setFaqEnabled] = useState(true);
-  const [faqCount, setFaqCount] = useState(5);
-  const [brand, setBrand] = useState('');
-  const [brandUrl, setBrandUrl] = useState('');
-  const [brandDescription, setBrandDescription] = useState('');
-  const [cta, setCta] = useState('');
-  const [ctaUrl, setCtaUrl] = useState('');
-  const [externalLinks, setExternalLinks] = useState<Array<{url: string; anchor: string}>>([{ url: '', anchor: '' }]);
-  const [forbiddenWords, setForbiddenWords] = useState('');
-  const [legalRestrictions, setLegalRestrictions] = useState('');
+  const [accordionOpen, setAccordionOpen] = useState(
+    !!iv && Object.keys(iv).length > 0 &&
+    !!(iv.brand || iv.cta || iv.forbidden_words || iv.legal_restrictions)
+  );
+  const [faqEnabled, setFaqEnabled] = useState(iv?.faq_count !== undefined ? (iv.faq_count as number) > 0 : true);
+  const [faqCount, setFaqCount] = useState((iv?.faq_count as number) > 0 ? (iv!.faq_count as number) : 5);
+  const [brand, setBrand] = useState((iv?.brand as string) ?? '');
+  const [brandUrl, setBrandUrl] = useState((iv?.brand_url as string) ?? '');
+  const [brandDescription, setBrandDescription] = useState((iv?.brand_description as string) ?? '');
+  const [cta, setCta] = useState((iv?.cta as string) ?? '');
+  const [ctaUrl, setCtaUrl] = useState((iv?.cta_url as string) ?? '');
+  const [externalLinks, setExternalLinks] = useState<Array<{url: string; anchor: string}>>(
+    (iv?.external_links as Array<{url: string; anchor: string}>) ?? [{ url: '', anchor: '' }]
+  );
+  const [forbiddenWords, setForbiddenWords] = useState((iv?.forbidden_words as string) ?? '');
+  const [legalRestrictions, setLegalRestrictions] = useState((iv?.legal_restrictions as string) ?? '');
 
   const [filterWarning, setFilterWarning] = useState(false);
 

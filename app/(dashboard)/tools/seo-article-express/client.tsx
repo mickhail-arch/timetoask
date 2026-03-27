@@ -8,6 +8,9 @@ import { ScreenBrief } from '@/components/seo-article/ScreenBrief';
 import { ScreenResult } from '@/components/seo-article/ScreenResult';
 import { useSeoJobPolling } from '@/hooks/useSeoJobPolling';
 import { copyArticle, downloadHTML, downloadDOCX, downloadMetadata } from '@/lib/seo-article/export';
+import { SessionHistory } from '@/components/seo-article/SessionHistory';
+import { useSessionHistory } from '@/hooks/useSessionHistory';
+import type { SessionFull } from '@/hooks/useSessionHistory';
 import '@/components/seo-article/tokens.css';
 
 type Screen = 'input' | 'progress_analysis' | 'brief' | 'progress_generation' | 'result';
@@ -35,6 +38,8 @@ export function SeoArticleExpressClient() {
   const [startTime, setStartTime] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedImages, setSavedImages] = useState<Record<string, unknown> | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession } = useSessionHistory('seo-article-express');
 
   const { state: jobState } = useSeoJobPolling(
     screen !== 'input' && screen !== 'result' ? jobId : null,
@@ -71,6 +76,39 @@ export function SeoArticleExpressClient() {
 
       setResult(flatResult);
       setScreen('result');
+
+      // Автосохранение сессии
+      try {
+        const inputParams = input;
+        const title = (inputParams.target_query as string) ?? 'Без названия';
+        const meta = {
+          metadata: flatResult.metadata,
+          quality_metrics: flatResult.quality_metrics,
+          warnings: flatResult.warnings,
+        };
+
+        fetch('/api/sessions/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            toolSlug: 'seo-article-express',
+            title,
+            inputParams,
+            outputMeta: meta,
+            contentText: flatResult.article_html,
+            tokensUsed: calculatedPrice,
+            durationSec: Math.round((Date.now() - startTime) / 1000),
+          }),
+        }).then(async (res) => {
+          if (res.ok) {
+            const json = await res.json();
+            setActiveSessionId(json.data?.id ?? null);
+            refreshSessions();
+          }
+        });
+      } catch (err) {
+        console.error('Failed to save session:', err);
+      }
     }
   }, [jobState, screen]);
 
@@ -114,32 +152,48 @@ export function SeoArticleExpressClient() {
     }
   }, [jobId]);
 
-  const handleRegenerate = useCallback(async () => {
-    if (!jobId || !brief) return;
+  const handleRegenerate = useCallback(() => {
     setResult(null);
-    setStartTime(Date.now());
-    setScreen('progress_generation');
+    setJobId(null);
+    setScreen('input');
+  }, []);
 
-    try {
-      const res = await fetch(`/api/jobs/${jobId}/regenerate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brief,
-          savedImages: savedImages ?? null,
-        }),
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
-        throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
-      }
-      const json = await res.json();
-      if (json.data?.jobId) setJobId(json.data.jobId);
-    } catch (err) {
-      console.error('Regenerate error:', err);
-      setScreen('result');
+  const handleSelectSession = useCallback(async (sessionId: string) => {
+    const data = await loadSession(sessionId);
+    if (!data || !data.contentText) return;
+
+    setActiveSessionId(sessionId);
+    setInput(data.inputParams ?? {});
+
+    const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
+    setResult({
+      article_html: data.contentText,
+      article_docx_base64: '',
+      metadata: meta.metadata ?? {},
+      quality_metrics: meta.quality_metrics ?? {},
+      warnings: (meta.warnings as string[]) ?? [],
+    });
+
+    setBrief(null);
+    setJobId(null);
+    setScreen('result');
+  }, [loadSession]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    await deleteSession(sessionId);
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(null);
+      setScreen('input');
+      setResult(null);
     }
-  }, [jobId, brief, savedImages]);
+  }, [deleteSession, activeSessionId]);
+
+  const handleNewFromHistory = useCallback(() => {
+    setActiveSessionId(null);
+    setScreen('input');
+    setResult(null);
+    setJobId(null);
+  }, []);
 
   const handleCancel = useCallback(() => {
     setJobId(null);
@@ -169,66 +223,78 @@ export function SeoArticleExpressClient() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {screen === 'input' && (
-        <>
-          {submitError && (
-            <div className="mx-auto max-w-[640px] rounded-[var(--radius-md)] border border-[var(--color-step-error)] bg-[#FFF5F5] px-4 py-3 text-sm text-[var(--color-step-error)]">
-              {submitError}
-            </div>
+    <>
+      <SessionHistory
+        sessions={sessions}
+        loading={sessionsLoading}
+        activeSessionId={activeSessionId}
+        onSelect={handleSelectSession}
+        onDelete={handleDeleteSession}
+        onNewArticle={handleNewFromHistory}
+      />
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex flex-col gap-6">
+          {screen === 'input' && (
+            <>
+              {submitError && (
+                <div className="mx-auto max-w-[640px] rounded-[var(--radius-md)] border border-[var(--color-step-error)] bg-[#FFF5F5] px-4 py-3 text-sm text-[var(--color-step-error)]">
+                  {submitError}
+                </div>
+              )}
+              <ScreenInput onSubmit={handleSubmit} initialValues={input} />
+            </>
           )}
-          <ScreenInput onSubmit={handleSubmit} />
-        </>
-      )}
 
-      {screen === 'progress_analysis' && (
-        <ScreenProgress
-          title="Анализ"
-          subtitle={`«${(input.target_query as string) ?? ''}»`}
-          steps={mapSteps(ANALYSIS_STEPS)}
-          progress={jobState?.progress ?? 0}
-          currentStepLabel={`осталось ~${Math.max(1, 15 - Math.round((Date.now() - startTime) / 1000))} сек`}
-          onCancel={handleCancel}
-        />
-      )}
+          {screen === 'progress_analysis' && (
+            <ScreenProgress
+              title="Анализ"
+              subtitle={`«${(input.target_query as string) ?? ''}»`}
+              steps={mapSteps(ANALYSIS_STEPS)}
+              progress={jobState?.progress ?? 0}
+              currentStepLabel={`осталось ~${Math.max(1, 15 - Math.round((Date.now() - startTime) / 1000))} сек`}
+              onCancel={handleCancel}
+            />
+          )}
 
-      {screen === 'brief' && brief && (
-        <ScreenBrief
-          brief={brief as any}
-          charCount={(input.target_char_count as number) ?? 8000}
-          imageCount={(input.image_count as number) ?? 0}
-          faqCount={(input.faq_count as number) ?? 5}
-          calculatedPrice={calculatedPrice}
-          onConfirm={handleConfirm as any}
-          onBack={handleBack}
-        />
-      )}
+          {screen === 'brief' && brief && (
+            <ScreenBrief
+              brief={brief as any}
+              charCount={(input.target_char_count as number) ?? 8000}
+              imageCount={(input.image_count as number) ?? 0}
+              faqCount={(input.faq_count as number) ?? 5}
+              calculatedPrice={calculatedPrice}
+              onConfirm={handleConfirm as any}
+              onBack={handleBack}
+            />
+          )}
 
-      {screen === 'progress_generation' && (
-        <ScreenProgress
-          title="Генерация"
-          subtitle={`«${(input.target_query as string) ?? ''}»`}
-          steps={mapSteps(GENERATION_STEPS, 2)}
-          progress={jobState?.progress ?? 15}
-          currentStepLabel={`осталось ~${Math.max(1, 90 - Math.round((Date.now() - startTime) / 1000))} сек`}
-          onCancel={handleCancel}
-        />
-      )}
+          {screen === 'progress_generation' && (
+            <ScreenProgress
+              title="Генерация"
+              subtitle={`«${(input.target_query as string) ?? ''}»`}
+              steps={mapSteps(GENERATION_STEPS, 2)}
+              progress={jobState?.progress ?? 15}
+              currentStepLabel={`осталось ~${Math.max(1, 90 - Math.round((Date.now() - startTime) / 1000))} сек`}
+              onCancel={handleCancel}
+            />
+          )}
 
-      {screen === 'result' && result && (
-        <ScreenResult
-          result={result as any}
-          query={(input.target_query as string) ?? ''}
-          stepCount={9}
-          duration={duration}
-          onCopyArticle={() => copyArticle((result as any).article_html ?? '')}
-          onDownloadHtml={() => downloadHTML((result as any).article_html ?? '', (result as any).metadata?.slug ?? 'article')}
-          onDownloadDocx={() => downloadDOCX((result as any).article_docx_base64 ?? '', (result as any).metadata?.file_name ?? 'article.docx')}
-          onDownloadMetadata={() => downloadMetadata('', (result as any).metadata?.metadata_file_name ?? 'metadata.docx')}
-          onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); }}
-          onRegenerate={handleRegenerate}
-        />
-      )}
-    </div>
+          {screen === 'result' && result && (
+            <ScreenResult
+              result={result as any}
+              query={(input.target_query as string) ?? ''}
+              stepCount={9}
+              duration={duration}
+              onCopyArticle={() => copyArticle((result as any).article_html ?? '')}
+              onDownloadHtml={() => downloadHTML((result as any).article_html ?? '', (result as any).metadata?.slug ?? 'article')}
+              onDownloadDocx={() => downloadDOCX((result as any).article_docx_base64 ?? '', (result as any).metadata?.file_name ?? 'article.docx')}
+              onDownloadMetadata={() => downloadMetadata('', (result as any).metadata?.metadata_file_name ?? 'metadata.docx')}
+              onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); setActiveSessionId(null); }}
+              onRegenerate={handleRegenerate}
+            />
+          )}
+        </div>
+      </div>
+    </>
   );
 }

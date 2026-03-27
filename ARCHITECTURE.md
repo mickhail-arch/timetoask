@@ -2,7 +2,7 @@
  
 ## Стек
 TypeScript 5.x (strict) · Next.js 16.1.x · React 19.2.x
-PostgreSQL 16 · Prisma 7.x · Redis 7.x · OpenRouter
+PostgreSQL 16 · Prisma 7.x · Redis 7.x · OpenRouter · Winston AI · Serper.dev
 NextAuth v4 · ЮKassa · Tailwind CSS 4.x · shadcn/ui
  
 ## Слои (зависимости строго сверху вниз)
@@ -26,3 +26,11 @@ Free-tier (free_uses_limit на инструмент) + Token-based billing
 ## Инструменты
 executionMode: sync → SSE-стрим (<30 сек)
 executionMode: async → jobId + polling GET /api/jobs/:id/status
+
+## SEO-пайплайн (seo-article-express)
+executionMode: async. 9 шагов: moderation → brief → [UI confirmation] → moderation_headings → draft → seo_audit → ai_detect_revisions → targeted_rewrite → images → assembly.
+Модели: Claude Sonnet 4 (draft/brief/revisions/ai_detect), Gemini 2.5 Flash (moderation/image_prompt), Gemini 3.1 Flash (image_gen).
+Конфиг моделей и цен — в БД tools.config, меняется без деплоя.
+
+## Таблицы БД (12 моделей)
+User, Session, Plan, Balance, Transaction, UsageLog, Chat, Message, Tool, JobStep, VerificationToken, PasswordResetToken, ToolSession
