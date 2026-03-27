@@ -2,6 +2,7 @@
 import type { StepResult, PipelineContext } from '../types';
 import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { detectAIWinston } from '@/adapters/ai-detection';
 import type { ToolConfig } from '@/core/types';
 
 const STOP_STARTS = [
@@ -180,6 +181,42 @@ function quickSeoRecheck(
   return { issues, metrics: { water, spam, nauseaClassic, keywordDensity } };
 }
 
+/**
+ * Найти абзацы, содержащие проблемные предложения от Winston.
+ * Возвращает абзацы с конкретными проблемами для рерайта.
+ */
+function findParagraphsWithWinstonSentences(
+  paragraphs: string[],
+  problematicSentences: string[],
+): Array<{ index: number; html: string; text: string; problems: string[] }> {
+  if (problematicSentences.length === 0) return [];
+
+  const result: Array<{ index: number; html: string; text: string; problems: string[] }> = [];
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const paraText = paragraphs[i].replace(/<[^>]*>/g, '').toLowerCase();
+    const matchedProblems: string[] = [];
+
+    for (const sentence of problematicSentences) {
+      const searchSnippet = sentence.replace(/\.\.\.$/g, '').slice(0, 50).toLowerCase();
+      if (searchSnippet.length > 10 && paraText.includes(searchSnippet)) {
+        matchedProblems.push(`Winston AI пометил как AI-текст: "${sentence.slice(0, 80)}"`);
+      }
+    }
+
+    if (matchedProblems.length > 0) {
+      result.push({
+        index: i,
+        html: paragraphs[i],
+        text: paragraphs[i].replace(/<[^>]*>/g, ''),
+        problems: matchedProblems,
+      });
+    }
+  }
+
+  return result;
+}
+
 export async function executeTargetedRewrite(
   ctx: PipelineContext,
 ): Promise<StepResult> {
@@ -203,6 +240,8 @@ export async function executeTargetedRewrite(
         skipped: true,
         warnings: skipWarnings,
         recheckMetrics: skipRecheck.metrics,
+        final_ai_score: aiScore,
+        winston_recheck: false,
         partial: articleHtml.slice(0, 500),
       },
       durationMs: Date.now() - start,
@@ -211,10 +250,16 @@ export async function executeTargetedRewrite(
 
   const config = ctx.config as ToolConfig | null;
   const model = getStepModel(config, 'revisions', 'google/gemini-2.5-flash');
+  const aiModel = getStepModel(config, 'ai_detect', 'anthropic/claude-sonnet-4');
 
   const paragraphs = extractParagraphs(articleHtml);
 
-  const scored: ParagraphScore[] = paragraphs
+  // Источник 1: проблемные предложения от Winston (шаг 5)
+  const winstonSentences = (revData.winston_problematic_sentences as string[]) ?? [];
+  const winstonParagraphs = findParagraphsWithWinstonSentences(paragraphs, winstonSentences);
+
+  // Источник 2: кодовый скоринг абзацев (как раньше)
+  const codeScoredRaw: ParagraphScore[] = paragraphs
     .map((html, index) => {
       const text = html.replace(/<[^>]*>/g, '');
       return { index, html, text, score: 0, problems: [] as string[] };
@@ -224,30 +269,45 @@ export async function executeTargetedRewrite(
       const result = scoreParagraph(p.text);
       return { ...p, score: result.score, problems: result.problems };
     })
-    .filter(p => p.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .filter(p => p.score > 0);
+
+  // Объединить: Winston-абзацы приоритетнее, затем кодовые
+  const winstonIndices = new Set(winstonParagraphs.map(p => p.index));
+  const codeOnly = codeScoredRaw.filter(p => !winstonIndices.has(p.index));
+
+  const toRewrite: Array<{ index: number; html: string; text: string; problems: string[] }> = [
+    ...winstonParagraphs.map(p => ({
+      ...p,
+      problems: [
+        ...p.problems,
+        ...(codeScoredRaw.find(c => c.index === p.index)?.problems ?? []),
+      ],
+    })),
+    ...codeOnly.sort((a, b) => b.score - a.score).slice(0, Math.max(0, 5 - winstonParagraphs.length)),
+  ].slice(0, 5);
 
   const warnings: string[] = [];
   let rewrittenCount = 0;
 
-  for (const para of scored) {
+  for (const para of toRewrite) {
     try {
       const problemList = para.problems.map((p, i) => `${i + 1}. ${p}`).join('\n');
 
       const rewritten = await generateText({
         model,
-        systemPrompt: `Перепиши абзац, исправив конкретные проблемы. Сохрани смысл, все ключевые слова и факты.
+        systemPrompt: `Перепиши абзац, чтобы он звучал как написанный человеком-экспертом. Сохрани смысл, все ключевые слова и факты.
 
 ПРОБЛЕМЫ ЭТОГО АБЗАЦА:
 ${problemList}
 
-ПРАВИЛА:
-- Исправь каждую указанную проблему.
+ПРАВИЛА ЧЕЛОВЕКОПОДОБНОГО ТЕКСТА:
+- Начни с конкретного факта, числа, вопроса или живого примера — не с вводного слова.
+- Чередуй длину предложений: одно короткое (5-8 слов), следующее длинное (18-25 слов).
+- Добавь одну деталь от первого лица или конкретный пример из практики.
+- Используй разговорную вставку: риторический вопрос, восклицание, обращение к читателю.
+- Убери все канцеляризмы и стоп-конструкции.
+- Не добавляй: "стоит отметить", "важно подчеркнуть", "в настоящее время", "таким образом", "следует отметить", "необходимо учитывать".
 - Сохрани длину абзаца (±30%).
-- Не добавляй стоп-конструкции: "в настоящее время", "стоит отметить", "важно отметить", "таким образом" и подобные.
-- Чередуй короткие (5-10 слов) и длинные (15-25 слов) предложения.
-- Начни абзац с факта, числа, вопроса или примера — не с вводного слова.
 
 Верни ТОЛЬКО переписанный текст абзаца без пояснений, без HTML-тегов.`,
         userMessage: para.text,
@@ -262,7 +322,7 @@ ${problemList}
         cleanRewritten.length < para.text.length * 0.5 ||
         cleanRewritten.length > para.text.length * 2
       ) {
-        warnings.push(`Абзац #${para.index + 1}: рерайт отклонён (длина изменилась слишком сильно)`);
+        warnings.push(`Абзац #${para.index + 1}: рерайт отклонён (длина)`);
         continue;
       }
 
@@ -276,8 +336,26 @@ ${problemList}
     }
   }
 
-  if (scored.length === 0) {
+  if (toRewrite.length === 0) {
     warnings.push('Проблемных абзацев не найдено — рерайт не потребовался');
+  }
+
+  // Повторный Winston-детект после рерайта
+  let finalAiScore = aiScore;
+  if (rewrittenCount > 0) {
+    try {
+      const recheckResult = await detectAIWinston(
+        articleHtml.replace(/<[^>]*>/g, ''),
+        aiModel,
+      );
+      finalAiScore = recheckResult.score;
+      console.info(`[step-5.5] Winston recheck: ${aiScore}% → ${finalAiScore}%`);
+      if (finalAiScore > 35) {
+        warnings.push(`AI-детект после рерайта: ${finalAiScore}% (Winston)`);
+      }
+    } catch {
+      console.warn('[step-5.5] Winston recheck failed');
+    }
   }
 
   const recheck = quickSeoRecheck(articleHtml, ctx.input);
@@ -296,6 +374,8 @@ ${problemList}
       skipped: false,
       warnings,
       recheckMetrics: recheck.metrics,
+      final_ai_score: finalAiScore,
+      winston_recheck: rewrittenCount > 0,
       partial: articleHtml.slice(0, 500),
     },
     durationMs: Date.now() - start,

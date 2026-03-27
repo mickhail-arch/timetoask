@@ -144,6 +144,10 @@ export async function executeAssembly(
   const baseMetrics = (auditData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
   const revMetrics = (revisionsData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
 
+  // Финальный AI-score из targeted_rewrite (после Winston recheck) — приоритетнее
+  const targetedRewriteData = ctx.data.targeted_rewrite as Record<string, unknown> ?? {};
+  const winstonFinalScore = targetedRewriteData.final_ai_score as number | undefined;
+
   const input = ctx.input;
 
   // Пересчитать метрики по финальному тексту
@@ -154,8 +158,9 @@ export async function executeAssembly(
   const codeAiResult = detectAIByCode(plainTextForAI);
 
   // ai_score: среднее между LLM-оценкой и кодовой проверкой (LLM весит больше)
-  const llmAiScore = revMetrics.ai_score ?? baseMetrics.ai_score ?? 0;
-  const combinedAiScore = Math.round(llmAiScore * 0.6 + codeAiResult.score * 0.4);
+  // Если есть Winston recheck из targeted_rewrite — он главный
+  const winstonScore = winstonFinalScore ?? revMetrics.ai_score ?? baseMetrics.ai_score ?? 0;
+  const combinedAiScore = Math.round(winstonScore * 0.7 + codeAiResult.score * 0.3);
 
   const qualityMetrics: QualityMetrics = {
     ...baseMetrics,

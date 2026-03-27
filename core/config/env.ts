@@ -59,6 +59,9 @@ const envSchema = z.object({
   FREE_TOKENS_ON_REGISTER: z.coerce.number().int().default(300),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().default(60),
 
+  // AI Detection (Winston AI)
+  WINSTON_API_KEY: z.string().optional().default(''),
+
   // Search
   SERPER_API_KEY: z.string().optional().default(''),
   SERPAPI_KEY: z.string().optional().default(''),

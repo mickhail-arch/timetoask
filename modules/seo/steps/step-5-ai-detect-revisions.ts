@@ -1,7 +1,7 @@
 // modules/seo/steps/step-5-ai-detect-revisions.ts — AI-детект + правки + повторный детект
 import type { StepResult, PipelineContext, SeoIssue, QualityMetrics } from '../types';
 import { getStepModel } from '../config';
-import { detectAI } from '@/adapters/ai-detection';
+import { detectAIWinston } from '@/adapters/ai-detection';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import type { ToolConfig } from '@/core/types';
 
@@ -39,10 +39,17 @@ export async function executeAiDetectRevisions(
   const seoIssues = (auditData.seo_issues as SeoIssue[]) ?? [];
   let qualityMetrics = (auditData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
 
-  // 5.1 — AI-детект
+  // 5.1 — AI-детект (Winston AI основной, LLM fallback)
   const plainText = articleHtml.replace(/<[^>]*>/g, '');
-  const aiResult = await detectAI(plainText, aiModel);
+  const aiResult = await detectAIWinston(plainText, aiModel);
   const firstAiScore = aiResult.score;
+
+  const winstonProblematicSentences = aiResult.fix_instructions
+    .map(fi => {
+      const match = fi.match(/Переписать: "(.+?)"/);
+      return match ? match[1] : '';
+    })
+    .filter(Boolean);
 
   // 5.2 — Объединение issues
   const aiIssues: SeoIssue[] = aiResult.markers.map((marker, i) => ({
@@ -213,7 +220,7 @@ ${rulesBlock}
   let finalAiScore = firstAiScore;
   if (firstAiScore > 35) {
     try {
-      const recheck = await detectAI(
+      const recheck = await detectAIWinston(
         articleHtml.replace(/<[^>]*>/g, ''),
         aiModel,
       );
@@ -246,6 +253,7 @@ ${rulesBlock}
       qualityMetrics,
       warnings,
       partial: articleHtml.slice(0, 500),
+      winston_problematic_sentences: winstonProblematicSentences,
     },
     durationMs: Date.now() - start,
   };
