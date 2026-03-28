@@ -1,3 +1,5 @@
+//modules/seo/steps/step-3-draft.ts
+
 import type { StepResult, PipelineContext, BriefData } from '../types';
 import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
@@ -24,7 +26,7 @@ export async function executeDraft(
   const imageCount = (ctx.input.image_count as number) ?? 0;
 
   const builtPrompt = buildSystemPrompt(ctx.input, brief);
-  const maxOutputTokens = Math.ceil(charCount * 0.5);
+  const maxOutputTokens = Math.max(4000, Math.ceil(charCount * 1.2));
 
   const userMessage = `Напиши статью по заданным параметрам. Все правила — в системном промпте.
 

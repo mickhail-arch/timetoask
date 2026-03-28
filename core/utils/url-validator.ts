@@ -12,8 +12,18 @@ export function formatUrlInput(value: string): string {
   return `https://${trimmed}`;
 }
 
-export function getUrlError(value: string): string | null {
-  if (!value.trim()) return null;
-  if (isValidUrl(value.trim())) return null;
-  return 'Введите корректный URL (https://example.com)';
+export function getUrlError(url: string): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return 'Введите корректный URL (https://example.com)';
+    }
+    if (!parsed.hostname.includes('.')) {
+      return 'Введите корректный URL (https://example.com)';
+    }
+    return null;
+  } catch {
+    return 'Введите корректный URL (https://example.com)';
+  }
 }

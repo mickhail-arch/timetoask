@@ -33,6 +33,21 @@ export interface BriefData {
   cta_position?: string;
   brand_mentions: number;
   geo_mentions: number;
+
+  // E-E-A-T блоки (генерируются brief на основе charCount и intent)
+  table_topic: string;
+  table_after_h2: number;
+  case_topic: string;
+  callout_count: number;
+  citation_count: number;
+  faq_count_eeat: number;
+  toc_enabled: boolean;
+  intro_chars: number;
+  tldr_chars: number;
+  table_chars: number;
+  case_chars: number;
+  conclusion_chars: number;
+  faq_chars: number;
 }
 
 export interface QualityMetrics {

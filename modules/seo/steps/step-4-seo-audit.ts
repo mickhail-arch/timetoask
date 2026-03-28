@@ -100,6 +100,13 @@ const WATER_WORDS = {
   ]),
 };
 
+const STOP_WORDS_LIGHT = new Set([
+  'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'к', 'за', 'о', 'об',
+  'у', 'до', 'при', 'а', 'но', 'же', 'бы', 'ли', 'или', 'ни', 'не',
+  'что', 'как', 'это', 'то', 'так', 'через', 'между', 'после',
+  'перед', 'над', 'под', 'без', 'ко', 'во', 'со', 'про',
+]);
+
 /**
  * Шаг 4: SEO-аудит.
  * Код парсит article_html, проверяет по всем измеримым правилам wrapper_rules.
@@ -154,7 +161,7 @@ export async function executeSeoAudit(
   const density = charCount > 0 ? (keywordCount * mainKeyword.length / charCount) * 100 : 0;
 
   if (density < 0.5) addIssue('keyword', 'critical', `Плотность основного ключа ${density.toFixed(2)}% (мин 0.5%)`, 'Добавить вхождения ключа');
-  if (density > 1.5) addIssue('keyword', 'warning', `Плотность основного ключа ${density.toFixed(2)}% (макс 1.5%)`, 'Убрать лишние вхождения');
+  if (density > 1.5) addIssue('keyword', 'critical', `Плотность основного ключа ${density.toFixed(2)}% (макс 1.5%)`, 'Убрать лишние вхождения, использовать синонимы');
 
   const first300 = textLower.slice(0, 300);
   if (!first300.includes(mainKeyword)) addIssue('keyword', 'critical', 'Основной ключ не в первых 300 символах', 'Добавить ключ в начало текста');
@@ -296,7 +303,7 @@ export async function executeSeoAudit(
   const wordFreq: Record<string, number> = {};
   for (const w of words) {
     const wl = w.toLowerCase().replace(/[^а-яёa-z]/g, '');
-    if (wl.length > 3 && !keywordTokens.has(wl)) wordFreq[wl] = (wordFreq[wl] ?? 0) + 1;
+    if (wl.length > 3) wordFreq[wl] = (wordFreq[wl] ?? 0) + 1;
   }
   const totalSignificant = Object.values(wordFreq).reduce((a, b) => a + b, 0);
   const repeatedWords = Object.values(wordFreq).filter(c => c > 2).reduce((a, b) => a + b, 0);
@@ -313,6 +320,8 @@ export async function executeSeoAudit(
       waterFull++;
     } else if (WATER_WORDS.pronouns.has(wl)) {
       waterHalf++;
+    } else if (STOP_WORDS_LIGHT.has(wl)) {
+      waterHalf += 0.6;
     }
   }
   for (const phrase of WATER_WORDS.parasitePhrases) {
@@ -475,6 +484,27 @@ export async function executeSeoAudit(
 
   for (const sc of stopConstructions) {
     if (textLower.includes(sc)) addIssue('quality', 'info', `Стоп-конструкция: "${sc}"`, `Переписать без "${sc}"`);
+  }
+
+  // --- E-E-A-T блоки ---
+  const hasTldr = /<div class="tldr"/i.test(html);
+  if (!hasTldr) addIssue('eeat', 'warning', 'Блок «Кратко» (TL;DR) отсутствует', 'Добавить TL;DR после введения');
+
+  const hasTable = /<table[\s>]/i.test(html);
+  if (!hasTable) addIssue('eeat', 'warning', 'Таблица сравнения отсутствует', 'Добавить таблицу с минимум 3 столбцами и 4 строками');
+
+  const hasBlockquote = /<blockquote[\s>]/i.test(html);
+  if (!hasBlockquote) addIssue('eeat', 'info', 'Цитата эксперта отсутствует', 'Добавить blockquote с цитатой и cite');
+
+  const hasCallout = /class="callout/i.test(html);
+  if (!hasCallout) addIssue('eeat', 'info', 'Callout-блоки отсутствуют', 'Добавить callout (важно/совет/предупреждение)');
+
+  const hasReadingTime = /class="reading-time"/i.test(html);
+  if (!hasReadingTime) addIssue('eeat', 'info', 'Время чтения не указано', 'Добавить блок с временем чтения');
+
+  if (targetChars >= 8000) {
+    const hasToc = /<nav class="toc"/i.test(html);
+    if (!hasToc) addIssue('eeat', 'info', 'Оглавление отсутствует (рекомендуется для статей >8000 символов)', 'Добавить nav.toc с якорными ссылками');
   }
 
   const qualityMetrics: QualityMetrics = {

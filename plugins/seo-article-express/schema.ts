@@ -30,6 +30,13 @@ export const inputSchema = z.object({
   })).max(5).optional().describe('Внешние ссылки с анкорами'),
   forbidden_words: z.string().optional().describe('Запрещённые слова (по одному на строку)'),
   legal_restrictions: z.string().max(500).optional().describe('Юридические ограничения'),
+
+  // Блок автора (E-E-A-T)
+  author_name: z.string().max(100).optional().describe('ФИО автора статьи'),
+  author_position: z.string().max(100).optional().describe('Должность автора'),
+  author_company: z.string().max(100).optional().describe('Компания автора'),
+  author_url: z.string().url().max(300).optional().describe('Ссылка на профиль автора'),
+  publication_date: z.string().max(20).optional().describe('Дата публикации (ДД.ММ.ГГГГ)'),
 });
 
 export type SeoArticleInput = z.infer<typeof inputSchema>;

@@ -181,42 +181,6 @@ function quickSeoRecheck(
   return { issues, metrics: { water, spam, nauseaClassic, keywordDensity } };
 }
 
-/**
- * Найти абзацы, содержащие проблемные предложения от Winston.
- * Возвращает абзацы с конкретными проблемами для рерайта.
- */
-function findParagraphsWithWinstonSentences(
-  paragraphs: string[],
-  problematicSentences: string[],
-): Array<{ index: number; html: string; text: string; problems: string[] }> {
-  if (problematicSentences.length === 0) return [];
-
-  const result: Array<{ index: number; html: string; text: string; problems: string[] }> = [];
-
-  for (let i = 0; i < paragraphs.length; i++) {
-    const paraText = paragraphs[i].replace(/<[^>]*>/g, '').toLowerCase();
-    const matchedProblems: string[] = [];
-
-    for (const sentence of problematicSentences) {
-      const searchSnippet = sentence.replace(/\.\.\.$/g, '').slice(0, 50).toLowerCase();
-      if (searchSnippet.length > 10 && paraText.includes(searchSnippet)) {
-        matchedProblems.push(`Winston AI пометил как AI-текст: "${sentence.slice(0, 80)}"`);
-      }
-    }
-
-    if (matchedProblems.length > 0) {
-      result.push({
-        index: i,
-        html: paragraphs[i],
-        text: paragraphs[i].replace(/<[^>]*>/g, ''),
-        problems: matchedProblems,
-      });
-    }
-  }
-
-  return result;
-}
-
 export async function executeTargetedRewrite(
   ctx: PipelineContext,
 ): Promise<StepResult> {
@@ -224,13 +188,22 @@ export async function executeTargetedRewrite(
 
   const revData = ctx.data.ai_detect_revisions as Record<string, unknown> ?? {};
   let articleHtml = (revData.article_html as string) ?? '';
-  const aiScore = (revData.final_ai_score as number) ?? 0;
+  const articleBefore = articleHtml;
 
-  if (aiScore <= 15) {
+  const warnings: string[] = [];
+
+  // 1. Кодовый AI-детект
+  const plainText = articleHtml.replace(/<[^>]*>/g, '');
+  const codeCheck = detectAIByCode(plainText);
+  const initialScore = codeCheck.score;
+  const codeMarkers = codeCheck.markers;
+  console.info(`[step-5.5] Code AI check: score=${initialScore}%, markers: ${codeMarkers.length}`);
+
+  // 2. Если score <= 15 — пропустить рерайт
+  if (initialScore <= 15) {
     const skipRecheck = quickSeoRecheck(articleHtml, ctx.input);
-    const skipWarnings: string[] = [];
     for (const issue of skipRecheck.issues) {
-      skipWarnings.push(`[recheck] ${issue}`);
+      warnings.push(`[recheck] ${issue}`);
     }
     return {
       success: true,
@@ -238,114 +211,95 @@ export async function executeTargetedRewrite(
         article_html: articleHtml,
         rewritten_count: 0,
         skipped: true,
-        warnings: skipWarnings,
+        warnings,
         recheckMetrics: skipRecheck.metrics,
-        final_ai_score: aiScore,
-        winston_recheck: false,
+        final_ai_score: initialScore,
         partial: articleHtml.slice(0, 500),
       },
       durationMs: Date.now() - start,
     };
   }
 
+  // 3. Метрики оригинала для валидации после рерайта
+  const originalH1Count = (articleHtml.match(/<h1[\s>]/gi) ?? []).length;
+  const originalH2Count = (articleHtml.match(/<h2[\s>]/gi) ?? []).length;
+  const originalTextLength = articleHtml.replace(/<[^>]*>/g, '').length;
+  const originalMarkerCount = (articleHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
+
+  // 4. Один вызов Sonnet с полным текстом
   const config = ctx.config as ToolConfig | null;
-  const model = getStepModel(config, 'revisions', 'google/gemini-2.5-flash');
+  const model = getStepModel(config, 'revisions', 'anthropic/claude-sonnet-4');
 
+  const systemPrompt = `Ты — редактор-антидетектор. Твоя задача — переписать статью так, чтобы AI-детекторы не могли отличить её от написанной человеком.
 
-  const paragraphs = extractParagraphs(articleHtml);
+КОДОВЫЙ АНАЛИЗ ОБНАРУЖИЛ ПРОБЛЕМЫ:
+${codeMarkers.map(m => '- ' + m).join('\n')}
 
-  // Источник 1: проблемные предложения от Winston (шаг 5)
-  const winstonSentences = (revData.winston_problematic_sentences as string[]) ?? [];
-  const winstonParagraphs = findParagraphsWithWinstonSentences(paragraphs, winstonSentences);
+ПРАВИЛА ПЕРЕПИСЫВАНИЯ:
+- Перепиши ТОЛЬКО проблемные предложения и абзацы вокруг них. Не трогай текст который звучит естественно.
+- Сохрани ВСЕ заголовки H1/H2/H3 без изменений.
+- Сохрани ВСЕ маркеры [IMAGE_N] и [IMAGE_N_DESC] на местах.
+- Сохрани все ключевые слова и их позиции.
+- Объём может измениться не более чем на ±15%.
+- Формат: HTML (h1, h2, h3, p). Без strong, em, b, i.
 
-  // Источник 2: кодовый скоринг абзацев (как раньше)
-  const codeScoredRaw: ParagraphScore[] = paragraphs
-    .map((html, index) => {
-      const text = html.replace(/<[^>]*>/g, '');
-      return { index, html, text, score: 0, problems: [] as string[] };
-    })
-    .filter(p => p.text.length > 200)
-    .map(p => {
-      const result = scoreParagraph(p.text);
-      return { ...p, score: result.score, problems: result.problems };
-    })
-    .filter(p => p.score > 0);
+ТЕХНИКИ ЧЕЛОВЕКОПОДОБНОГО ТЕКСТА:
+- Рваный ритм: чередуй предложения 5-8 слов и 18-25 слов. Три одинаковой длины подряд — запрещено.
+- Начинай абзацы по-разному: факт, вопрос, число, короткое утверждение.
+- В каждом абзаце — минимум 1 конкретика: число, дата, пример, название.
+- Добавь разговорные вставки: риторический вопрос, "если честно", "на практике".
+- Убери все канцеляризмы: "стоит отметить", "важно подчеркнуть", "в настоящее время", "таким образом", "следует отметить", "необходимо учитывать", "как показывает практика".
 
-  // Объединить: Winston-абзацы приоритетнее, затем кодовые
-  const winstonIndices = new Set(winstonParagraphs.map(p => p.index));
-  const codeOnly = codeScoredRaw.filter(p => !winstonIndices.has(p.index));
+Верни ТОЛЬКО переписанный HTML статьи целиком, без пояснений.`;
 
-  const toRewrite: Array<{ index: number; html: string; text: string; problems: string[] }> = [
-    ...winstonParagraphs.map(p => ({
-      ...p,
-      problems: [
-        ...p.problems,
-        ...(codeScoredRaw.find(c => c.index === p.index)?.problems ?? []),
-      ],
-    })),
-    ...codeOnly.sort((a, b) => b.score - a.score).slice(0, Math.max(0, 5 - winstonParagraphs.length)),
-  ].slice(0, 5);
+  try {
+    const rewritten = await generateText({
+      model,
+      systemPrompt,
+      userMessage: articleHtml,
+    });
 
-  const warnings: string[] = [];
-  let rewrittenCount = 0;
+    const cleanRewritten = rewritten
+      .replace(/^```html\s*/i, '')
+      .replace(/\s*```\s*$/i, '')
+      .trim();
 
-  for (const para of toRewrite) {
-    try {
-      const problemList = para.problems.map((p, i) => `${i + 1}. ${p}`).join('\n');
+    // 6. Валидация после рерайта
+    const rewrittenH1 = (cleanRewritten.match(/<h1[\s>]/gi) ?? []).length;
+    const rewrittenH2 = (cleanRewritten.match(/<h2[\s>]/gi) ?? []).length;
+    const rewrittenTextLength = cleanRewritten.replace(/<[^>]*>/g, '').length;
+    const rewrittenMarkerCount = (cleanRewritten.match(/\[IMAGE_\d+\]/g) ?? []).length;
 
-      const rewritten = await generateText({
-        model,
-        systemPrompt: `Перепиши абзац, чтобы он звучал как написанный человеком-экспертом. Сохрани смысл, все ключевые слова и факты.
+    const h1Ok = rewrittenH1 === originalH1Count;
+    const h2Ok = Math.abs(rewrittenH2 - originalH2Count) <= 1;
+    const lengthOk =
+      rewrittenTextLength >= originalTextLength * 0.7 &&
+      rewrittenTextLength <= originalTextLength * 1.3;
+    const markersOk = originalMarkerCount === 0 || rewrittenMarkerCount >= originalMarkerCount;
 
-ПРОБЛЕМЫ ЭТОГО АБЗАЦА:
-${problemList}
-
-ПРАВИЛА ЧЕЛОВЕКОПОДОБНОГО ТЕКСТА:
-- Начни с конкретного факта, числа, вопроса или живого примера — не с вводного слова.
-- Чередуй длину предложений: одно короткое (5-8 слов), следующее длинное (18-25 слов).
-- Добавь одну деталь от первого лица или конкретный пример из практики.
-- Используй разговорную вставку: риторический вопрос, восклицание, обращение к читателю.
-- Убери все канцеляризмы и стоп-конструкции.
-- Не добавляй: "стоит отметить", "важно подчеркнуть", "в настоящее время", "таким образом", "следует отметить", "необходимо учитывать".
-- Сохрани длину абзаца (±30%).
-
-Верни ТОЛЬКО переписанный текст абзаца без пояснений, без HTML-тегов.`,
-        userMessage: para.text,
-      });
-
-      const cleanRewritten = rewritten
-        .replace(/^```html\s*/i, '')
-        .replace(/\s*```\s*$/i, '')
-        .trim();
-
-      if (
-        cleanRewritten.length < para.text.length * 0.5 ||
-        cleanRewritten.length > para.text.length * 2
-      ) {
-        warnings.push(`Абзац #${para.index + 1}: рерайт отклонён (длина)`);
-        continue;
-      }
-
-      const newParagraphHtml = `<p>${cleanRewritten}</p>`;
-      articleHtml = articleHtml.replace(para.html, newParagraphHtml);
-      rewrittenCount++;
-    } catch (err) {
-      warnings.push(
-        `Абзац #${para.index + 1}: ошибка рерайта — ${err instanceof Error ? err.message : String(err)}`,
-      );
+    if (!h1Ok || !h2Ok || !lengthOk || !markersOk) {
+      const reasons: string[] = [];
+      if (!h1Ok) reasons.push(`H1: ${rewrittenH1} (ожидалось ${originalH1Count})`);
+      if (!h2Ok) reasons.push(`H2: ${rewrittenH2} (ожидалось ${originalH2Count}±1)`);
+      if (!lengthOk) reasons.push(`Длина: ${rewrittenTextLength} (ожидалось ${Math.round(originalTextLength * 0.7)}–${Math.round(originalTextLength * 1.3)})`);
+      if (!markersOk) reasons.push(`IMAGE маркеры: ${rewrittenMarkerCount} (ожидалось >=${originalMarkerCount})`);
+      warnings.push(`Рерайт откачен — валидация не пройдена: ${reasons.join('; ')}`);
+      console.warn(`[step-5.5] Validation failed, rollback: ${reasons.join('; ')}`);
+      articleHtml = articleBefore;
+    } else {
+      articleHtml = cleanRewritten;
     }
+  } catch (err) {
+    warnings.push(`Ошибка рерайта: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn('[step-5.5] Rewrite LLM error:', err);
+    articleHtml = articleBefore;
   }
 
-  if (toRewrite.length === 0) {
-    warnings.push('Проблемных абзацев не найдено — рерайт не потребовался');
-  }
+  // 6. Финальная оценка detectAIByCode
+  const finalCodeCheck = detectAIByCode(articleHtml.replace(/<[^>]*>/g, ''));
+  const rewriteApplied = articleHtml !== articleBefore;
 
-  let finalAiScore = aiScore;
-  if (rewrittenCount > 0) {
-    const recheckCode = detectAIByCode(articleHtml.replace(/<[^>]*>/g, ''));
-    finalAiScore = recheckCode.score;
-  }
-
+  // 7. quickSeoRecheck
   const recheck = quickSeoRecheck(articleHtml, ctx.input);
   if (recheck.issues.length > 0) {
     for (const issue of recheck.issues) {
@@ -358,12 +312,11 @@ ${problemList}
     success: true,
     data: {
       article_html: articleHtml,
-      rewritten_count: rewrittenCount,
+      rewritten_count: rewriteApplied ? 1 : 0,
       skipped: false,
       warnings,
       recheckMetrics: recheck.metrics,
-      final_ai_score: finalAiScore,
-      winston_recheck: false,
+      final_ai_score: finalCodeCheck.score,
       partial: articleHtml.slice(0, 500),
     },
     durationMs: Date.now() - start,

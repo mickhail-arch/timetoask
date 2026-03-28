@@ -66,7 +66,9 @@ function buildBriefPrompt(
   "subtopics": ["подтема 1", "подтема 2"],
   "lsi_keywords": ["LSI-ключ 1", "LSI-ключ 2"],
   "featured_snippet_spec": "формат рекомендуемого Featured Snippet (параграф/список/таблица)",
-  "main_keyword": "извлечённый основной ключ (2-5 слов)"
+  "main_keyword": "извлечённый основной ключ (2-5 слов)",
+  "table_topic": "тема для таблицы сравнения (например: Сравнение X vs Y vs Z по 4 критериям)",
+  "case_topic": "тема для блока личного опыта/кейса (например: Мой опыт использования X на проекте Y)"
 }
 
 === СТРУКТУРА ===
@@ -122,6 +124,11 @@ function buildBriefPrompt(
 - "table" — если запрос сравнительный или содержит "vs", "сравнение"
 Укажи в featured_snippet_spec.`;
 
+  prompt += `\n\n=== E-E-A-T БЛОКИ ===
+Дополнительно сгенерируй:
+- table_topic: тема для таблицы сравнения. Таблица должна отвечать на конкретный вопрос — сравнение продуктов, методов или характеристик по теме статьи. Минимум 3 столбца, 4 строки.
+- case_topic: тема для блока личного опыта. Это кейс от первого лица: конкретная ситуация, действие, результат с цифрами. Не повторяет основной текст, а дополняет его практическим примером.`;
+
   return prompt;
 }
 
@@ -159,6 +166,20 @@ function parseBriefResponse(
     geo_mentions: ctx.input.geo_location
       ? (String(ctx.input.geo_location).includes(',') ? 4 : 3)
       : 0,
+    // E-E-A-T блоки (вычисляются по формулам из документа)
+    table_topic: parsed.table_topic ?? '',
+    table_after_h2: Math.min(1, (parsed.h2_list?.length ?? 2) - 1),
+    case_topic: parsed.case_topic ?? '',
+    callout_count: chars <= 6000 ? 2 : chars <= 10000 ? 3 : chars <= 14000 ? 4 : 5,
+    citation_count: chars <= 10000 ? 1 : 2,
+    faq_count_eeat: Math.min(10, Math.max(2, Math.floor(chars / 2000))),
+    toc_enabled: chars >= 8000,
+    intro_chars: Math.round(chars * 0.04),
+    tldr_chars: Math.round(chars * 0.02),
+    table_chars: Math.round(chars * 0.04),
+    case_chars: Math.round(chars * 0.05),
+    conclusion_chars: Math.round(chars * 0.05),
+    faq_chars: Math.round(chars * 0.10),
   };
 }
 
@@ -190,7 +211,9 @@ Intent: ${ctx.input.intent}
 Изображений: ${imageCount}
 FAQ: ${faqCount}
 Tone: ${ctx.input.tone_of_voice ?? 'expert'}
-Гео: ${ctx.input.geo_location ?? 'вся Россия'}`;
+Гео: ${ctx.input.geo_location ?? 'вся Россия'}
+Автор: ${ctx.input.author_name ?? 'не указан'}
+Компания: ${ctx.input.author_company ?? 'не указана'}`;
 
   try {
     const raw = await generateText({ model, systemPrompt, userMessage });

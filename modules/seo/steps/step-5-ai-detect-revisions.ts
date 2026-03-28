@@ -38,6 +38,11 @@ export async function executeAiDetectRevisions(
   const seoIssues = (auditData.seo_issues as SeoIssue[]) ?? [];
   let qualityMetrics = (auditData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
 
+  // Получить результаты анализа текста из шага 4.5
+  const analysisData = ctx.data.content_analysis as Record<string, unknown> ?? {};
+  const writingIssues = (analysisData.writing_issues as Array<{sentence: string; problem: string; fix: string}>) ?? [];
+  const factIssues = (analysisData.fact_issues as Array<{claim: string; verdict: string; correction: string | null}>) ?? [];
+
   // 5.1 — AI-детект (кодовая оценка)
   const plainText = articleHtml.replace(/<[^>]*>/g, '');
   const codeResult = detectAIByCode(plainText);
@@ -52,9 +57,33 @@ export async function executeAiDetectRevisions(
     fix_instruction: `Исправить: ${marker}`,
   }));
 
+  const contentIssues: SeoIssue[] = [];
+
+  for (const wi of writingIssues.slice(0, 10)) {
+    contentIssues.push({
+      id: `writing-${contentIssues.length + 1}`,
+      group: 'writing',
+      severity: 'warning' as const,
+      message: `[стиль] ${wi.problem}: "${wi.sentence.slice(0, 80)}"`,
+      fix_instruction: wi.fix,
+    });
+  }
+
+  for (const fi of factIssues.filter(f => f.verdict === 'false')) {
+    contentIssues.push({
+      id: `fact-${contentIssues.length + 1}`,
+      group: 'fact_check',
+      severity: 'critical' as const,
+      message: `[факт] Неверно: "${fi.claim.slice(0, 80)}"`,
+      fix_instruction: fi.correction ? `Исправить на: ${fi.correction}` : 'Убрать или перепроверить',
+    });
+  }
+
   const allIssues = [
     ...seoIssues.filter(i => i.severity === 'critical'),
+    ...contentIssues.filter(i => i.severity === 'critical'),
     ...seoIssues.filter(i => i.severity === 'warning'),
+    ...contentIssues.filter(i => i.severity === 'warning'),
     ...aiIssues,
     ...seoIssues.filter(i => i.severity === 'info'),
   ];
@@ -192,21 +221,6 @@ ${rulesBlock}
   }
 
   console.info(`[step-5] Revision iteration 1 done, critical remaining: ${criticalSeoIssues.length}`);
-
-  // --- Итерация 2: только critical SEO issues (не ai_issues) ---
-  if (criticalSeoIssues.length > 0) {
-    const articleBeforeIter2 = articleHtml;
-
-    articleHtml = await executeRevisionIteration(articleHtml, criticalSeoIssues, 'iteration 2');
-
-    if (miniAudit(articleHtml) && articleHtml !== articleBeforeIter2) {
-      articleHtml = articleBeforeIter2;
-      warnings.push('Правки откачены: нарушена структура (итерация 2)');
-      console.warn('[step-5] Mini-audit failed after iteration 2, rolled back');
-    }
-
-    console.info(`[step-5] Revision iteration 2 done, critical remaining: ${criticalSeoIssues.length}`);
-  }
 
   // 5.4 — Финальный AI-скор
   let finalAiScore = firstAiScore;

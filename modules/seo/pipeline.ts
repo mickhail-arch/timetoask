@@ -20,10 +20,11 @@ const STEP_PROGRESS: Record<string, [number, number]> = {
   'brief': [5, 15],
   'confirmation': [15, 15],
   'moderation_headings': [15, 20],
-  'draft': [20, 55],
-  'seo_audit': [55, 65],
-  'ai_detect_revisions': [65, 82],
-  'targeted_rewrite': [82, 90],
+  'draft': [20, 50],
+  'seo_audit': [50, 55],
+  'content_analysis': [55, 65],
+  'ai_detect_revisions': [65, 78],
+  'targeted_rewrite': [78, 90],
   'images': [90, 97],
   'assembly': [97, 100],
 };
@@ -302,7 +303,7 @@ export async function resumePipeline(
 
 /**
  * Перегенерация статьи с тем же brief и input.
- * Запускает шаги: moderation_headings → draft → seo_audit → ai_detect_revisions → targeted_rewrite → assembly.
+ * Запускает шаги: moderation_headings → draft → seo_audit → content_analysis → ai_detect_revisions → targeted_rewrite → assembly.
  * Пропускает images — использует savedImages из предыдущего результата.
  */
 export async function regeneratePipeline(
@@ -328,8 +329,8 @@ export async function regeneratePipeline(
   };
 
   const regenStepNames = savedImages
-    ? ['moderation_headings', 'draft', 'seo_audit', 'ai_detect_revisions', 'targeted_rewrite', 'assembly']
-    : ['moderation_headings', 'draft', 'seo_audit', 'ai_detect_revisions', 'targeted_rewrite', 'images', 'assembly'];
+    ? ['moderation_headings', 'draft', 'seo_audit', 'content_analysis', 'ai_detect_revisions', 'targeted_rewrite', 'assembly']
+    : ['moderation_headings', 'draft', 'seo_audit', 'content_analysis', 'ai_detect_revisions', 'targeted_rewrite', 'images', 'assembly'];
 
   const regenSteps = steps.filter(s => regenStepNames.includes(s.name));
 

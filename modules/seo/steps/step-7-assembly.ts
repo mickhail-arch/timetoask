@@ -3,7 +3,15 @@ import type { StepResult, PipelineContext, QualityMetrics } from '../types';
 import type { ToolConfig } from '@/core/types';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { getStepModel } from '../config';
-import { detectAIByCode, detectAIWinston } from '@/adapters/ai-detection';
+import { detectAIByCode } from '@/adapters/ai-detection';
+
+const STOP_WORDS = new Set([
+  'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'к', 'за', 'о', 'об',
+  'у', 'до', 'при', 'а', 'но', 'же', 'бы', 'ли', 'или', 'ни', 'не',
+  'что', 'как', 'это', 'то', 'все', 'так', 'его', 'она', 'они',
+  'мы', 'вы', 'уже', 'ещё', 'еще', 'через', 'между', 'после',
+  'перед', 'над', 'под', 'без', 'ко', 'во', 'со', 'про',
+]);
 
 /**
  * Пересчёт ключевых метрик качества по финальному тексту.
@@ -27,25 +35,19 @@ function recalculateMetrics(html: string, input: Record<string, unknown>): Parti
   let waterCount = 0;
   for (const w of words) {
     const wl = w.toLowerCase().replace(/[^а-яёa-z]/g, '');
-    if (waterWords.has(wl)) waterCount++;
+    if (!wl) continue;
+    if (waterWords.has(wl)) {
+      waterCount++;
+    } else if (STOP_WORDS.has(wl)) {
+      waterCount += 0.3;
+    }
   }
   const water = wordCount > 0 ? Math.round((waterCount / wordCount) * 100) : 0;
 
-  const targetQuery = ((input.target_query as string) ?? '').toLowerCase();
-  const keywordTokens = new Set<string>();
-  for (const tok of targetQuery.split(/\s+/)) {
-    const clean = tok.replace(/[^а-яёa-z]/g, '');
-    if (clean.length > 0) keywordTokens.add(clean);
-  }
-  const kwStr = ((input.keywords as string) ?? '').toLowerCase();
-  for (const tok of kwStr.split(/[\n\s]+/)) {
-    const clean = tok.replace(/[^а-яёa-z]/g, '');
-    if (clean.length > 0) keywordTokens.add(clean);
-  }
   const wordFreq: Record<string, number> = {};
   for (const w of words) {
     const wl = w.toLowerCase().replace(/[^а-яёa-z]/g, '');
-    if (wl.length > 3 && !keywordTokens.has(wl)) wordFreq[wl] = (wordFreq[wl] ?? 0) + 1;
+    if (wl.length > 3) wordFreq[wl] = (wordFreq[wl] ?? 0) + 1;
   }
   const totalSig = Object.values(wordFreq).reduce((a, b) => a + b, 0);
   const repeated = Object.values(wordFreq).filter(c => c > 2).reduce((a, b) => a + b, 0);
@@ -144,9 +146,7 @@ export async function executeAssembly(
   const baseMetrics = (auditData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
   const revMetrics = (revisionsData.qualityMetrics as QualityMetrics) ?? {} as QualityMetrics;
 
-  // Финальный AI-score из targeted_rewrite (после Winston recheck) — приоритетнее
   const targetedRewriteData = ctx.data.targeted_rewrite as Record<string, unknown> ?? {};
-  const winstonFinalScore = targetedRewriteData.final_ai_score as number | undefined;
 
   const input = ctx.input;
 
@@ -157,20 +157,8 @@ export async function executeAssembly(
   const plainTextForAI = articleHtml.replace(/<[^>]*>/g, '');
   const codeAiResult = detectAIByCode(plainTextForAI);
 
-  let winstonAiScore: number | null = null;
-  try {
-    const winstonResult = await detectAIWinston(plainTextForAI);
-    if (winstonResult.score > 0 || winstonResult.markers.length > 0) {
-      winstonAiScore = winstonResult.score;
-      console.info(`[step-7] Winston final: AI=${winstonAiScore}%`);
-    }
-  } catch {
-    console.warn('[step-7] Winston final check failed, using code score');
-  }
-
-  const winstonScore = winstonFinalScore ?? revMetrics.ai_score ?? baseMetrics.ai_score ?? 0;
-  const baseAiScore = winstonAiScore ?? winstonScore;
-  const combinedAiScore = Math.round(baseAiScore * 0.7 + codeAiResult.score * 0.3);
+  const targetedScore = (targetedRewriteData.final_ai_score as number) ?? codeAiResult.score;
+  const combinedAiScore = Math.round(targetedScore * 0.5 + codeAiResult.score * 0.5);
 
   const qualityMetrics: QualityMetrics = {
     ...baseMetrics,
@@ -178,10 +166,6 @@ export async function executeAssembly(
     ...freshMetrics,
     ai_score: combinedAiScore,
   };
-
-  if (winstonAiScore !== null && winstonAiScore > 35) {
-    warnings.push(`AI-детект ${winstonAiScore}% (Winston) — рекомендуем проверить вручную`);
-  }
 
   if (codeAiResult.markers.length > 0) {
     for (const marker of codeAiResult.markers) {
@@ -548,13 +532,74 @@ function wrapWithInlineStyles(
   legalRestrictions: string,
 ): string {
   let styled = html
+    // Заголовки
     .replace(/<h1([^>]*)>/gi, '<h1$1 style="font-size:28px;font-weight:700;margin:0 0 16px;line-height:1.3;color:#1a1a1a">')
     .replace(/<h2([^>]*)>/gi, '<h2$1 style="font-size:22px;font-weight:600;margin:24px 0 12px;line-height:1.3;color:#1a1a1a">')
     .replace(/<h3([^>]*)>/gi, '<h3$1 style="font-size:18px;font-weight:600;margin:20px 0 8px;line-height:1.3;color:#1a1a1a">')
+    // Абзацы, медиа, ссылки
     .replace(/<p([^>]*)>/gi, '<p$1 style="font-size:16px;line-height:1.7;margin:0 0 12px;color:#333">')
     .replace(/<figure([^>]*)>/gi, '<figure$1 style="margin:20px 0;text-align:center">')
     .replace(/<img([^>]*)>/gi, '<img$1 style="max-width:100%;height:auto;border-radius:8px">')
-    .replace(/<a([^>]*)>/gi, '<a$1 style="color:#2563EB;text-decoration:underline">');
+    .replace(/<a([^>]*)>/gi, '<a$1 style="color:#2563EB;text-decoration:underline">')
+    // Таблица
+    .replace(/<table([^>]*)>/gi, '<table$1 style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px">')
+    .replace(/<thead([^>]*)>/gi, '<thead$1 style="background:#f5f5f5">')
+    .replace(/<th([^>]*)>/gi, '<th$1 style="padding:10px 12px;text-align:left;border:1px solid #e0e0e0;font-weight:600;color:#1a1a1a">')
+    .replace(/<td([^>]*)>/gi, '<td$1 style="padding:10px 12px;border:1px solid #e0e0e0;color:#333">')
+    // Цитаты экспертов
+    .replace(/<blockquote([^>]*)>/gi, '<blockquote$1 style="margin:20px 0;padding:16px 20px;border-left:4px solid #A6E800;background:#f9fdf2;border-radius:0 8px 8px 0">')
+    .replace(/<cite([^>]*)>/gi, '<cite$1 style="display:block;margin-top:8px;font-size:13px;color:#6b6b6b;font-style:normal">')
+    // Навигация (оглавление)
+    .replace(/<nav class="toc"([^>]*)>/gi, '<nav class="toc"$1 style="margin:16px 0;padding:16px 20px;background:#f9f9f9;border-radius:8px;border:1px solid #e0e0e0">');
+
+  // TL;DR блок
+  styled = styled.replace(
+    /<div class="tldr"([^>]*)>/gi,
+    '<div class="tldr"$1 style="margin:16px 0;padding:16px 20px;background:#f0fcd4;border-radius:8px;border:1px solid #d4e8a0">',
+  );
+
+  // Callout-блоки
+  styled = styled.replace(
+    /<div class="callout callout-warning"([^>]*)>/gi,
+    '<div class="callout callout-warning"$1 style="margin:16px 0;padding:12px 16px;background:#fff8e6;border-left:4px solid #f5a623;border-radius:0 8px 8px 0">',
+  );
+  styled = styled.replace(
+    /<div class="callout callout-tip"([^>]*)>/gi,
+    '<div class="callout callout-tip"$1 style="margin:16px 0;padding:12px 16px;background:#f0fcd4;border-left:4px solid #A6E800;border-radius:0 8px 8px 0">',
+  );
+  styled = styled.replace(
+    /<div class="callout callout-important"([^>]*)>/gi,
+    '<div class="callout callout-important"$1 style="margin:16px 0;padding:12px 16px;background:#fef2f2;border-left:4px solid #ef4444;border-radius:0 8px 8px 0">',
+  );
+  styled = styled.replace(
+    /<div class="callout callout-example"([^>]*)>/gi,
+    '<div class="callout callout-example"$1 style="margin:16px 0;padding:12px 16px;background:#f0f7ff;border-left:4px solid #3b82f6;border-radius:0 8px 8px 0">',
+  );
+
+  // Блок автора
+  styled = styled.replace(
+    /<div class="article-meta"([^>]*)>/gi,
+    '<div class="article-meta"$1 style="margin:8px 0 20px;padding:12px 16px;background:#f9f9f9;border-radius:8px;font-size:14px;color:#6b6b6b">',
+  );
+  styled = styled.replace(
+    /<p class="author"([^>]*)>/gi,
+    '<p class="author"$1 style="font-size:14px;margin:0 0 4px;color:#1a1a1a;font-weight:500">',
+  );
+  styled = styled.replace(
+    /<p class="date"([^>]*)>/gi,
+    '<p class="date"$1 style="font-size:13px;margin:0;color:#6b6b6b">',
+  );
+
+  // Время чтения
+  styled = styled.replace(
+    /<p class="reading-time"([^>]*)>/gi,
+    '<p class="reading-time"$1 style="font-size:13px;margin:0 0 16px;color:#6b6b6b">',
+  );
+
+  // Списки (ul/ol внутри TL;DR и callout)
+  styled = styled.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:8px 0;padding-left:20px">');
+  styled = styled.replace(/<ol([^>]*)>/gi, '<ol$1 style="margin:8px 0;padding-left:20px">');
+  styled = styled.replace(/<li([^>]*)>/gi, '<li$1 style="margin:4px 0;line-height:1.6;color:#333">');
 
   if (addDisclaimer && legalRestrictions) {
     const disclaimer = `<p style="font-size:13px;line-height:1.5;color:#666;padding:12px;background:#f9f9f9;border-radius:6px;margin:16px 0"><em>Дисклеймер: ${legalRestrictions}</em></p>`;

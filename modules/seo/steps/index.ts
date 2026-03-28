@@ -1,9 +1,12 @@
+ // modules/seo/steps/index.ts
+
 import type { StepDefinition } from '../types';
 import { executeModeration } from './step-1-1-moderation';
 import { executeBrief } from './step-1-2-brief';
 import { executeModerationHeadings } from './step-2-5-moderation-headings';
 import { executeDraft } from './step-3-draft';
 import { executeSeoAudit } from './step-4-seo-audit';
+import { executeContentAnalysis } from './step-4-5-content-analysis';
 import { executeAiDetectRevisions } from './step-5-ai-detect-revisions';
 import { executeTargetedRewrite } from './step-5-5-targeted-rewrite';
 import { executeImages } from './step-6-images';
@@ -43,6 +46,11 @@ export const seoExpressSteps: StepDefinition[] = [
     name: 'seo_audit',
     displayName: 'Проверка качества',
     execute: executeSeoAudit,
+  },
+  {
+    name: 'content_analysis',
+    displayName: 'Анализ текста',
+    execute: executeContentAnalysis,
   },
   {
     name: 'ai_detect_revisions',

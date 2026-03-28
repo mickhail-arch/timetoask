@@ -1,3 +1,5 @@
+// app/(dashboard)/tools/seo-article-express/client.tsx
+
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
@@ -38,6 +40,7 @@ export function SeoArticleExpressClient() {
   const [startTime, setStartTime] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedImages, setSavedImages] = useState<Record<string, unknown> | null>(null);
+  const [inputKey, setInputKey] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession } = useSessionHistory('seo-article-express');
 
@@ -155,6 +158,7 @@ export function SeoArticleExpressClient() {
   const handleRegenerate = useCallback(() => {
     setResult(null);
     setJobId(null);
+    setInputKey(k => k + 1);
     setScreen('input');
   }, []);
 
@@ -193,6 +197,8 @@ export function SeoArticleExpressClient() {
     setScreen('input');
     setResult(null);
     setJobId(null);
+    setInput({});
+    setInputKey(k => k + 1);
   }, []);
 
   const handleCancel = useCallback(() => {
@@ -241,7 +247,7 @@ export function SeoArticleExpressClient() {
                   {submitError}
                 </div>
               )}
-              <ScreenInput onSubmit={handleSubmit} initialValues={input} />
+              <ScreenInput key={inputKey} onSubmit={handleSubmit} initialValues={input} />
             </>
           )}
 
@@ -289,7 +295,7 @@ export function SeoArticleExpressClient() {
               onDownloadHtml={() => downloadHTML((result as any).article_html ?? '', (result as any).metadata?.slug ?? 'article')}
               onDownloadDocx={() => downloadDOCX((result as any).article_docx_base64 ?? '', (result as any).metadata?.file_name ?? 'article.docx')}
               onDownloadMetadata={() => downloadMetadata('', (result as any).metadata?.metadata_file_name ?? 'metadata.docx')}
-              onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); setActiveSessionId(null); }}
+              onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); setActiveSessionId(null); setInput({}); setInputKey(k => k + 1); }}
               onRegenerate={handleRegenerate}
             />
           )}

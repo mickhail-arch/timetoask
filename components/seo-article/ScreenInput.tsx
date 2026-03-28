@@ -75,10 +75,14 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
 
   const [accordionOpen, setAccordionOpen] = useState(
     !!iv && Object.keys(iv).length > 0 &&
-    !!(iv.brand || iv.cta || iv.forbidden_words || iv.legal_restrictions)
+    !!(iv.brand || iv.cta || iv.forbidden_words || iv.legal_restrictions || iv.author_name)
   );
   const [faqEnabled, setFaqEnabled] = useState(iv?.faq_count !== undefined ? (iv.faq_count as number) > 0 : true);
-  const [faqCount, setFaqCount] = useState((iv?.faq_count as number) > 0 ? (iv!.faq_count as number) : 5);
+  const [faqCount, setFaqCount] = useState(() => {
+    const ivFaq = (iv?.faq_count as number) ?? 0;
+    const maxForChars = Math.min(10, Math.max(2, Math.floor(((iv?.target_char_count as number) ?? 8000) / 2000)));
+    return ivFaq > 0 ? Math.min(ivFaq, maxForChars) : Math.min(5, maxForChars);
+  });
   const [brand, setBrand] = useState((iv?.brand as string) ?? '');
   const [brandUrl, setBrandUrl] = useState((iv?.brand_url as string) ?? '');
   const [brandDescription, setBrandDescription] = useState((iv?.brand_description as string) ?? '');
@@ -89,11 +93,18 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   );
   const [forbiddenWords, setForbiddenWords] = useState((iv?.forbidden_words as string) ?? '');
   const [legalRestrictions, setLegalRestrictions] = useState((iv?.legal_restrictions as string) ?? '');
+  const [authorName, setAuthorName] = useState((iv?.author_name as string) ?? '');
+  const [authorPosition, setAuthorPosition] = useState((iv?.author_position as string) ?? '');
+  const [authorCompany, setAuthorCompany] = useState((iv?.author_company as string) ?? '');
+  const [authorUrl, setAuthorUrl] = useState((iv?.author_url as string) ?? '');
+  const [publicationDate, setPublicationDate] = useState((iv?.publication_date as string) ?? '');
+  const [useTodayDate, setUseTodayDate] = useState(false);
 
   const [filterWarning, setFilterWarning] = useState(false);
 
   const maxImages = useMemo(() => getMaxImages(charCount), [charCount]);
   const maxLinks = charCount <= 5000 ? 2 : charCount <= 10000 ? 3 : charCount <= 15000 ? 4 : 5;
+  const maxFaq = Math.min(10, Math.max(2, Math.floor(charCount / 2000)));
 
   const price = useMemo(
     () => calculatePriceClient(charCount, imageCount, faqEnabled ? faqCount : 0, pricingConfig),
@@ -111,7 +122,8 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
     !filterWarning &&
     getUrlError(brandUrl) === null &&
     getUrlError(ctaUrl) === null &&
-    externalLinks.every(l => getUrlError(l.url) === null);
+    externalLinks.every(l => getUrlError(l.url) === null) &&
+    getUrlError(authorUrl) === null;
 
   const checkForbidden = useCallback((text: string) => {
     const allText = `${targetQuery} ${keywords} ${text}`;
@@ -123,7 +135,9 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
     setCharCount(v);
     const newMax = getMaxImages(v);
     if (imageCount > newMax) setImageCount(newMax);
-  }, [imageCount]);
+    const newMaxFaq = Math.min(10, Math.max(2, Math.floor(v / 2000)));
+    if (faqCount > newMaxFaq) setFaqCount(newMaxFaq);
+  }, [imageCount, faqCount]);
 
   const handleToneClick = useCallback((t: string) => {
     if (t === 'Свой...') {
@@ -196,8 +210,13 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
         : undefined,
       forbidden_words: forbiddenWords || undefined,
       legal_restrictions: legalRestrictions || undefined,
+      author_name: authorName || undefined,
+      author_position: authorPosition || undefined,
+      author_company: authorCompany || undefined,
+      author_url: authorUrl || undefined,
+      publication_date: useTodayDate ? new Date().toLocaleDateString('ru-RU') : (publicationDate || undefined),
     });
-  }, [canSubmit, targetQuery, keywords, intent, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqEnabled, faqCount, brand, brandUrl, brandDescription, cta, ctaUrl, externalLinks, forbiddenWords, legalRestrictions, onSubmit]);
+  }, [canSubmit, targetQuery, keywords, intent, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqEnabled, faqCount, brand, brandUrl, brandDescription, cta, ctaUrl, externalLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
@@ -377,22 +396,70 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5">
         <button onClick={() => setAccordionOpen(v => !v)} className="flex w-full items-center justify-between">
           <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Дополнительные настройки</span>
-          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">8 полей {accordionOpen ? '▴' : '▾'}</span>
+          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">13 полей {accordionOpen ? '▴' : '▾'}</span>
         </button>
         {accordionOpen && (
           <div className="mt-4 space-y-4">
+            {/* Автор статьи */}
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+              <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Автор статьи (E-E-A-T)</div>
+              <div className="flex gap-3 mb-3">
+                <div className="flex-1">
+                  <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">ФИО автора</label>
+                  <input type="text" value={authorName} onChange={e => setAuthorName(e.target.value)} maxLength={100} placeholder="Иванов Алексей Петрович"
+                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Должность</label>
+                  <input type="text" value={authorPosition} onChange={e => setAuthorPosition(e.target.value)} maxLength={100} placeholder="SEO-специалист"
+                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                </div>
+              </div>
+              <div className="flex gap-3 mb-3">
+                <div className="flex-1">
+                  <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Компания</label>
+                  <input type="text" value={authorCompany} onChange={e => setAuthorCompany(e.target.value)} maxLength={100} placeholder="Digital Agency"
+                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Ссылка на профиль</label>
+                  <input type="url" value={authorUrl} onChange={e => setAuthorUrl(e.target.value)} onBlur={() => setAuthorUrl(v => formatUrlInput(v))} placeholder="https://linkedin.com/in/..."
+                    disabled={!authorName}
+                    className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!authorName ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                  {getUrlError(authorUrl) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(authorUrl)}</div>}
+                </div>
+              </div>
+              <div className="flex items-end gap-3">
+                <div className="max-w-[200px]">
+                  <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Дата публикации</label>
+                  <input type="text" value={useTodayDate ? new Date().toLocaleDateString('ru-RU') : publicationDate}
+                    onChange={e => setPublicationDate(e.target.value)} maxLength={20} placeholder="28.03.2026"
+                    disabled={useTodayDate}
+                    className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${useTodayDate ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                </div>
+                <label className="flex items-center gap-1.5 pb-[9px] cursor-pointer">
+                  <input type="checkbox" checked={useTodayDate} onChange={e => { setUseTodayDate(e.target.checked); if (e.target.checked) setPublicationDate(''); }}
+                    className="accent-[var(--color-accent)]" />
+                  <span className="text-[12px] text-[var(--color-text-secondary)]">Сегодня</span>
+                </label>
+              </div>
+              <div className="mt-2 text-[11px] text-[var(--color-text-secondary)]">Если заполнено — блок автора появится в статье. Улучшает E-E-A-T сигналы для Google.</div>
+            </div>
             <div>
               <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)] cursor-pointer">
-                <input type="checkbox" checked={faqEnabled} onChange={e => setFaqEnabled(e.target.checked)}
+                <input type="checkbox" checked={faqEnabled} onChange={e => { setFaqEnabled(e.target.checked); if (e.target.checked && faqCount > maxFaq) setFaqCount(maxFaq); }}
                   className="accent-[var(--color-accent)]" />
                 Включить FAQ-блок
               </label>
               {faqEnabled && (
-                <div className="flex items-center gap-3">
-                  <input type="range" min={1} max={10} step={1} value={faqCount} onChange={e => setFaqCount(Number(e.target.value))}
-                    className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
-                  <span className="min-w-[24px] text-right text-sm font-medium">{faqCount}</span>
-                </div>
+                <>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min={1} max={maxFaq} step={1} value={faqCount} onChange={e => setFaqCount(Number(e.target.value))}
+                      className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
+                    <span className="min-w-[24px] text-right text-sm font-medium">{faqCount}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Макс: {maxFaq} для {charCount.toLocaleString('ru-RU')} символов</div>
+                </>
               )}
             </div>
             <div className="flex gap-3">
