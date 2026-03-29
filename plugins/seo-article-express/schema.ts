@@ -7,7 +7,7 @@ export const inputSchema = z.object({
     'informational', 'educational', 'commercial', 'comparative',
     'review', 'news', 'problem_solution',
   ]).default('informational').describe('Intent запроса'),
-  target_char_count: z.number().min(4000).max(20000).default(8000).describe('Объём статьи в символах'),
+  target_char_count: z.number().min(6000).max(20000).default(8000).describe('Объём статьи в символах'),
   image_count: z.number().min(0).max(11).default(0).describe('Количество изображений'),
 
   tone_of_voice: z.string().max(300).default('expert').describe('Tone of voice'),

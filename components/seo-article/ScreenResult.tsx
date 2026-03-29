@@ -63,7 +63,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
 
       <MetadataPanel pageName={query} slug={result.metadata.slug} breadcrumb={result.metadata.breadcrumb} altTexts={result.metadata.alt_texts} jsonLd={result.metadata.json_ld} />
 
-      <ExportPanel onCopyArticle={onCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
+      <ExportPanel articleHtml={result.article_html} onCopyArticle={onCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
 
       <div className="text-center text-[11px] text-[var(--color-step-pending)]">Сгенерировано за {duration} сек · {stepCount} шагов</div>
     </div>

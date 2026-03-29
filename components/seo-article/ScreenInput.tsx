@@ -9,7 +9,7 @@ import { formatUrlInput, getUrlError } from '@/core/utils';
 import '@/components/seo-article/tokens.css';
 
 const MAX_IMAGES: Record<number, number> = {
-  4000:2, 5000:2, 6000:3, 7000:4, 8000:5, 9000:5, 10000:6,
+  6000:3, 7000:4, 8000:5, 9000:5, 10000:6,
   11000:6, 12000:7, 13000:7, 14000:8, 15000:8, 16000:9,
   17000:9, 18000:10, 19000:10, 20000:11,
 };
@@ -58,7 +58,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   const [targetQuery, setTargetQuery] = useState((iv?.target_query as string) ?? '');
   const [keywords, setKeywords] = useState((iv?.keywords as string) ?? '');
   const [intent, setIntent] = useState((iv?.intent as string) ?? 'informational');
-  const [charCount, setCharCount] = useState((iv?.target_char_count as number) ?? 8000);
+  const [charCount, setCharCount] = useState(Math.max(6000, (iv?.target_char_count as number) ?? 8000));
   const [imageCount, setImageCount] = useState((iv?.image_count as number) ?? 0);
 
   const [tone, setTone] = useState(ivToneDisplay ?? (ivIsCustomTone ? '' : 'Экспертный'));
@@ -268,11 +268,11 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
         <div className="mb-4">
           <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Объём статьи</label>
           <div className="flex items-center gap-3">
-            <input type="range" min={4000} max={20000} step={1000} value={charCount} onChange={e => handleCharChange(Number(e.target.value))}
+            <input type="range" min={6000} max={20000} step={1000} value={charCount} onChange={e => handleCharChange(Number(e.target.value))}
               className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
             <span className="min-w-[72px] text-right text-sm font-medium text-[var(--color-text-primary)]">{charCount.toLocaleString('ru-RU')} симв</span>
           </div>
-          <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">4 000 – 20 000 символов</div>
+          <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">6 000 – 20 000 символов</div>
         </div>
 
         <div>
@@ -392,6 +392,36 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
         </div>
       </div>
 
+      {/* FAQ */}
+      <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5">
+        <div>
+          <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">FAQ</label>
+          <label className="mb-1.5 flex items-center gap-2 text-[13px] text-[var(--color-text-primary)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={faqEnabled}
+              onChange={e => {
+                setFaqEnabled(e.target.checked);
+                if (e.target.checked && faqCount < 2) setFaqCount(2);
+                if (e.target.checked && faqCount > maxFaq) setFaqCount(maxFaq);
+              }}
+              className="accent-[var(--color-accent)]"
+            />
+            Включить FAQ-блок
+          </label>
+          {faqEnabled && (
+            <>
+              <div className="flex items-center gap-3">
+                <input type="range" min={2} max={maxFaq} step={1} value={faqCount} onChange={e => setFaqCount(Number(e.target.value))}
+                  className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
+                <span className="min-w-[24px] text-right text-sm font-medium">{faqCount}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">от 2 до {maxFaq} вопросов для {charCount.toLocaleString('ru-RU')} символов</div>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* ДОПОЛНИТЕЛЬНЫЕ */}
       <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5">
         <button onClick={() => setAccordionOpen(v => !v)} className="flex w-full items-center justify-between">
@@ -444,23 +474,6 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
                 </label>
               </div>
               <div className="mt-2 text-[11px] text-[var(--color-text-secondary)]">Если заполнено — блок автора появится в статье. Улучшает E-E-A-T сигналы для Google.</div>
-            </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)] cursor-pointer">
-                <input type="checkbox" checked={faqEnabled} onChange={e => { setFaqEnabled(e.target.checked); if (e.target.checked && faqCount > maxFaq) setFaqCount(maxFaq); }}
-                  className="accent-[var(--color-accent)]" />
-                Включить FAQ-блок
-              </label>
-              {faqEnabled && (
-                <>
-                  <div className="flex items-center gap-3">
-                    <input type="range" min={1} max={maxFaq} step={1} value={faqCount} onChange={e => setFaqCount(Number(e.target.value))}
-                      className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
-                    <span className="min-w-[24px] text-right text-sm font-medium">{faqCount}</span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Макс: {maxFaq} для {charCount.toLocaleString('ru-RU')} символов</div>
-                </>
-              )}
             </div>
             <div className="flex gap-3">
               <div className="flex-1">

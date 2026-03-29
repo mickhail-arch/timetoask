@@ -28,11 +28,24 @@ let faqNextId = 500;
 const genFaqId = () => `faq-${faqNextId++}`;
 
 function getMaxFaqForCharCount(charCount: number): number {
-  if (charCount >= 18000) return 10;
-  if (charCount >= 14000) return 8;
-  if (charCount >= 10000) return 7;
-  if (charCount >= 6000) return 5;
-  return 3;
+  if (charCount <= 8000) return 3;
+  if (charCount <= 10000) return 4;
+  if (charCount <= 12000) return 5;
+  if (charCount <= 14000) return 6;
+  if (charCount <= 16000) return 7;
+  if (charCount <= 18000) return 8;
+  return 10;
+}
+
+function getStructureLimits(charCount: number) {
+  if (charCount <= 6000) return { maxH2: 3, maxH3PerH2: 0, maxH3Total: 0 };
+  if (charCount <= 8000) return { maxH2: 4, maxH3PerH2: 2, maxH3Total: 4 };
+  if (charCount <= 10000) return { maxH2: 5, maxH3PerH2: 2, maxH3Total: 6 };
+  if (charCount <= 12000) return { maxH2: 6, maxH3PerH2: 2, maxH3Total: 8 };
+  if (charCount <= 14000) return { maxH2: 7, maxH3PerH2: 3, maxH3Total: 12 };
+  if (charCount <= 16000) return { maxH2: 8, maxH3PerH2: 3, maxH3Total: 14 };
+  if (charCount <= 18000) return { maxH2: 9, maxH3PerH2: 3, maxH3Total: 16 };
+  return { maxH2: 10, maxH3PerH2: 3, maxH3Total: 18 };
 }
 
 export function ScreenBrief({
@@ -44,6 +57,8 @@ export function ScreenBrief({
   onConfirm,
   onBack,
 }: ScreenBriefProps) {
+  const structureLimits = getStructureLimits(charCount);
+
   const [h1, setH1] = useState(brief.h1);
 
   const [faqQuestions, setFaqQuestions] = useState<Array<{ id: string; text: string }>>(() => {
@@ -212,10 +227,10 @@ export function ScreenBrief({
       {/* Инфо-чипы */}
       <div className="mb-5 flex flex-wrap gap-2">
         <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
-          <strong className="font-medium text-[var(--color-text-primary)]">{h2Count}</strong> разделов H2
+          <strong className="font-medium text-[var(--color-text-primary)]">{h2Count}</strong>/{structureLimits.maxH2} H2
         </span>
         <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
-          <strong className="font-medium text-[var(--color-text-primary)]">{h3Count}</strong> подразделов H3
+          <strong className="font-medium text-[var(--color-text-primary)]">{h3Count}</strong>/{structureLimits.maxH3Total} H3
         </span>
         <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{faqQuestions.length}</strong>/{faqLimit} FAQ
@@ -231,7 +246,7 @@ export function ScreenBrief({
           <span>Структура заголовков</span>
           <span className="font-normal text-[var(--color-step-pending)]">перетаскивайте для изменения порядка</span>
         </div>
-        <BriefHeadings h1={h1} h2List={h2List} onH1Change={handleH1Change} onChange={handleH2Change} />
+        <BriefHeadings h1={h1} h2List={h2List} onH1Change={handleH1Change} onChange={handleH2Change} limits={structureLimits} />
       </div>
 
       {/* FAQ блок */}

@@ -490,8 +490,31 @@ export async function executeSeoAudit(
   const hasTldr = /<div class="tldr"/i.test(html);
   if (!hasTldr) addIssue('eeat', 'warning', 'Блок «Кратко» (TL;DR) отсутствует', 'Добавить TL;DR после введения');
 
-  const hasTable = /<table[\s>]/i.test(html);
-  if (!hasTable) addIssue('eeat', 'warning', 'Таблица сравнения отсутствует', 'Добавить таблицу с минимум 3 столбцами и 4 строками');
+  const hasComparisonBlock = h2Blocks.some(block => {
+    const h3Regex = /<h3[\s>][\s\S]*?<\/h3>/gi;
+    const ends: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = h3Regex.exec(block)) !== null) {
+      ends.push(m.index + m[0].length);
+    }
+    if (ends.length < 3) return false;
+    let consecutive = 0;
+    for (let i = 0; i < ends.length; i++) {
+      const afterH3 = ends[i];
+      const nextH3Start = i + 1 < ends.length
+        ? block.indexOf('<h3', afterH3)
+        : block.length;
+      const segment = block.slice(afterH3, nextH3Start > -1 ? nextH3Start : block.length);
+      if (/<ul[\s>]/i.test(segment)) {
+        consecutive++;
+        if (consecutive >= 3) return true;
+      } else {
+        consecutive = 0;
+      }
+    }
+    return false;
+  });
+  if (!hasComparisonBlock) addIssue('eeat', 'warning', 'Нет блока сравнения (H3 + списки)', 'Добавить блок сравнения: минимум 3 подряд H3 с <ul> после каждого');
 
   const hasBlockquote = /<blockquote[\s>]/i.test(html);
   if (!hasBlockquote) addIssue('eeat', 'info', 'Цитата эксперта отсутствует', 'Добавить blockquote с цитатой и cite');

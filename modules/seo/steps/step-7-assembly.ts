@@ -541,14 +541,9 @@ function wrapWithInlineStyles(
     .replace(/<figure([^>]*)>/gi, '<figure$1 style="margin:20px 0;text-align:center">')
     .replace(/<img([^>]*)>/gi, '<img$1 style="max-width:100%;height:auto;border-radius:8px">')
     .replace(/<a([^>]*)>/gi, '<a$1 style="color:#2563EB;text-decoration:underline">')
-    // Таблица
-    .replace(/<table([^>]*)>/gi, '<table$1 style="width:100%;border-collapse:collapse;margin:20px 0;font-size:14px">')
-    .replace(/<thead([^>]*)>/gi, '<thead$1 style="background:#f5f5f5">')
-    .replace(/<th([^>]*)>/gi, '<th$1 style="padding:10px 12px;text-align:left;border:1px solid #e0e0e0;font-weight:600;color:#1a1a1a">')
-    .replace(/<td([^>]*)>/gi, '<td$1 style="padding:10px 12px;border:1px solid #e0e0e0;color:#333">')
     // Цитаты экспертов
-    .replace(/<blockquote([^>]*)>/gi, '<blockquote$1 style="margin:20px 0;padding:16px 20px;border-left:4px solid #A6E800;background:#f9fdf2;border-radius:0 8px 8px 0">')
-    .replace(/<cite([^>]*)>/gi, '<cite$1 style="display:block;margin-top:8px;font-size:13px;color:#6b6b6b;font-style:normal">')
+    .replace(/<blockquote([^>]*)>/gi, '<blockquote$1 style="margin:20px 0;padding:16px 20px;border-left:4px solid #A6E800;background:#f9fdf2">')
+    .replace(/<cite([^>]*)>/gi, '<cite$1>')
     // Навигация (оглавление)
     .replace(/<nav class="toc"([^>]*)>/gi, '<nav class="toc"$1 style="margin:16px 0;padding:16px 20px;background:#f9f9f9;border-radius:8px;border:1px solid #e0e0e0">');
 
@@ -599,7 +594,8 @@ function wrapWithInlineStyles(
   // Списки (ul/ol внутри TL;DR и callout)
   styled = styled.replace(/<ul([^>]*)>/gi, '<ul$1 style="margin:8px 0;padding-left:20px">');
   styled = styled.replace(/<ol([^>]*)>/gi, '<ol$1 style="margin:8px 0;padding-left:20px">');
-  styled = styled.replace(/<li([^>]*)>/gi, '<li$1 style="margin:4px 0;line-height:1.6;color:#333">');
+  styled = styled.replace(/<li><strong>/gi, '<li style="margin:4px 0;line-height:1.6;color:#333"><strong style="font-weight:600;color:#1a1a1a">');
+  styled = styled.replace(/<li(?![^>]*style)([^>]*)>/gi, '<li$1 style="margin:4px 0;line-height:1.6;color:#333">');
 
   if (addDisclaimer && legalRestrictions) {
     const disclaimer = `<p style="font-size:13px;line-height:1.5;color:#666;padding:12px;background:#f9f9f9;border-radius:6px;margin:16px 0"><em>Дисклеймер: ${legalRestrictions}</em></p>`;

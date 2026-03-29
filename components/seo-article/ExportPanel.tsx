@@ -1,6 +1,30 @@
 'use client';
 import { useState, useCallback } from 'react';
 
+function transformForTilda(html: string): string {
+  let s = html;
+  s = s.replace(/\s+style="[^"]*"/gi, '');
+  s = s.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '');
+  return s;
+}
+
+function transformForDzen(html: string): string {
+  let result = html;
+  result = result.replace(/\s+style="[^"]*"/gi, '');
+  result = result.replace(/<div[^>]*>([\s\S]*?)<\/div>/gi, '$1');
+  result = result.replace(/<nav[^>]*>([\s\S]*?)<\/nav>/gi, '$1');
+  result = result.replace(/<figure[^>]*>([\s\S]*?)<\/figure>/gi, '$1');
+  result = result.replace(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/gi, '$1');
+  result = result.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/gi, '<p><em>$1</em></p>');
+  result = result.replace(/<article[^>]*>([\s\S]*?)<\/article>/gi, '$1');
+  result = result.replace(/<br\s*\/?>/gi, '<br>\n');
+  result = result.replace(/<\/(p|h1|h2|h3|blockquote|ul|ol)>/gi, '</$1>\n\n');
+  result = result.replace(/<\/li>/gi, '</li>\n');
+  result = result.replace(/\n{3,}/g, '\n\n');
+  result = result.trim();
+  return result;
+}
+
 export function CopyButton({ text, label = 'Копировать' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {
@@ -23,16 +47,47 @@ interface ExportPanelProps {
   onDownloadMetadata: () => void;
   onNewArticle: () => void;
   onRegenerate?: () => void;
+  articleHtml?: string;
 }
 
-export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate }: ExportPanelProps) {
+export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, articleHtml }: ExportPanelProps) {
   const [copied, setCopied] = useState(false);
+  const [copiedDzen, setCopiedDzen] = useState(false);
 
-  const handleCopy = useCallback(() => {
-    onCopyArticle();
+  const copyHtmlToClipboard = useCallback(async (html: string) => {
+    const plain = html.replace(/<[^>]*>/g, '');
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plain], { type: 'text/plain' }),
+      }),
+    ]);
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!articleHtml) { onCopyArticle(); setCopied(true); setTimeout(() => setCopied(false), 2000); return; }
+    try { await copyHtmlToClipboard(articleHtml); } catch { onCopyArticle(); }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [onCopyArticle]);
+  }, [articleHtml, onCopyArticle, copyHtmlToClipboard]);
+
+  const handleCopyDzen = useCallback(async () => {
+    if (!articleHtml) return;
+    const simplified = transformForDzen(articleHtml);
+    const plainText = simplified.replace(/<[^>]*>/g, '');
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([simplified], { type: 'text/html' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain' }),
+        }),
+      ]);
+    } catch {
+      await navigator.clipboard.writeText(plainText);
+    }
+    setCopiedDzen(true);
+    setTimeout(() => setCopiedDzen(false), 2000);
+  }, [articleHtml]);
 
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
@@ -43,12 +98,21 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
             ? 'bg-[var(--color-step-done)] text-white'
             : 'bg-[var(--seo-selected-bg)] text-[var(--seo-selected-text)] hover:opacity-90'
         }`}>
-          {copied ? '✓ Текст скопирован' : 'Скопировать статью'}
+          {copied ? '✓ Скопировано' : 'Скопировать статью'}
         </button>
         <div className="flex gap-1.5">
           <button onClick={onDownloadHtml} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Скачать .html</button>
           <button onClick={onDownloadDocx} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Скачать .docx</button>
         </div>
+        {articleHtml && (
+          <button onClick={handleCopyDzen} className={`w-full rounded-[var(--radius-md)] border py-2.5 text-[13px] transition-all ${
+            copiedDzen
+              ? 'border-[var(--color-step-done)] bg-[var(--color-step-done)] text-white'
+              : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] transition-colors hover:bg-[#F5F5F5]'
+          }`}>
+            {copiedDzen ? '✓ Скопировано для Дзен' : 'Копировать для Дзен'}
+          </button>
+        )}
         <button onClick={onDownloadMetadata} className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Метаданные .docx</button>
       </div>
       <div className="mt-2 text-center text-[11px] text-[var(--color-step-pending)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>

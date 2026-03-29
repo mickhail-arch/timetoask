@@ -5,20 +5,19 @@ import { calculatePrice } from '../pricing';
 import type { PricingConfig } from '../pricing';
 import type { StepResult, PipelineContext, BriefData } from '../types';
 
-// SEO-таблица: символы → диапазоны H2/H3
-const SEO_TABLE: Record<number, { h2: [number, number]; h3: [number, number] }> = {
-  4000:  { h2: [1, 2], h3: [1, 2] },
-  6000:  { h2: [2, 3], h3: [2, 3] },
-  8000:  { h2: [3, 4], h3: [3, 4] },
-  10000: { h2: [4, 5], h3: [4, 5] },
-  12000: { h2: [5, 6], h3: [5, 7] },
-  14000: { h2: [6, 7], h3: [6, 8] },
-  16000: { h2: [7, 8], h3: [7, 9] },
-  18000: { h2: [8, 9], h3: [8, 10] },
-  20000: { h2: [9, 10], h3: [9, 11] },
+// SEO-таблица: символы → диапазоны H2/H3, FAQ, заключение
+const SEO_TABLE: Record<number, { h2: [number, number]; h3: [number, number]; maxH3Total: number; faqCount: [number, number]; hasConclusion: boolean }> = {
+  6000:  { h2: [3, 3], h3: [0, 0], maxH3Total: 0, faqCount: [2, 2], hasConclusion: true },
+  8000:  { h2: [3, 4], h3: [0, 2], maxH3Total: 4, faqCount: [2, 3], hasConclusion: true },
+  10000: { h2: [4, 5], h3: [0, 2], maxH3Total: 6, faqCount: [3, 4], hasConclusion: true },
+  12000: { h2: [5, 6], h3: [0, 2], maxH3Total: 8, faqCount: [4, 5], hasConclusion: true },
+  14000: { h2: [6, 7], h3: [1, 3], maxH3Total: 12, faqCount: [5, 6], hasConclusion: true },
+  16000: { h2: [7, 8], h3: [1, 3], maxH3Total: 14, faqCount: [6, 7], hasConclusion: true },
+  18000: { h2: [8, 9], h3: [1, 3], maxH3Total: 16, faqCount: [7, 8], hasConclusion: true },
+  20000: { h2: [9, 10], h3: [2, 3], maxH3Total: 18, faqCount: [8, 10], hasConclusion: true },
 };
 
-function getSeoLimits(chars: number) {
+function getSeoLimits(chars: number): { h2: [number, number]; h3: [number, number]; maxH3Total: number; faqCount: [number, number]; hasConclusion: boolean } {
   const keys = Object.keys(SEO_TABLE).map(Number).sort((a, b) => a - b);
   let best = keys[0];
   for (const k of keys) {
@@ -40,9 +39,8 @@ const INTENT_STRUCTURES: Record<string, string> = {
 function buildBriefPrompt(
   input: Record<string, unknown>,
   chars: number,
-  limits: { h2: [number, number]; h3: [number, number] },
+  limits: { h2: [number, number]; h3: [number, number]; maxH3Total: number; faqCount: [number, number]; hasConclusion: boolean },
   maxKeywords: number,
-  faqCount: number,
 ): string {
   const intent = (input.intent as string) ?? 'informational';
   const geo = (input.geo_location as string) ?? '';
@@ -73,10 +71,13 @@ function buildBriefPrompt(
 
 === СТРУКТУРА ===
 - H2: от ${limits.h2[0]} до ${limits.h2[1]} штук (1 на каждые 1500-2000 символов)
-- H3: от ${limits.h3[0]} до ${limits.h3[1]} штук (только внутри H2, 0-2 на H2)
-- H2 и H3 не совпадают более чем на 60%
+- H3: от ${limits.h3[0]} до ${limits.h3[1]} штук на каждый H2 (только внутри H2).
+- Общее количество H3 во всей статье: максимум ${limits.maxH3Total}. Если maxH3Total равен 0 — НЕ создавай H3 вообще, используй только H2. H3 на каждый H2: от ${limits.h3[0]} до ${limits.h3[1]}.
+- FAQ вопросов: от ${limits.faqCount[0]} до ${limits.faqCount[1]}.${!limits.hasConclusion ? ' Заключение НЕ выделяй в отдельный H2 — просто заверши статью итоговым абзацем.' : ''}
+${limits.faqCount[0] === 0 && limits.faqCount[1] === 0 ? '- FAQ-раздел не добавляй в h2_list.\n' : ''}${!limits.hasConclusion ? '- Заключение не добавляй как отдельный H2 в h2_list.\n' : ''}- H2 и H3 не совпадают более чем на 60%
 - H2-заголовки должны полностью покрывать тему. Читатель после прочтения всех H2 должен получить исчерпывающий ответ на запрос.
 - Каждый H2 раскрывает отдельный аспект темы, без пересечений.
+- H4 запрещён. Используй только H1, H2, H3.
 
 === INTENT: ${intent.toUpperCase()} ===
 Логика структуры: ${intentStructure}
@@ -109,8 +110,8 @@ function buildBriefPrompt(
     prompt += `\n\n=== БРЕНД ===\nБренд "${brand}" — не включай в H1 (если не часть ключа). Допустим в 1 H2-заголовке. Учти в тезисах: один H2 может содержать упоминание бренда в контексте.`;
   }
 
-  if (faqCount > 0) {
-    prompt += `\n\n=== FAQ ===\nПоследний H2 = "Часто задаваемые вопросы" с ${faqCount} H3 (каждый H3 = конкретный вопрос, 5-10 слов).
+  if (limits.faqCount[0] > 0 || limits.faqCount[1] > 0) {
+    prompt += `\n\n=== FAQ ===\nПоследний H2 = "Часто задаваемые вопросы" с ${limits.faqCount[0]}-${limits.faqCount[1]} H3 (каждый H3 = конкретный вопрос, 5-10 слов).
 Вопросы должны быть реальными — то, что люди спрашивают по теме. 1-2 вопроса содержат основной ключ.
 Не дублируй содержание основных H2. FAQ закрывает вопросы, не раскрытые в основном тексте.`;
   } else {
@@ -194,15 +195,15 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
 
   const chars = (ctx.input.target_char_count as number) ?? 8000;
   const imageCount = (ctx.input.image_count as number) ?? 0;
-  const faqCount = (ctx.input.faq_count as number) ?? 5;
   const limits = getSeoLimits(chars);
+  const faqCount = limits.faqCount[1];
   const maxKeywords = Math.floor(chars / 800);
 
   // Расчёт плотности основного ключа
   const mainKeywordMin = Math.max(2, Math.floor(chars / 2500));
   const mainKeywordMax = Math.floor(chars / 1000);
 
-  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount);
+  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords);
 
   const userMessage = `Тема: ${ctx.input.target_query}
 Ключевые слова: ${ctx.input.keywords}
