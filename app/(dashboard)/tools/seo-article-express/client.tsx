@@ -75,6 +75,7 @@ export function SeoArticleExpressClient() {
           ...((assembly.warnings as string[]) ?? []),
           ...((aiRevisions.warnings as string[]) ?? []),
         ],
+        images_map: (imagesData.images_map as Record<string, { base64?: string; url?: string }>) ?? {},
       };
 
       setResult(flatResult);

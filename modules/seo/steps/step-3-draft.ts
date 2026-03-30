@@ -4,6 +4,7 @@ import type { StepResult, PipelineContext, BriefData } from '../types';
 import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { buildSystemPrompt } from '@/plugins/seo-article-express/prompt';
+import { sanitizeArticleHtml } from './sanitize-html';
 import type { ToolConfig } from '@/core/types';
 
 export async function executeDraft(
@@ -26,6 +27,7 @@ export async function executeDraft(
   const imageCount = (ctx.input.image_count as number) ?? 0;
 
   const builtPrompt = buildSystemPrompt(ctx.input, brief);
+  const h2Count = brief.h2_list?.length || Math.round(charCount / 2000);
   const maxOutputTokens = Math.max(4000, Math.ceil(charCount * 1.2));
 
   const userMessage = `Напиши статью по заданным параметрам. Все правила — в системном промпте.
@@ -35,27 +37,50 @@ export async function executeDraft(
 
   let articleHtml = '';
   let attempts = 0;
-  const maxAttempts = 2;
+  const maxAttempts = 3;
+  let lastTextLength = 0;
 
   while (attempts < maxAttempts) {
     attempts++;
+
+    let currentPrompt = builtPrompt;
+    if (attempts > 1 && lastTextLength > 0) {
+      const deficit = charCount - lastTextLength;
+      const additionalInstruction = `\n\n=== КРИТИЧЕСКАЯ КОРРЕКЦИЯ ОБЪЁМА ===\nПредыдущая попытка: ${lastTextLength} символов. Целевой: ${charCount}. Недобор: ${deficit} символов.\nЭто НЕДОПУСТИМО. Увеличь объём КАЖДОГО H2-раздела. Добавь больше примеров, цифр, деталей. Не добавляй новые разделы — расширяй существующие. Каждый H2 должен быть на ${Math.round(deficit / h2Count)} символов длиннее.`;
+      currentPrompt = builtPrompt + additionalInstruction;
+    }
+
     try {
       articleHtml = await generateText({
         model,
-        systemPrompt: builtPrompt,
-        userMessage,
+        systemPrompt: currentPrompt,
+        userMessage: attempts > 1
+          ? `Напиши статью по заданным параметрам. Все правила — в системном промпте.\n\nТема: ${targetQuery}\nКлючевые слова: ${keywords}\n\nВНИМАНИЕ: объём статьи СТРОГО ${charCount} символов. Предыдущая попытка была слишком короткой (${lastTextLength} символов). Пиши развёрнуто.`
+          : userMessage,
         maxOutputTokens,
       });
       articleHtml = articleHtml.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-      break;
+
+      const currentTextLength = articleHtml.replace(/<[^>]*>/g, '').length;
+      lastTextLength = currentTextLength;
+
+      if (currentTextLength >= charCount * 0.85) {
+        break;
+      }
+
+      console.warn(`[step-3-draft] attempt ${attempts}: ${currentTextLength} chars (target ${charCount}), retrying...`);
+
+      if (attempts >= maxAttempts) break;
     } catch (err) {
       if (attempts >= maxAttempts) throw err;
       console.warn(`[step-3-draft] attempt ${attempts} failed, retrying...`);
     }
   }
 
+  articleHtml = sanitizeArticleHtml(articleHtml);
+
   const h1Count = (articleHtml.match(/<h1[\s>]/gi) ?? []).length;
-  const h2Count = (articleHtml.match(/<h2[\s>]/gi) ?? []).length;
+  const actualH2Count = (articleHtml.match(/<h2[\s>]/gi) ?? []).length;
   const imageMarkers = (articleHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
   const textLength = articleHtml.replace(/<[^>]*>/g, '').length;
 
@@ -77,7 +102,7 @@ export async function executeDraft(
       article_html: articleHtml,
       char_count: textLength,
       h1_count: h1Count,
-      h2_count: h2Count,
+      h2_count: actualH2Count,
       image_markers: imageMarkers,
       warnings,
       partial: articleHtml.slice(0, 500),

@@ -1,0 +1,48 @@
+---
+description: Rules for SEO article generator project
+globs: ["modules/seo/**", "plugins/seo-article-express/**", "components/seo-article/**"]
+---
+
+# SEO Article Project Rules
+
+## Architecture (5 layers, top-down only)
+core/ -> adapters/ -> modules/ -> plugins/ -> apps/
+Route Handler <= 10 lines. All logic in modules/*.service.ts.
+modules/ NEVER imports Next.js.
+new PrismaClient() only in lib/prisma.ts.
+
+## Key files
+- `plugins/seo-article-express/prompt.ts` — buildSystemPrompt (63KB, 22 dynamic blocks)
+- `modules/seo/steps/step-1-2-brief.ts` — SEO_TABLE + brief generation
+- `modules/seo/steps/step-7-assembly.ts` — wrapWithInlineStyles + metadata
+- `modules/seo/steps/sanitize-html.ts` — HTML sanitizer between pipeline steps
+- `components/seo-article/ScreenResult.tsx` — article preview with images_map
+- `modules/seo/steps/step-6-images.ts` — image gen, images_map (NOT base64 in src)
+
+## Pipeline data flow
+draft(article_html) -> seo_audit -> content_analysis -> ai_detect_revisions(article_html) -> targeted_rewrite(article_html) -> images(article_html + images_map) -> assembly(article_html + images_map)
+Each step that modifies article_html must call sanitizeArticleHtml() before returning.
+Images are stored in images_map, NOT as base64 in img src.
+
+## HTML rules
+- Allowed tags: h1 h2 h3 p blockquote ul ol li a img strong em figure figcaption cite nav
+- Forbidden tags: h4 h5 h6 div span section article header footer main (except article wrapper in assembly)
+- style attributes are ONLY added by wrapWithInlineStyles in step-7-assembly
+- All previous steps must return clean HTML without style attributes
+- sanitize-html.ts strips styles/forbidden tags between steps
+
+## Agent behavior
+- Before editing: read ONLY the relevant function, not the whole file
+- Make replacements directly, no verbose analysis in response text
+- Never re-read a file already read in this session
+- For string replacements: skip full file reads, use grep to find anchor
+- No hardcoded colors in components — use CSS variables from tokens.css
+
+## SEO_TABLE reference (step-1-2-brief.ts)
+charCount ranges: 6000/8000/10000/12000/14000/16000/18000/20000
+Columns: minH2 maxH2 minH3Total maxH3Total hasConclusion hasFaq maxFaq
+
+## Models config (from DB tools.config.models)
+brief/draft/ai_detect/revisions/assembly: anthropic/claude-sonnet-4
+moderation/moderation_headings/image_prompt: google/gemini-2.5-flash
+image_gen: google/gemini-3.1-flash-image-preview

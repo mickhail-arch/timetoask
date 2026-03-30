@@ -3,6 +3,7 @@ import type { StepResult, PipelineContext } from '../types';
 import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { detectAIByCode } from '@/adapters/ai-detection';
+import { sanitizeArticleHtml } from './sanitize-html';
 import type { ToolConfig } from '@/core/types';
 
 const STOP_STARTS = [
@@ -307,6 +308,8 @@ ${codeMarkers.map(m => '- ' + m).join('\n')}
     }
     console.warn('[step-5.5] SEO recheck issues:', recheck.issues);
   }
+
+  articleHtml = sanitizeArticleHtml(articleHtml);
 
   return {
     success: true,

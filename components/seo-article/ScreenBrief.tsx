@@ -39,13 +39,20 @@ function getMaxFaqForCharCount(charCount: number): number {
 
 function getStructureLimits(charCount: number) {
   if (charCount <= 6000) return { maxH2: 3, maxH3PerH2: 0, maxH3Total: 0 };
-  if (charCount <= 8000) return { maxH2: 4, maxH3PerH2: 2, maxH3Total: 4 };
-  if (charCount <= 10000) return { maxH2: 5, maxH3PerH2: 2, maxH3Total: 6 };
-  if (charCount <= 12000) return { maxH2: 6, maxH3PerH2: 2, maxH3Total: 8 };
-  if (charCount <= 14000) return { maxH2: 7, maxH3PerH2: 3, maxH3Total: 12 };
-  if (charCount <= 16000) return { maxH2: 8, maxH3PerH2: 3, maxH3Total: 14 };
-  if (charCount <= 18000) return { maxH2: 9, maxH3PerH2: 3, maxH3Total: 16 };
-  return { maxH2: 10, maxH3PerH2: 3, maxH3Total: 18 };
+  if (charCount <= 7000) return { maxH2: 3, maxH3PerH2: 1, maxH3Total: 1 };
+  if (charCount <= 8000) return { maxH2: 4, maxH3PerH2: 1, maxH3Total: 2 };
+  if (charCount <= 9000) return { maxH2: 4, maxH3PerH2: 1, maxH3Total: 2 };
+  if (charCount <= 10000) return { maxH2: 5, maxH3PerH2: 1, maxH3Total: 3 };
+  if (charCount <= 11000) return { maxH2: 5, maxH3PerH2: 1, maxH3Total: 3 };
+  if (charCount <= 12000) return { maxH2: 6, maxH3PerH2: 2, maxH3Total: 4 };
+  if (charCount <= 13000) return { maxH2: 6, maxH3PerH2: 2, maxH3Total: 5 };
+  if (charCount <= 14000) return { maxH2: 7, maxH3PerH2: 2, maxH3Total: 6 };
+  if (charCount <= 15000) return { maxH2: 7, maxH3PerH2: 2, maxH3Total: 7 };
+  if (charCount <= 16000) return { maxH2: 8, maxH3PerH2: 2, maxH3Total: 8 };
+  if (charCount <= 17000) return { maxH2: 8, maxH3PerH2: 2, maxH3Total: 9 };
+  if (charCount <= 18000) return { maxH2: 9, maxH3PerH2: 2, maxH3Total: 10 };
+  if (charCount <= 19000) return { maxH2: 9, maxH3PerH2: 3, maxH3Total: 11 };
+  return { maxH2: 10, maxH3PerH2: 3, maxH3Total: 12 };
 }
 
 export function ScreenBrief({

@@ -4,6 +4,7 @@ import type { ToolConfig } from '@/core/types';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { getStepModel } from '../config';
 import { detectAIByCode } from '@/adapters/ai-detection';
+import { sanitizeArticleHtml } from './sanitize-html';
 
 const STOP_WORDS = new Set([
   'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'к', 'за', 'о', 'об',
@@ -150,11 +151,14 @@ export async function executeAssembly(
 
   const input = ctx.input;
 
+  // Чистим HTML от возможных style/div оставшихся от LLM
+  const cleanedHtml = sanitizeArticleHtml(articleHtml);
+
   // Пересчитать метрики по финальному тексту
-  const freshMetrics = recalculateMetrics(articleHtml, input);
+  const freshMetrics = recalculateMetrics(cleanedHtml, input);
 
   // Кодовый AI-чекер
-  const plainTextForAI = articleHtml.replace(/<[^>]*>/g, '');
+  const plainTextForAI = cleanedHtml.replace(/<[^>]*>/g, '');
   const codeAiResult = detectAIByCode(plainTextForAI);
 
   const targetedScore = (targetedRewriteData.final_ai_score as number) ?? codeAiResult.score;
@@ -183,10 +187,10 @@ export async function executeAssembly(
     ? targetQuery
     : targetQuery.split(' ').slice(0, 4).join(' ');
 
-  const h1Match = articleHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const h1Match = cleanedHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   const h1Text = h1Match ? h1Match[1].replace(/<[^>]*>/g, '').trim() : targetQuery;
 
-  const plainText = articleHtml.replace(/<[^>]*>/g, '');
+  const plainText = cleanedHtml.replace(/<[^>]*>/g, '');
 
   let title: string;
   let description: string;
@@ -319,7 +323,7 @@ export async function executeAssembly(
   });
 
   if (faqCount > 0) {
-    const faqQuestions = extractFAQ(articleHtml);
+    const faqQuestions = extractFAQ(cleanedHtml);
     if (faqQuestions.length > 0) {
       schemas.push({
         '@context': 'https://schema.org',
@@ -358,7 +362,7 @@ export async function executeAssembly(
   const brandUrl = (input.brand_url as string) ?? '';
   const ctaUrl = (input.cta_url as string) ?? '';
 
-  let processedHtml = articleHtml;
+  let processedHtml = cleanedHtml;
   if (brand && brandUrl) {
     processedHtml = ensureBrandLinks(processedHtml, brand, brandUrl);
   }

@@ -3,6 +3,7 @@ import type { StepResult, PipelineContext, SeoIssue, QualityMetrics } from '../t
 import { getStepModel } from '../config';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { sanitizeArticleHtml } from './sanitize-html';
 import type { ToolConfig } from '@/core/types';
 
 /**
@@ -237,6 +238,8 @@ ${rulesBlock}
   if (finalAiScore > 35) {
     warnings.push(`AI-детект ${finalAiScore}% после правок — рекомендуем проверить вручную`);
   }
+
+  articleHtml = sanitizeArticleHtml(articleHtml);
 
   return {
     success: true,

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { QualityPanel } from './QualityPanel';
 import { MetaPanel } from './MetaPanel';
 import { MetadataPanel } from './MetadataPanel';
@@ -11,6 +11,7 @@ interface ArticleResult {
   metadata: { title: string; description: string; slug: string; breadcrumb: string; alt_texts: string[]; json_ld: string; };
   quality_metrics: Record<string, number>;
   warnings?: string[];
+  images_map?: Record<string, { base64?: string; url?: string }>;
 }
 
 interface ScreenResultProps {
@@ -29,6 +30,34 @@ interface ScreenResultProps {
 export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate }: ScreenResultProps) {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const m = result.quality_metrics;
+
+  const renderedHtml = useMemo(() => {
+    let html = result.article_html;
+    const map = result.images_map ?? {};
+    for (const [imageId, imgData] of Object.entries(map)) {
+      const src = imgData.base64
+        ? `data:image/png;base64,${imgData.base64}`
+        : imgData.url ?? '';
+      html = html.replace(
+        new RegExp(`src="/api/images/${imageId}"`, 'g'),
+        `src="${src}"`,
+      );
+    }
+    return html;
+  }, [result.article_html, result.images_map]);
+
+  const codeHtml = useMemo(() => {
+    let html = result.article_html;
+    const map = result.images_map ?? {};
+    for (const [imageId, imgData] of Object.entries(map)) {
+      const src = imgData.url ?? '[base64 image]';
+      html = html.replace(
+        new RegExp(`src="/api/images/${imageId}"`, 'g'),
+        `src="${src}"`,
+      );
+    }
+    return html;
+  }, [result.article_html, result.images_map]);
 
   return (
     <div className="mx-auto max-w-[680px] space-y-3">
@@ -53,10 +82,10 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
           <button onClick={() => setTab('code')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'code' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>HTML-код</button>
         </div>
         {tab === 'preview' ? (
-          <div className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed" style={{ resize: 'vertical' }} dangerouslySetInnerHTML={{ __html: `<style>.seo-preview a[href]{position:relative;cursor:pointer}.seo-preview a[href]:hover::before{content:attr(href);position:absolute;bottom:100%;left:0;background:#fff;border:1px solid #E0E0E0;border-radius:6px;padding:4px 8px;font-size:11px;color:#666;white-space:nowrap;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.08);pointer-events:none}</style>${result.article_html}` }} />
+          <div className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed" style={{ resize: 'vertical' }} dangerouslySetInnerHTML={{ __html: `<style>.seo-preview a[href]{position:relative;cursor:pointer}.seo-preview a[href]:hover::before{content:attr(href);position:absolute;bottom:100%;left:0;background:#fff;border:1px solid #E0E0E0;border-radius:6px;padding:4px 8px;font-size:11px;color:#666;white-space:nowrap;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.08);pointer-events:none}</style>${renderedHtml}` }} />
         ) : (
           <pre className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4 font-mono text-xs leading-relaxed text-[#444] whitespace-pre-wrap break-all" style={{ resize: 'vertical' }}>
-            {result.article_html}
+            {codeHtml}
           </pre>
         )}
       </div>

@@ -1,26 +1,32 @@
 'use client';
 import { useState, useCallback } from 'react';
+import { stripBase64Images } from '@/lib/seo-article/export';
 
 function transformForTilda(html: string): string {
   let s = html;
   s = s.replace(/\s+style="[^"]*"/gi, '');
+  s = s.replace(/<\/(div|blockquote|cite|figcaption|figure|article|section|nav)>/gi, '</$1> ');
   s = s.replace(/<h1[^>]*>[\s\S]*?<\/h1>/gi, '');
+  s = s.replace(/ {2,}/g, ' ');
   return s;
 }
 
 function transformForDzen(html: string): string {
   let result = html;
   result = result.replace(/\s+style="[^"]*"/gi, '');
+  result = result.replace(/<\/(div|blockquote|cite|figcaption|figure|article|section|nav|header|footer)>/gi, '</$1> ');
+  result = result.replace(/<(blockquote|cite|figcaption)[^>]*>/gi, '\n<$1>');
+  result = result.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/gi, '\n<p><em>$1</em></p>');
   result = result.replace(/<div[^>]*>([\s\S]*?)<\/div>/gi, '$1');
   result = result.replace(/<nav[^>]*>([\s\S]*?)<\/nav>/gi, '$1');
   result = result.replace(/<figure[^>]*>([\s\S]*?)<\/figure>/gi, '$1');
   result = result.replace(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/gi, '$1');
-  result = result.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/gi, '<p><em>$1</em></p>');
   result = result.replace(/<article[^>]*>([\s\S]*?)<\/article>/gi, '$1');
   result = result.replace(/<br\s*\/?>/gi, '<br>\n');
   result = result.replace(/<\/(p|h1|h2|h3|blockquote|ul|ol)>/gi, '</$1>\n\n');
   result = result.replace(/<\/li>/gi, '</li>\n');
   result = result.replace(/\n{3,}/g, '\n\n');
+  result = result.replace(/ {2,}/g, ' ');
   result = result.trim();
   return result;
 }
@@ -55,10 +61,11 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
   const [copiedDzen, setCopiedDzen] = useState(false);
 
   const copyHtmlToClipboard = useCallback(async (html: string) => {
-    const plain = html.replace(/<[^>]*>/g, '');
+    const clean = stripBase64Images(html);
+    const plain = clean.replace(/<[^>]*>/g, '');
     await navigator.clipboard.write([
       new ClipboardItem({
-        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/html': new Blob([clean], { type: 'text/html' }),
         'text/plain': new Blob([plain], { type: 'text/plain' }),
       }),
     ]);
@@ -73,7 +80,8 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
 
   const handleCopyDzen = useCallback(async () => {
     if (!articleHtml) return;
-    const simplified = transformForDzen(articleHtml);
+    const stripped = stripBase64Images(articleHtml);
+    const simplified = transformForDzen(stripped);
     const plainText = simplified.replace(/<[^>]*>/g, '');
     try {
       await navigator.clipboard.write([

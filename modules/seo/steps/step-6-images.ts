@@ -143,6 +143,7 @@ export async function executeImages(
     alt: string;
     success: boolean;
   }> = [];
+  const imagesMap: Record<string, { base64?: string; url?: string }> = {};
 
   // 6.1 + 6.2: Генерация промптов и картинок (параллельно)
   const imagePromises = markers.map(async (markerNum, index) => {
@@ -156,14 +157,19 @@ export async function executeImages(
 
       const detailedPrompt = await generateText({
         model: promptModel,
-        systemPrompt: `Generate a detailed image generation prompt in English for an AI image generator. Output ONLY the prompt text, nothing else. Max 200 words.
+        systemPrompt: `Generate a detailed image generation prompt in English for an AI image generator. Output ONLY the prompt text, nothing else. Max 150 words.
+
+MANDATORY STYLE: ${styleEN}
+This style MUST be the dominant visual characteristic of the image. Every element must follow this style.
 
 Rules:
-- The image must visually match the article section it illustrates.
-- Include specific visual details: composition, lighting, colors, perspective.
-- Style requirements are mandatory — follow them precisely.
-- No text, watermarks, logos, or UI elements in the image.
-- No people's faces (use silhouettes, back views, or hands if people are needed).`,
+- Start the prompt with the style: "${styleEN}".
+- The image MUST visually represent the SPECIFIC topic of the article section, not a generic concept.
+- Include concrete objects, specific details, composition, lighting, colors, perspective.
+- Image ${parseInt(markerNum)} of ${imageCount}: ${index === 0 ? 'Hero/cover image — wide establishing shot showing the main subject.' : 'Section illustration — focused on a specific detail or process from this section.'}
+- Each image must be visually DIFFERENT: vary angle, color palette, objects, composition.
+- No text, watermarks, logos, or UI elements.
+- No people faces (silhouettes, back views, or hands only).`,
         userMessage: `Scene description: ${desc}
 Style: ${styleEN}
 Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionContext}` : ''}`,
@@ -172,7 +178,7 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
       // 6.2: Seedream генерирует картинку
       const imageResult = await generateImage({
         model: genModel,
-        prompt: detailedPrompt.trim(),
+        prompt: `${styleEN}. ${detailedPrompt.trim()}`,
         size: '1792x1024',
       });
 
@@ -214,11 +220,11 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
 
     if (successfulImages.length > 0) {
       const buildFigure = (img: (typeof successfulImages)[0]) => {
-        const src = img.base64
-          ? `data:image/png;base64,${img.base64}`
-          : img.url ?? '';
+        const imageId = `seo-img-${img.marker}`;
+        const src = `/api/images/${imageId}`;
+        imagesMap[imageId] = { base64: img.base64, url: img.url };
         altTexts.push(img.alt);
-        return `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
+        return `<figure><img src="${src}" alt="${img.alt}" loading="lazy" data-image-id="${imageId}"></figure>`;
       };
 
       // Собираем точки вставки (позиция = конец </p>)
@@ -279,11 +285,11 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
         continue;
       }
 
-      const src = img.base64
-        ? `data:image/png;base64,${img.base64}`
-        : img.url ?? '';
+      const imageId = `seo-img-${img.marker}`;
+      const src = `/api/images/${imageId}`;
+      imagesMap[imageId] = { base64: img.base64, url: img.url };
 
-      const figureTag = `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
+      const figureTag = `<figure><img src="${src}" alt="${img.alt}" loading="lazy" data-image-id="${imageId}"></figure>`;
 
       articleHtml = articleHtml.replace(
         new RegExp(`\\[IMAGE_${img.marker}\\]`, 'g'),
@@ -313,6 +319,7 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
       images_generated: successCount,
       images_total: imageCount,
       alt_texts: altTexts,
+      images_map: imagesMap,
       warnings,
     },
     durationMs: Date.now() - start,

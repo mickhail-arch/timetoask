@@ -1,11 +1,27 @@
 /**
+ * Заменяет base64-картинки на плейсхолдер для экспорта.
+ * Дзен и Word не принимают data:image URI.
+ */
+export function stripBase64Images(html: string): string {
+  return html.replace(
+    /<img([^>]*?)src="data:image\/[^"]*"([^>]*?)>/gi,
+    (match, before, after) => {
+      const altMatch = match.match(/alt="([^"]*)"/);
+      const alt = altMatch ? altMatch[1] : 'Изображение';
+      return `<p style="padding:20px;background:#f5f5f5;border-radius:8px;text-align:center;color:#666;font-size:14px">[Изображение: ${alt}]</p>`;
+    },
+  );
+}
+
+/**
  * Скопировать статью в буфер обмена (HTML + plain text).
  */
 export async function copyArticle(html: string): Promise<void> {
-  const plainText = html.replace(/<[^>]*>/g, '');
+  const cleanHtml = stripBase64Images(html);
+  const plainText = cleanHtml.replace(/<[^>]*>/g, '');
 
   try {
-    const htmlBlob = new Blob([html], { type: 'text/html' });
+    const htmlBlob = new Blob([cleanHtml], { type: 'text/html' });
     const textBlob = new Blob([plainText], { type: 'text/plain' });
     await navigator.clipboard.write([
       new ClipboardItem({
@@ -22,6 +38,7 @@ export async function copyArticle(html: string): Promise<void> {
  * Скачать HTML-файл.
  */
 export function downloadHTML(html: string, slug: string): void {
+  const cleanHtml = stripBase64Images(html);
   const fullHtml = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -30,7 +47,7 @@ export function downloadHTML(html: string, slug: string): void {
   <title>${slug}</title>
 </head>
 <body>
-${html}
+${cleanHtml}
 </body>
 </html>`;
 
