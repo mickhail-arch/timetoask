@@ -15,21 +15,25 @@ new PrismaClient() only in lib/prisma.ts.
 - `plugins/seo-article-express/prompt.ts` — buildSystemPrompt (63KB, 22 dynamic blocks)
 - `modules/seo/steps/step-1-2-brief.ts` — SEO_TABLE + brief generation
 - `modules/seo/steps/step-7-assembly.ts` — wrapWithInlineStyles + metadata
-- `modules/seo/steps/sanitize-html.ts` — HTML sanitizer between pipeline steps
-- `components/seo-article/ScreenResult.tsx` — article preview with images_map
-- `modules/seo/steps/step-6-images.ts` — image gen, images_map (NOT base64 in src)
+- `modules/seo/steps/step-6-images.ts` — image generation, base64 in figure tags
+- `components/seo-article/ScreenResult.tsx` — article preview (dangerouslySetInnerHTML)
+- `components/seo-article/ExportPanel.tsx` — copy/download with transformForDzen/transformForTilda
+- `lib/seo-article/export.ts` — copyArticle, downloadHTML, downloadDOCX
 
 ## Pipeline data flow
-draft(article_html) -> seo_audit -> content_analysis -> ai_detect_revisions(article_html) -> targeted_rewrite(article_html) -> images(article_html + images_map) -> assembly(article_html + images_map)
-Each step that modifies article_html must call sanitizeArticleHtml() before returning.
-Images are stored in images_map, NOT as base64 in img src.
+draft(article_html) -> seo_audit -> content_analysis -> ai_detect_revisions(article_html) -> targeted_rewrite(article_html) -> images(article_html) -> assembly(article_html)
+
+## Known issues (TODO)
+- No HTML sanitization between pipeline steps — LLM may add style/div/span
+- wrapWithInlineStyles in assembly can double style attributes if LLM already added them
+- Images inserted as base64 data URI in img src — breaks Dzen/Word export, makes HTML huge
+- article_docx_base64 = '' (not implemented)
+- No retry on draft length — if LLM generates 25% less than target, only warning
 
 ## HTML rules
 - Allowed tags: h1 h2 h3 p blockquote ul ol li a img strong em figure figcaption cite nav
 - Forbidden tags: h4 h5 h6 div span section article header footer main (except article wrapper in assembly)
 - style attributes are ONLY added by wrapWithInlineStyles in step-7-assembly
-- All previous steps must return clean HTML without style attributes
-- sanitize-html.ts strips styles/forbidden tags between steps
 
 ## Agent behavior
 - Before editing: read ONLY the relevant function, not the whole file
@@ -37,6 +41,7 @@ Images are stored in images_map, NOT as base64 in img src.
 - Never re-read a file already read in this session
 - For string replacements: skip full file reads, use grep to find anchor
 - No hardcoded colors in components — use CSS variables from tokens.css
+- No hardcoded years in prompt examples — use relative time or dynamic currentYear
 
 ## SEO_TABLE reference (step-1-2-brief.ts)
 charCount ranges: 6000/8000/10000/12000/14000/16000/18000/20000
