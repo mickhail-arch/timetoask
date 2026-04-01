@@ -23,7 +23,7 @@ async function main() {
     imagePrompt = await generateText({
       model: 'google/gemini-2.5-flash',
       systemPrompt: 'Generate a detailed image generation prompt in English. Output ONLY the prompt text. Max 200 words.',
-      userMessage: 'Scene description: Мобильное приложение Poizon на экране смартфона\nStyle: photorealistic\nTopic: Poizon',
+      userMessage: 'Scene description: Смартфон на деревянном столе с открытым каталогом кроссовок Nike Air Jordan — на экране видна сетка товаров с ценами в юанях и зелёными бейджами проверки подлинности\nStyle: photorealistic, professional photography, high detail\nTopic: Poizon кроссовки\nArticle section context: Section: Что такое Poizon и как работает платформа. Content: Dewu — мобильная торговая площадка из Китая, специализирующаяся на премиальных кроссовках.',
     });
     console.log('OK: Image prompt generated');
     console.log('Prompt:', imagePrompt.slice(0, 200) + (imagePrompt.length > 200 ? '...' : ''));
@@ -40,7 +40,7 @@ async function main() {
   try {
     const imageResult = await generateImage({
       model: 'google/gemini-3.1-flash-image-preview',
-      prompt: imagePrompt,
+      prompt: `photorealistic, professional photography, high detail. ${imagePrompt}`,
       size: '1792x1024',
     });
 
@@ -68,16 +68,18 @@ async function main() {
   // -------------------------------------------------------
   console.log('--- Part B: Full executeImages step ---\n');
 
-  const articleHtml = `<h1>Poizon что это: полный обзор платформы</h1>
-<p>Платформа Poizon представляет собой крупнейший маркетплейс оригинальных товаров из Китая. Каждый товар проходит проверку подлинности перед отправкой покупателю. Сервис работает через мобильное приложение.</p>
+  const articleHtml = `<h1>Что такое Poizon: полный гид по китайской площадке кроссовок</h1>
+<p>Poizon — китайская торговая площадка с проверкой подлинности каждого товара.</p>
 [IMAGE_1]
-[IMAGE_1_DESC: Мобильное приложение Poizon на экране смартфона с каталогом товаров]
-<h2>Как работает Poizon</h2>
-<p>Принцип работы достаточно прост. Продавцы размещают товары, покупатели выбирают из каталога. Перед отправкой каждая вещь проверяется экспертами на подлинность.</p>
+[IMAGE_1_DESC: Смартфон на деревянном столе с открытым каталогом кроссовок Nike Air Jordan — на экране видна сетка товаров с ценами в юанях и зелёными бейджами проверки подлинности]
+<h2>Что такое Poizon и как работает платформа</h2>
+<p>Dewu — мобильная торговая площадка из Китая. Каждый товар проверяют эксперты перед отправкой.</p>
+<h2>Система проверки подлинности</h2>
+<p>Центры аутентификации расположены в 8 городах Китая.</p>
 [IMAGE_2]
-[IMAGE_2_DESC: Процесс верификации товара экспертами на складе Poizon]
-<h2>Преимущества платформы</h2>
-<p>Гарантия подлинности и широкий ассортимент — главные плюсы Poizon для покупателей из России.</p>`;
+[IMAGE_2_DESC: Эксперт в белых перчатках осматривает пару кроссовок Nike под настольной лупой в лаборатории проверки подлинности — на столе лежат документы с штрих-кодами и печатью Dewu]
+<h2>Заключение</h2>
+<p>Dewu Poizon остаётся надёжным источником аутентичных кроссовок.</p>`;
 
   const ctx: import('@/modules/seo/types').PipelineContext = {
     jobId: 'test-images-001',
@@ -86,7 +88,7 @@ async function main() {
       target_query: 'poizon что это',
       keywords: 'poizon\nпойзон приложение',
       image_count: 2,
-      image_style: 'realistic',
+      image_style: ['realistic'],
     },
     config: {
       models: {
@@ -131,6 +133,14 @@ async function main() {
     const hasImg = (finalHtml.match(/<img/gi) ?? []).length;
     console.log('\n<figure> tags in output:', hasFigure);
     console.log('<img> tags in output:', hasImg);
+
+    // Проверяем что маркеры IMAGE_DESC удалены
+    const remainingDesc = (finalHtml.match(/\[IMAGE_\d+_DESC:[^\]]*\]/g) ?? []).length;
+    console.log('Remaining [IMAGE_N_DESC] markers:', remainingDesc);
+    if (remainingDesc > 0) {
+      console.log('FAIL: IMAGE_DESC markers not cleaned up');
+    }
+
     console.log('Remaining [IMAGE_N] markers:', (finalHtml.match(/\[IMAGE_\d+\]/g) ?? []).length);
 
     console.log('\nDuration:', result.durationMs, 'ms');

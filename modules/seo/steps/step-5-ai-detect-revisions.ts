@@ -125,7 +125,9 @@ export async function executeAiDetectRevisions(
     const forbiddenWords = (input.forbidden_words as string) ?? '';
 
     const rulesBlock = `ПРАВИЛА (нарушение любого = брак):
-- Формат: HTML (h1, h2, h3, p). Без strong, em, b, i внутри абзацев.
+- Формат: HTML (h1, h2, h3, p, blockquote, ul, ol, li, a, strong, em). Теги strong и em допустимы внутри blockquote (callout-блоки) и в блоке сравнения (<p><strong>Название</strong></p>). В обычных абзацах <p> не используй strong/em.
+- Callout-блоки (<blockquote><p><strong>Заголовок</strong><br><em>Текст</em></p></blockquote>) — НЕ ТРОГАЙ, оставь как есть.
+- Блок сравнения (<p><strong>Объект</strong></p> + <ul><li><strong>Критерий:</strong> значение</li></ul>) — НЕ ТРОГАЙ формат, оставь как есть.
 - Сохрани ВСЕ заголовки H1/H2/H3 — не удаляй, не добавляй, не переименовывай.
 - Сохрани ВСЕ маркеры [IMAGE_N] и [IMAGE_N_DESC] на своих местах.
 - Объём может измениться не более чем на ±15%.

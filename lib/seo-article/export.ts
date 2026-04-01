@@ -4,7 +4,7 @@
  */
 export function stripBase64Images(html: string): string {
   return html.replace(
-    /<img([^>]*?)src="data:image\/[^"]*"([^>]*?)>/gi,
+    /<figure[^>]*>\s*<img([^>]*?)src="data:image\/[^"]*"([^>]*?)>\s*<\/figure>/gi,
     (match, before, after) => {
       const altMatch = match.match(/alt="([^"]*)"/);
       const alt = altMatch ? altMatch[1] : 'Изображение';

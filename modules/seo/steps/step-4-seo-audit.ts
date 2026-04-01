@@ -490,31 +490,26 @@ export async function executeSeoAudit(
   const hasTldr = /<div class="tldr"/i.test(html);
   if (!hasTldr) addIssue('eeat', 'warning', 'Блок «Кратко» (TL;DR) отсутствует', 'Добавить TL;DR после введения');
 
+  // Блок сравнения: <p><strong>Название</strong></p> + <ul> (НЕ через H3)
   const hasComparisonBlock = h2Blocks.some(block => {
-    const h3Regex = /<h3[\s>][\s\S]*?<\/h3>/gi;
-    const ends: number[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = h3Regex.exec(block)) !== null) {
-      ends.push(m.index + m[0].length);
-    }
-    if (ends.length < 3) return false;
-    let consecutive = 0;
-    for (let i = 0; i < ends.length; i++) {
-      const afterH3 = ends[i];
-      const nextH3Start = i + 1 < ends.length
-        ? block.indexOf('<h3', afterH3)
-        : block.length;
-      const segment = block.slice(afterH3, nextH3Start > -1 ? nextH3Start : block.length);
-      if (/<ul[\s>]/i.test(segment)) {
-        consecutive++;
-        if (consecutive >= 3) return true;
-      } else {
-        consecutive = 0;
+    // Ищем паттерн: <p><strong>Текст</strong></p> за которым идёт <ul>
+    const boldListPattern = /<p[^>]*><strong>[^<]+<\/strong><\/p>\s*<ul[\s>]/gi;
+    const matches = block.match(boldListPattern) ?? [];
+    return matches.length >= 2; // минимум 2 объекта сравнения
+  });
+  if (!hasComparisonBlock) addIssue('eeat', 'warning', 'Нет блока сравнения (<p><strong>Название</strong></p> + <ul>)', 'Добавить блок сравнения: минимум 2 объекта в формате <p><strong>Название</strong></p> + <ul>');
+
+  // Проверка: H3 не должны использоваться для объектов сравнения
+  for (const block of h2Blocks) {
+    const blockH2Title = (block.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i) ?? ['', ''])[1].replace(/<[^>]*>/g, '').trim().toLowerCase();
+    if (blockH2Title.includes('сравнени') || blockH2Title.includes('виды') || blockH2Title.includes('типы')) {
+      const blockH3s = block.match(/<h3[\s>]/gi) ?? [];
+      const blockUls = block.match(/<ul[\s>]/gi) ?? [];
+      if (blockH3s.length >= 3 && blockUls.length >= 3) {
+        addIssue('structure', 'critical', `Блок "${blockH2Title}" использует H3 для объектов сравнения. Заменить H3 на <p><strong>Название</strong></p>`, 'Убрать H3, использовать bold-абзацы для названий объектов');
       }
     }
-    return false;
-  });
-  if (!hasComparisonBlock) addIssue('eeat', 'warning', 'Нет блока сравнения (H3 + списки)', 'Добавить блок сравнения: минимум 3 подряд H3 с <ul> после каждого');
+  }
 
   const hasBlockquote = /<blockquote[\s>]/i.test(html);
   if (!hasBlockquote) addIssue('eeat', 'info', 'Цитата эксперта отсутствует', 'Добавить blockquote с цитатой и cite');
