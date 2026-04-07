@@ -1,23 +1,10 @@
-/**
- * Заменяет base64-картинки на плейсхолдер для экспорта.
- * Дзен и Word не принимают data:image URI.
- */
-export function stripBase64Images(html: string): string {
-  return html.replace(
-    /<figure[^>]*>\s*<img([^>]*?)src="data:image\/[^"]*"([^>]*?)>\s*<\/figure>/gi,
-    (match, before, after) => {
-      const altMatch = match.match(/alt="([^"]*)"/);
-      const alt = altMatch ? altMatch[1] : 'Изображение';
-      return `<p style="padding:20px;background:#f5f5f5;border-radius:8px;text-align:center;color:#666;font-size:14px">[Изображение: ${alt}]</p>`;
-    },
-  );
-}
+//lib/seo-article/export.ts
 
 /**
  * Скопировать статью в буфер обмена (HTML + plain text).
  */
 export async function copyArticle(html: string): Promise<void> {
-  const cleanHtml = stripBase64Images(html);
+  const cleanHtml = html;
   const plainText = cleanHtml.replace(/<[^>]*>/g, '');
 
   try {
@@ -38,7 +25,7 @@ export async function copyArticle(html: string): Promise<void> {
  * Скачать HTML-файл.
  */
 export function downloadHTML(html: string, slug: string): void {
-  const cleanHtml = stripBase64Images(html);
+  const cleanHtml = html;
   const fullHtml = `<!DOCTYPE html>
 <html lang="ru">
 <head>

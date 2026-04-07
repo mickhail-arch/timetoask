@@ -5,6 +5,7 @@ import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { getStepModel } from '../config';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { sanitizeArticleHtml } from './sanitize-html';
+import { generateDocxFromHtml } from './generate-docx';
 
 const STOP_WORDS = new Set([
   'и', 'в', 'на', 'с', 'по', 'для', 'от', 'из', 'к', 'за', 'о', 'об',
@@ -390,11 +391,19 @@ export async function executeAssembly(
     metadata_file_name: `${fileBaseName}_metadannye.docx`,
   };
 
+  let docxBase64 = '';
+  try {
+    docxBase64 = await generateDocxFromHtml({ html: cleanedHtml, title });
+  } catch (err) {
+    console.warn('[step-7] DOCX generation failed:', err);
+    warnings.push('Не удалось сгенерировать .docx');
+  }
+
   return {
     success: true,
     data: {
       article_html: styledHtml,
-      article_docx_base64: '', // TODO: генерация .docx с библиотекой docx
+      article_docx_base64: docxBase64,
       metadata,
       qualityMetrics,
       warnings: [...new Set(warnings)],

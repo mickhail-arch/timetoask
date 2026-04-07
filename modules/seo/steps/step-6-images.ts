@@ -3,6 +3,18 @@ import type { StepResult, PipelineContext } from '../types';
 import { getStepModel } from '../config';
 import { generateText, generateImage } from '@/adapters/llm/openrouter.adapter';
 import type { ToolConfig } from '@/core/types';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
+async function saveImageToDisk(jobId: string, markerNum: string, base64: string): Promise<string> {
+  const dir = join(process.cwd(), 'public', 'uploads', 'images');
+  await mkdir(dir, { recursive: true });
+  const fileName = `${jobId}-${markerNum}.png`;
+  const filePath = join(dir, fileName);
+  const buffer = Buffer.from(base64, 'base64');
+  await writeFile(filePath, buffer);
+  return `/uploads/images/${fileName}`;
+}
 
 /**
  * Для каждого маркера [IMAGE_N] находит ближайший H2 после маркера
@@ -143,7 +155,6 @@ export async function executeImages(
     alt: string;
     success: boolean;
   }> = [];
-  const imagesMap: Record<string, { base64?: string; url?: string }> = {};
 
   // 6.1 + 6.2: Генерация промптов и картинок (параллельно)
   const imagePromises = markers.map(async (markerNum, index) => {
@@ -182,10 +193,33 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
         size: '1792x1024',
       });
 
-      // 6.3: Alt-тег
-      const alt = index === 0
-        ? `${targetQuery} ${desc}`.slice(0, 125)
-        : `${keywords[index % keywords.length] ?? targetQuery} ${desc}`.slice(0, 125);
+      // 6.3: Alt-тег (50-125 символов, без спама ключами)
+      const rawDesc = desc
+        .replace(/<[^>]*>/g, '')
+        .replace(/\[IMAGE_\d+_DESC:\s*/g, '')
+        .replace(/[—–\-:,.]?\s*$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Берём первое предложение описания как базу
+      const firstSentence = rawDesc.split(/[.!?]/)[0]?.trim() ?? rawDesc;
+      
+      let alt: string;
+      if (firstSentence.length >= 50 && firstSentence.length <= 125) {
+        alt = firstSentence;
+      } else if (firstSentence.length > 125) {
+        // Обрезаем по словам до 125 символов
+        alt = firstSentence.slice(0, 125).replace(/\s\S*$/, '').trim();
+      } else {
+        // Короче 50 — добавляем тему статьи
+        const combined = `${firstSentence} — ${targetQuery}`;
+        alt = combined.length <= 125 ? combined : combined.slice(0, 125).replace(/\s\S*$/, '').trim();
+      }
+      
+      // Гарантируем минимум 50 символов
+      if (alt.length < 50) {
+        alt = `${targetQuery}: ${firstSentence}`.slice(0, 125).replace(/\s\S*$/, '').trim();
+      }
 
       return {
         marker: markerNum,
@@ -219,12 +253,17 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
     const successfulImages = generatedImages.filter(i => i.success);
 
     if (successfulImages.length > 0) {
-      const buildFigure = (img: (typeof successfulImages)[0]) => {
-        const imageId = `seo-img-${img.marker}`;
-        const src = `/api/images/${imageId}`;
-        imagesMap[imageId] = { base64: img.base64, url: img.url };
+      const buildFigure = async (img: (typeof successfulImages)[0]) => {
+        let src = '';
+        if (img.base64) {
+          src = await saveImageToDisk(ctx.jobId, img.marker, img.base64);
+        } else if (img.url && !img.url.startsWith('data:')) {
+          src = img.url;
+        } else {
+          src = '';
+        }
         altTexts.push(img.alt);
-        return `<figure><img src="${src}" alt="${img.alt}" loading="lazy" data-image-id="${imageId}"></figure>`;
+        return `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
       };
 
       // Собираем точки вставки (позиция = конец </p>)
@@ -235,7 +274,7 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
       if (h1End >= 0) {
         insertions.push({
           pos: h1End + '</h1>'.length,
-          html: buildFigure(successfulImages[0]),
+          html: await buildFigure(successfulImages[0]),
         });
       }
 
@@ -261,7 +300,7 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
             );
             insertions.push({
               pos: h2PPoints[idx],
-              html: buildFigure(remaining[i]),
+              html: await buildFigure(remaining[i]),
             });
           }
         }
@@ -285,11 +324,16 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
         continue;
       }
 
-      const imageId = `seo-img-${img.marker}`;
-      const src = `/api/images/${imageId}`;
-      imagesMap[imageId] = { base64: img.base64, url: img.url };
+      let src = '';
+      if (img.base64) {
+        src = await saveImageToDisk(ctx.jobId, img.marker, img.base64);
+      } else if (img.url && !img.url.startsWith('data:')) {
+        src = img.url;
+      } else {
+        src = '';
+      }
 
-      const figureTag = `<figure><img src="${src}" alt="${img.alt}" loading="lazy" data-image-id="${imageId}"></figure>`;
+      const figureTag = `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
 
       articleHtml = articleHtml.replace(
         new RegExp(`\\[IMAGE_${img.marker}\\]`, 'g'),
@@ -319,7 +363,6 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
       images_generated: successCount,
       images_total: imageCount,
       alt_texts: altTexts,
-      images_map: imagesMap,
       warnings,
     },
     durationMs: Date.now() - start,

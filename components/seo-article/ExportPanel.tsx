@@ -1,6 +1,5 @@
 'use client';
 import { useState, useCallback } from 'react';
-import { stripBase64Images } from '@/lib/seo-article/export';
 
 function transformForTilda(html: string): string {
   let s = html;
@@ -61,7 +60,7 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
   const [copiedDzen, setCopiedDzen] = useState(false);
 
   const copyHtmlToClipboard = useCallback(async (html: string) => {
-    const clean = stripBase64Images(html);
+    const clean = html;
     const plain = clean.replace(/<[^>]*>/g, '');
     await navigator.clipboard.write([
       new ClipboardItem({
@@ -80,8 +79,7 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
 
   const handleCopyDzen = useCallback(async () => {
     if (!articleHtml) return;
-    const stripped = stripBase64Images(articleHtml);
-    const simplified = transformForDzen(stripped);
+    const simplified = transformForDzen(articleHtml);
     const plainText = simplified.replace(/<[^>]*>/g, '');
     try {
       await navigator.clipboard.write([

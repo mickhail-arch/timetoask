@@ -15,6 +15,28 @@ import { useSessionHistory } from '@/hooks/useSessionHistory';
 import type { SessionFull } from '@/hooks/useSessionHistory';
 import '@/components/seo-article/tokens.css';
 
+function notifyArticleReady(query: string) {
+  // Мигание вкладки
+  const originalTitle = document.title;
+  let blink = true;
+  const interval = setInterval(() => {
+    document.title = blink ? '✅ готово!' : originalTitle;
+    blink = !blink;
+  }, 1000);
+  const stopBlink = () => {
+    clearInterval(interval);
+    document.title = originalTitle;
+    window.removeEventListener('focus', stopBlink);
+  };
+  window.addEventListener('focus', stopBlink);
+  if (document.hasFocus()) setTimeout(stopBlink, 5000);
+
+  // Браузерное push-уведомление
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('Статья готова', { body: query, icon: '/favicon.ico' });
+  }
+}
+
 type Screen = 'input' | 'progress_analysis' | 'brief' | 'progress_generation' | 'result';
 
 const ANALYSIS_STEPS: ProgressStep[] = [
@@ -43,6 +65,12 @@ export function SeoArticleExpressClient() {
   const [inputKey, setInputKey] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession } = useSessionHistory('seo-article-express');
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   const { state: jobState } = useSeoJobPolling(
     screen !== 'input' && screen !== 'result' ? jobId : null,
@@ -80,6 +108,7 @@ export function SeoArticleExpressClient() {
 
       setResult(flatResult);
       setScreen('result');
+      notifyArticleReady((input.target_query as string) ?? '');
 
       // Автосохранение сессии
       try {

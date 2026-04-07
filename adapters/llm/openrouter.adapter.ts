@@ -78,11 +78,13 @@ export async function generateText(params: LlmParams): Promise<string> {
   const messages = buildMessages(params);
 
   return tryWithFallback(params, async (model) => {
-    const timeoutMs = model.includes('claude')
-      ? 120_000
-      : model.includes('deepseek')
-        ? 90_000
-        : 60_000;
+    const timeoutMs = model.includes('opus')
+      ? 420_000
+      : model.includes('claude')
+        ? 180_000
+        : model.includes('deepseek')
+          ? 90_000
+          : 60_000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
