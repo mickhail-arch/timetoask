@@ -7,6 +7,7 @@ export interface PricingConfig {
   perImage: number;
   perFaq: number;
   charBlockSize: number;
+  sonnetMultiplier: number;
 }
 
 const DEFAULT_PRICING: PricingConfig = {
@@ -15,6 +16,7 @@ const DEFAULT_PRICING: PricingConfig = {
   perImage: 15,
   perFaq: 5,
   charBlockSize: 1000,
+  sonnetMultiplier: 0.35,
 };
 
 /**
@@ -27,6 +29,7 @@ export function calculatePrice(
   imageCount: number,
   faqCount: number,
   config?: Partial<PricingConfig> | null,
+  aiModel: string = 'opus',
 ): PriceBreakdown {
   const c = { ...DEFAULT_PRICING, ...config };
 
@@ -35,11 +38,16 @@ export function calculatePrice(
   const faq = faqCount * c.perFaq;
   const total = c.base + chars + images + faq;
 
+  const multiplier = aiModel === 'sonnet' ? c.sonnetMultiplier : 1;
+  const finalTotal = Math.round(total * multiplier);
+
   return {
     base: c.base,
     chars,
     images,
     faq,
-    total,
+    multiplier,
+    totalBeforeMultiplier: total,
+    total: finalTotal,
   };
 }

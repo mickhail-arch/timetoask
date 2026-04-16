@@ -18,6 +18,10 @@ export const inputSchema = z.object({
   geo_location: z.string().max(200).optional().describe('Гео (город или регион)'),
   image_style: z.array(z.string()).max(2).optional().describe('Стиль изображений'),
 
+  ai_model: z.enum(['sonnet', 'opus']).default('opus').describe('Модель для генерации статьи'),
+  comparison_enabled: z.boolean().default(false).describe('Включить блок сравнения'),
+  comparison_objects: z.number().int().min(2).max(5).default(3).describe('Количество объектов сравнения'),
+  comparison_criteria: z.number().int().min(2).max(5).default(3).describe('Количество критериев сравнения'),
   faq_count: z.number().min(0).max(10).default(5).describe('Количество FAQ-вопросов'),
   brand: z.string().max(100).optional().describe('Бренд'),
   brand_url: z.string().url().max(300).optional().describe('Ссылка на бренд'),

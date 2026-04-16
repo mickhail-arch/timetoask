@@ -25,7 +25,13 @@ interface ArticleProfile {
   toc: boolean;
 }
 
-function getArticleProfile(charCount: number, faqCount: number): ArticleProfile {
+function getArticleProfile(
+  charCount: number,
+  faqCount: number,
+  comparisonEnabled: boolean,
+  comparisonObjectsInput: number,
+  comparisonCriteriaInput: number,
+): ArticleProfile {
   const intro = Math.round(charCount * 0.04);
   const tldrItems = Math.min(5, Math.max(3, Math.floor(charCount / 2500)));
   const tldrChars = Math.round(charCount * 0.02);
@@ -71,6 +77,16 @@ function getArticleProfile(charCount: number, faqCount: number): ArticleProfile 
     comparisonObjects = 4; comparisonCriteria = 4; comparisonChars = Math.round(charCount * 0.05);
     caseStyle = 'full'; caseChars = Math.round(charCount * 0.04);
     calloutCount = 4; citationCount = 2; toc = true;
+  }
+
+  if (!comparisonEnabled) {
+    comparisonObjects = 0;
+    comparisonCriteria = 0;
+    comparisonChars = 0;
+  } else {
+    comparisonObjects = comparisonObjectsInput;
+    comparisonCriteria = comparisonCriteriaInput;
+    comparisonChars = Math.round(charCount * 0.05);
   }
 
   const conclusionChars = Math.round(charCount * 0.04);
@@ -139,9 +155,13 @@ function buildBudgetBlock(charCount: number, h2Count: number, profile: ArticlePr
 
 - Введение: ~${profile.intro} символов
 - Блок «Кратко»: ~${profile.tldr.chars} символов (${profile.tldr.items} пунктов)
-- Основной текст (${h2Count} H2): ~${profile.body} символов (~${perH2} на H2)
-- Блок сравнения: ~${profile.comparison.chars} символов (${profile.comparison.objects} объекта по ${profile.comparison.criteria} критерия)
-- Личный опыт: ~${profile.case.chars} символов${profile.case.style === 'short' ? ' (2-3 предложения)' : ' (полный кейс с 5 шагами)'}
+- Основной текст (${h2Count} H2): ~${profile.body} символов (~${perH2} на H2)`;
+
+  if (profile.comparison.chars > 0) {
+    lines += `\n- Блок сравнения: ~${profile.comparison.chars} символов (${profile.comparison.objects} объекта по ${profile.comparison.criteria} критерия)`;
+  }
+
+  lines += `\n- Личный опыт: ~${profile.case.chars} символов${profile.case.style === 'short' ? ' (2-3 предложения)' : ' (полный кейс с 5 шагами)'}
 - Заключение (H2): ~${profile.conclusion} символов
 - FAQ (${profile.faq.count} вопросов): ~${profile.faq.chars} символов`;
 
@@ -902,10 +922,15 @@ export function buildSystemPrompt(
   const gender = audience?.gender ?? 'all';
   const ages = audience?.age ?? ['all'];
 
+  const comparisonEnabled = (input.comparison_enabled as boolean) ?? false;
+  const comparisonObjects = (input.comparison_objects as number) ?? 3;
+  const comparisonCriteria = (input.comparison_criteria as number) ?? 3;
+
   const h2Count = brief.h2_list?.length || Math.round(charCount / 2000);
-  const profile = getArticleProfile(charCount, faqCount);
+  const profile = getArticleProfile(charCount, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria);
 
   const readingTime = Math.max(2, Math.round(charCount / 1700));
+  const bodyIncludes = comparisonEnabled ? 'таблицу, кейс, цитаты, callout' : 'кейс, цитаты, callout';
 
   // === ПОРЯДОК БЛОКОВ ПО E-E-A-T ДОКУМЕНТУ ===
 
@@ -930,7 +955,7 @@ ${input.author_name || input.author_company ? '2. Блок автора (имя,
 3. Время чтения: «Время прочтения статьи: ${readingTime} минут» — формат: <p><em>Время прочтения статьи: ${readingTime} минут</em></p>
 ${imageCount > 0 ? '4. Главная картинка [IMAGE_1]' : ''}
 6. Введение (4%) + блок «Кратко» (2%)
-7. Основной текст (H2-блоки) — включает таблицу, кейс, цитаты, callout
+7. Основной текст (H2-блоки) — включает ${bodyIncludes}
 8. Заключение (H2) — отдельный раздел с выводом
 9. FAQ (H2 + H3-вопросы внутри) — если пользователь включил FAQ. Вопросы FAQ как H3 не считаются в лимит H3 основных разделов.
 ${cta ? '10. CTA (после FAQ, отдельный абзац, не считается в объём)' : ''}`);
@@ -947,7 +972,7 @@ ${cta ? '10. CTA (после FAQ, отдельный абзац, не счита
   const tocBlock = buildTocBlock(brief);
   if (tocBlock) blocks.push(tocBlock);
 
-  blocks.push(buildTableBlock(profile, brief));
+  if (comparisonEnabled) blocks.push(buildTableBlock(profile, brief));
   blocks.push(buildCaseBlock(profile, brief));
   if (profile.citations.count > 0) {
     blocks.push(buildCitationsBlock(profile));

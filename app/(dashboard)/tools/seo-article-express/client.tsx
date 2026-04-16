@@ -231,6 +231,20 @@ export function SeoArticleExpressClient() {
     setInputKey(k => k + 1);
   }, []);
 
+  const handleSaveEdits = useCallback(async (data: { articleHtml: string; metadata: Record<string, unknown> }) => {
+    if (!activeSessionId) return;
+    await fetch(`/api/sessions/${activeSessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contentText: data.articleHtml,
+        outputMeta: { ...(result as any)?.quality_metrics ? { quality_metrics: (result as any).quality_metrics } : {}, metadata: data.metadata, warnings: (result as any)?.warnings },
+      }),
+    });
+    setResult(prev => prev ? { ...prev, article_html: data.articleHtml, metadata: data.metadata } : prev);
+    refreshSessions();
+  }, [activeSessionId, result, refreshSessions]);
+
   const handleCancel = useCallback(() => {
     setJobId(null);
     setScreen('input');
@@ -317,6 +331,7 @@ export function SeoArticleExpressClient() {
 
           {screen === 'result' && result && (
             <ScreenResult
+              key={activeSessionId ?? jobId ?? 'result'}
               result={result as any}
               query={(input.target_query as string) ?? ''}
               stepCount={9}
@@ -327,6 +342,8 @@ export function SeoArticleExpressClient() {
               onDownloadMetadata={() => downloadMetadata('', (result as any).metadata?.metadata_file_name ?? 'metadata.docx')}
               onNewArticle={() => { setScreen('input'); setJobId(null); setResult(null); setActiveSessionId(null); setInput({}); setInputKey(k => k + 1); }}
               onRegenerate={handleRegenerate}
+              sessionId={activeSessionId}
+              onSave={handleSaveEdits}
             />
           )}
         </div>

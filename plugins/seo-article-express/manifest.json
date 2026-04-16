@@ -21,10 +21,11 @@
     },
     "pricing": {
       "base": 100,
-      "perCharBlock": 3,
-      "perImage": 15,
-      "perFaq": 5,
-      "charBlockSize": 1000
+      "perCharBlock": 12,
+      "perImage": 20,
+      "perFaq": 3,
+      "charBlockSize": 1000,
+      "sonnetMultiplier": 0.35
     }
   }
 }

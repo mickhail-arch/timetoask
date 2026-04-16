@@ -20,6 +20,9 @@ async function main() {
       image_count: 2,
       faq_count: 3,
       tone_of_voice: 'expert',
+      comparison_enabled: true,
+      comparison_objects: 4,
+      comparison_criteria: 5,
     },
     config: {
       models: { brief: 'anthropic/claude-opus-4.6' },

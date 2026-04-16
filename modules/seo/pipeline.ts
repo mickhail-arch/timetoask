@@ -116,7 +116,7 @@ export async function runPipeline(
         const charCount = (input.target_char_count as number) ?? 8000;
         const imageCount = (input.image_count as number) ?? 0;
         const faqCount = (input.faq_count as number) ?? 5;
-        const price = calculatePrice(charCount, imageCount, faqCount, pricingConfig);
+        const price = calculatePrice(charCount, imageCount, faqCount, pricingConfig, input.ai_model as string ?? 'opus');
 
         await saveRedisState(jobId, {
           jobId,

@@ -1,22 +1,21 @@
 //modules/seo/steps/step-3-draft.ts
 
 import type { StepResult, PipelineContext, BriefData } from '../types';
-import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { buildSystemPrompt } from '@/plugins/seo-article-express/prompt';
 import { sanitizeArticleHtml } from './sanitize-html';
-import type { ToolConfig } from '@/core/types';
 
 export async function executeDraft(
   ctx: PipelineContext,
 ): Promise<StepResult> {
   const start = Date.now();
 
-  const model = getStepModel(
-    ctx.config as ToolConfig | null,
-    'draft',
-    'anthropic/claude-opus-4.6',
-  );
+  const aiModelChoice = (ctx.input.ai_model as string) ?? 'opus';
+  const MODEL_MAP: Record<string, string> = {
+    sonnet: 'anthropic/claude-sonnet-4.6',
+    opus: 'anthropic/claude-opus-4.6',
+  };
+  const model = MODEL_MAP[aiModelChoice] ?? MODEL_MAP.opus;
 
   const brief = (ctx.data.confirmation as Record<string, unknown>)?.brief as BriefData
     ?? (ctx.data.brief as Record<string, unknown>)?.brief as BriefData;
@@ -74,11 +73,11 @@ export async function executeDraft(
       articleHtml = articleHtml.replace(/^(\d+)\.\s+\*\*([^*]+)\*\*\s*([\s\S]*?)(?=\n\d+\.\s+\*\*|\n*$)/gm, '<p><strong>$2</strong> $3</p>');
       // 2. Markdown bold **text** -> <strong>text</strong>
       articleHtml = articleHtml.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      // 3. Markdown italic *text* -> <em>text</em> (не внутри strong)
-      articleHtml = articleHtml.replace(/(?<![*<])\*([^*]+)\*(?![*>])/g, '<em>$1</em>');
-      // 4. Markdown unordered list items
+      // 3. Markdown unordered list items (до italic, чтобы * списков не захватывался)
       articleHtml = articleHtml.replace(/^[\*\-]\s+(.+)$/gm, '<li>$1</li>');
-      // 5. Markdown numbered list items (простые, без bold)
+      // 4. Markdown italic *text* -> <em>text</em> (ограничено одной строкой и 200 символами)
+      articleHtml = articleHtml.replace(/(?<![*<])\*([^*\n]{1,200})\*(?![*>])/g, '<em>$1</em>');
+      // 5. Markdown numbered list items (простые, без bold — уже обработан bold выше)
       articleHtml = articleHtml.replace(/^\d+\.\s+(?!<)(.+)$/gm, '<li>$1</li>');
       // 6. Оборачиваем сиротские <li> в <ul>
       articleHtml = articleHtml.replace(/((?:<li>[\s\S]*?<\/li>\s*)+)/g, (match) => {

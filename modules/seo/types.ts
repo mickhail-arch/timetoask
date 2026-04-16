@@ -106,6 +106,8 @@ export interface PriceBreakdown {
   chars: number;
   images: number;
   faq: number;
+  multiplier: number;
+  totalBeforeMultiplier: number;
   total: number;
 }
 

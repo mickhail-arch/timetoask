@@ -243,7 +243,7 @@ export function ScreenBrief({
           <strong className="font-medium text-[var(--color-text-primary)]">{faqQuestions.length}</strong>/{faqLimit} FAQ
         </span>
         <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
-          <strong className="font-medium text-[var(--color-text-primary)]">{calculatedPrice}</strong> токенов
+          <strong className="font-medium text-[var(--color-text-primary)]">{calculatedPrice.toLocaleString('ru-RU')}</strong> ₽
         </span>
       </div>
 

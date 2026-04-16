@@ -234,7 +234,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
     const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
       | Partial<PricingConfig>
       | undefined;
-    const price = calculatePrice(chars, imageCount, faqCount, pricingConfig);
+    const price = calculatePrice(chars, imageCount, faqCount, pricingConfig, ctx.input.ai_model as string);
 
     return {
       success: true,
@@ -250,7 +250,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 
       const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
         | Partial<PricingConfig> | undefined;
-      const price = calculatePrice(chars, imageCount, faqCount, pricingConfig);
+      const price = calculatePrice(chars, imageCount, faqCount, pricingConfig, ctx.input.ai_model as string);
 
       return {
         success: true,

@@ -60,6 +60,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   const [intent, setIntent] = useState((iv?.intent as string) ?? 'informational');
   const [charCount, setCharCount] = useState(Math.max(6000, (iv?.target_char_count as number) ?? 8000));
   const [imageCount, setImageCount] = useState((iv?.image_count as number) ?? 0);
+  const [aiModel, setAiModel] = useState<'sonnet' | 'opus'>((iv?.ai_model as 'sonnet' | 'opus') ?? 'opus');
 
   const [tone, setTone] = useState(ivToneDisplay ?? (ivIsCustomTone ? '' : 'Экспертный'));
   const [customTone, setCustomTone] = useState(ivIsCustomTone ? ivToneRaw : '');
@@ -75,7 +76,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
 
   const [accordionOpen, setAccordionOpen] = useState(
     !!iv && Object.keys(iv).length > 0 &&
-    !!(iv.brand || iv.cta || iv.forbidden_words || iv.legal_restrictions || iv.author_name)
+    !!(iv.brand || iv.cta || iv.forbidden_words || iv.legal_restrictions || iv.author_name || iv.comparison_enabled)
   );
   const [faqEnabled, setFaqEnabled] = useState(iv?.faq_count !== undefined ? (iv.faq_count as number) > 0 : true);
   const [faqCount, setFaqCount] = useState(() => {
@@ -83,6 +84,9 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
     const maxForChars = Math.min(10, Math.max(2, Math.floor(((iv?.target_char_count as number) ?? 8000) / 2000)));
     return ivFaq > 0 ? Math.min(ivFaq, maxForChars) : Math.min(5, maxForChars);
   });
+  const [comparisonEnabled, setComparisonEnabled] = useState((iv?.comparison_enabled as boolean) ?? false);
+  const [comparisonObjects, setComparisonObjects] = useState((iv?.comparison_objects as number) ?? 3);
+  const [comparisonCriteria, setComparisonCriteria] = useState((iv?.comparison_criteria as number) ?? 3);
   const [brand, setBrand] = useState((iv?.brand as string) ?? '');
   const [brandUrl, setBrandUrl] = useState((iv?.brand_url as string) ?? '');
   const [brandDescription, setBrandDescription] = useState((iv?.brand_description as string) ?? '');
@@ -107,8 +111,8 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   const maxFaq = Math.min(10, Math.max(2, Math.floor(charCount / 2000)));
 
   const price = useMemo(
-    () => calculatePriceClient(charCount, imageCount, faqEnabled ? faqCount : 0, pricingConfig),
-    [charCount, imageCount, faqCount, faqEnabled, pricingConfig],
+    () => calculatePriceClient(charCount, imageCount, faqEnabled ? faqCount : 0, pricingConfig, aiModel),
+    [charCount, imageCount, faqCount, faqEnabled, pricingConfig, aiModel],
   );
 
   const geoSuggestions = useMemo(() => {
@@ -184,6 +188,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       target_query: targetQuery.trim(),
       keywords: keywords.trim(),
       intent,
+      ai_model: aiModel,
       target_char_count: charCount,
       image_count: imageCount,
       tone_of_voice: showCustomTone ? customTone : (() => {
@@ -200,6 +205,9 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       geo_location: geo || undefined,
       image_style: imageCount > 0 ? imageStyles.map(s => s.toLowerCase()) : undefined,
       faq_count: faqEnabled ? faqCount : 0,
+      comparison_enabled: comparisonEnabled,
+      comparison_objects: comparisonEnabled ? comparisonObjects : undefined,
+      comparison_criteria: comparisonEnabled ? comparisonCriteria : undefined,
       brand: brand || undefined,
       brand_url: brand && brandUrl ? brandUrl : undefined,
       brand_description: brand && brandDescription ? brandDescription : undefined,
@@ -216,7 +224,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       author_url: authorUrl || undefined,
       publication_date: useTodayDate ? new Date().toLocaleDateString('ru-RU') : (publicationDate || undefined),
     });
-  }, [canSubmit, targetQuery, keywords, intent, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqEnabled, faqCount, brand, brandUrl, brandDescription, cta, ctaUrl, externalLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
+  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, brand, brandUrl, brandDescription, cta, ctaUrl, externalLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
@@ -263,6 +271,23 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
           >
             {INTENTS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
           </select>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-1.5 block text-[13px] font-medium text-[var(--color-text-primary)]">Модель AI</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setAiModel('opus')}
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'opus' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Claude Opus 4.6</div>
+              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Максимум качества. Дороже и медленнее</div>
+            </button>
+            <button type="button" onClick={() => setAiModel('sonnet')}
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Claude Sonnet 4.6</div>
+              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Быстрее и дешевле. Хорошее качество</div>
+            </button>
+          </div>
+          <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Применяется только к основной генерации статьи</div>
         </div>
 
         <div className="mb-4">
@@ -426,10 +451,38 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5">
         <button onClick={() => setAccordionOpen(v => !v)} className="flex w-full items-center justify-between">
           <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Дополнительные настройки</span>
-          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">13 полей {accordionOpen ? '▴' : '▾'}</span>
+          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">14 полей {accordionOpen ? '▴' : '▾'}</span>
         </button>
         {accordionOpen && (
           <div className="mt-4 space-y-4">
+            {/* Блок сравнения */}
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+              <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Блок сравнения</div>
+              <label className="mb-3 flex items-center gap-2 text-[13px] text-[var(--color-text-primary)] cursor-pointer">
+                <input type="checkbox" checked={comparisonEnabled} onChange={e => setComparisonEnabled(e.target.checked)} className="accent-[var(--color-accent)]" />
+                Включить сравнительную таблицу
+              </label>
+              {comparisonEnabled && (
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Объектов сравнения</label>
+                    <div className="flex items-center gap-3">
+                      <input type="range" min={2} max={5} step={1} value={comparisonObjects} onChange={e => setComparisonObjects(Number(e.target.value))}
+                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
+                      <span className="min-w-[24px] text-right text-sm font-medium">{comparisonObjects}</span>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Критериев</label>
+                    <div className="flex items-center gap-3">
+                      <input type="range" min={2} max={5} step={1} value={comparisonCriteria} onChange={e => setComparisonCriteria(Number(e.target.value))}
+                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
+                      <span className="min-w-[24px] text-right text-sm font-medium">{comparisonCriteria}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             {/* Автор статьи */}
             <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Автор статьи (E-E-A-T)</div>
@@ -569,10 +622,10 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
         <div>
           <span>Стоимость генерации:</span>
           <div className="text-[11px] text-[var(--color-text-secondary)]">
-            база {price.base} + объём {price.chars} + картинки {price.images} + FAQ {price.faq}
+            база {price.base.toLocaleString('ru-RU')} + объём {price.chars.toLocaleString('ru-RU')} + картинки {price.images.toLocaleString('ru-RU')} + FAQ {price.faq.toLocaleString('ru-RU')}
           </div>
         </div>
-        <div className="text-[15px] font-medium">{price.total} токенов</div>
+        <div className="text-[15px] font-medium">{price.total.toLocaleString('ru-RU')} ₽</div>
       </div>
 
       {/* ПРЕДУПРЕЖДЕНИЕ ФИЛЬТРА */}

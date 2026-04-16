@@ -222,6 +222,8 @@ export async function executeAssembly(
         '- Содержит основной ключ + 1 дополнительный',
         '- Законченное предложение',
         '- Улучшает seo',
+        '- НЕ начинай description с того же слова или словосочетания что title. Если title начинается с "Нейминг" — description должен начинаться с другого слова (например "Разбираем", "Узнайте как", "Процесс создания").',
+        '- Title и description должны быть взаимодополняющими: title — крючок, description — раскрытие выгоды. Не дублируй формулировки.',
         '',
         'Правила для slug (ЧПУ URL):',
         '- Транслитерация с русского на латиницу',
@@ -311,16 +313,31 @@ export async function executeAssembly(
   // 7.2 — Schema JSON-LD
   const schemas: Record<string, unknown>[] = [];
 
+  const authorNameRu = (input.author_name as string) ?? '';
+  const authorCompanyRu = (input.author_company as string) ?? (input.brand as string) ?? '';
+  const authorNameEn = authorNameRu ? transliterateAuthorName(authorNameRu) : '';
+  const today = new Date().toISOString().split('T')[0];
+
   schemas.push({
-    '@context': 'https://schema.org',
+    '@context': 'http://schema.org/',
     '@type': 'Article',
-    headline: title,
-    description,
-    datePublished: new Date().toISOString().split('T')[0],
-    inLanguage: 'ru-RU',
-    ...(altTexts.length > 0 && { image: altTexts.map(alt => ({ '@type': 'ImageObject', description: alt })) }),
-    publisher: { '@type': 'Organization', name: (input.brand as string) || 'Publisher' },
-    author: { '@type': 'Organization', name: (input.brand as string) || 'Publisher' },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+    },
+    author: {
+      '@type': 'Person',
+      name: authorNameEn || authorNameRu || 'Author',
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: authorCompanyRu || 'Publisher',
+      logo: {
+        '@type': 'ImageObject',
+      },
+    },
+    headline: h1Text,
+    datePublished: today,
+    dateModified: today,
   });
 
   if (faqCount > 0) {
@@ -429,6 +446,27 @@ function transliterate(text: string): string {
     .join('')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+function transliterateAuthorName(fullName: string): string {
+  const map: Record<string, string> = {
+    'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh',
+    'з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o',
+    'п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts',
+    'ч':'ch','ш':'sh','щ':'shch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya',
+  };
+  return fullName
+    .trim()
+    .split(/\s+/)
+    .map(word => {
+      const translit = word
+        .toLowerCase()
+        .split('')
+        .map(c => map[c] ?? c)
+        .join('');
+      return translit.charAt(0).toUpperCase() + translit.slice(1);
+    })
+    .join(' ');
 }
 
 function isValidSlug(slug: string): boolean {

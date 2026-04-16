@@ -30,3 +30,25 @@
   --seo-accent-selected-bg: var(--color-accent);
   --seo-accent-selected-text: #1A1A1A;
 }
+
+/* Превью статьи — tooltip с URL при наведении на ссылку */
+.seo-preview a[href] {
+  position: relative;
+  cursor: pointer;
+}
+.seo-preview a[href]:hover::before {
+  content: attr(href);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #E0E0E0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+}

@@ -43,6 +43,9 @@ async function main() {
       image_count: 2,
       faq_count: 3,
       tone_of_voice: 'expert',
+      comparison_enabled: true,
+      comparison_objects: 4,
+      comparison_criteria: 5,
       brand: 'CoffeeShop.ru',
       brand_url: 'https://coffeeshop.ru',
       brand_description: 'Интернет-магазин кофемашин с доставкой по России',
@@ -92,6 +95,39 @@ async function main() {
 
     const hasAnchorTag = /<a\s+href/i.test(html);
     console.log(`\n<a href> (brand link) found: ${hasAnchorTag ? 'OK' : 'FAIL'}`);
+
+    const comparisonEnabled = ctx.input.comparison_enabled as boolean | undefined;
+    const expectedObjects = ctx.input.comparison_objects as number | undefined;
+    const expectedCriteria = ctx.input.comparison_criteria as number | undefined;
+    // Паттерн блока сравнения: <p><strong>Название</strong></p> + <ul>
+    const objPattern = /<p><strong>[^<]+<\/strong><\/p>\s*<ul>/g;
+    const objMatches = html.match(objPattern) ?? [];
+    // Подсчёт <li> только в блоке сравнения (между первым и последним таким паттерном)
+    const firstObjIdx = html.search(/<p><strong>[^<]+<\/strong><\/p>\s*<ul>/);
+    let liInComparison = 0;
+    if (firstObjIdx >= 0) {
+      // Находим конец блока сравнения (после последнего </ul> следующего за pattern)
+      const compSlice = html.slice(firstObjIdx);
+      const liMatches = compSlice.match(/<li>/g) ?? [];
+      liInComparison = liMatches.length;
+    }
+    console.log(`\ncomparison_enabled: ${comparisonEnabled}`);
+    if (comparisonEnabled) {
+      const hasBlock = objMatches.length > 0;
+      console.log(`comparison block present: ${hasBlock ? 'OK' : 'FAIL — block not found'}`);
+      if (hasBlock && expectedObjects) {
+        const objOk = objMatches.length >= expectedObjects;
+        console.log(`objects found: ${objMatches.length} (expected ${expectedObjects}): ${objOk ? 'OK' : 'FAIL'}`);
+      }
+      if (hasBlock && expectedObjects && expectedCriteria) {
+        const expectedLi = expectedObjects * expectedCriteria;
+        const liOk = liInComparison >= expectedLi;
+        console.log(`<li> in comparison: ${liInComparison} (expected ~${expectedLi} = ${expectedObjects}×${expectedCriteria}): ${liOk ? 'OK' : 'WARN — possibly trimmed'}`);
+      }
+    } else {
+      const absent = objMatches.length === 0;
+      console.log(`comparison block absent: ${absent ? 'OK' : 'FAIL — block found unexpectedly (count: ' + objMatches.length + ')'}`);
+    }
 
     const warnings = data.warnings as string[];
     if (warnings?.length) {

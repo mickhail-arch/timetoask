@@ -193,32 +193,34 @@ Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionCon
         size: '1792x1024',
       });
 
-      // 6.3: Alt-тег (50-125 символов, без спама ключами)
-      const rawDesc = desc
-        .replace(/<[^>]*>/g, '')
-        .replace(/\[IMAGE_\d+_DESC:\s*/g, '')
-        .replace(/[—–\-:,.]?\s*$/, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      // Берём первое предложение описания как базу
-      const firstSentence = rawDesc.split(/[.!?]/)[0]?.trim() ?? rawDesc;
-      
-      let alt: string;
-      if (firstSentence.length >= 50 && firstSentence.length <= 125) {
-        alt = firstSentence;
-      } else if (firstSentence.length > 125) {
-        // Обрезаем по словам до 125 символов
-        alt = firstSentence.slice(0, 125).replace(/\s\S*$/, '').trim();
-      } else {
-        // Короче 50 — добавляем тему статьи
-        const combined = `${firstSentence} — ${targetQuery}`;
-        alt = combined.length <= 125 ? combined : combined.slice(0, 125).replace(/\s\S*$/, '').trim();
-      }
-      
-      // Гарантируем минимум 50 символов
-      if (alt.length < 50) {
-        alt = `${targetQuery}: ${firstSentence}`.slice(0, 125).replace(/\s\S*$/, '').trim();
+      // 6.3: Alt-тег — отдельный запрос к LLM на русском, 50-80 символов
+      let alt = '';
+      try {
+        alt = await generateText({
+          model: promptModel,
+          systemPrompt: `Generate an alt-text in Russian for an article image. Output ONLY the alt-text, nothing else.
+
+Rules:
+- Length: strictly 50-80 characters. Not shorter than 50, not longer than 80.
+- Must be a complete phrase, no trailing commas, dashes, or ellipsis.
+- Describe WHAT is shown in the image, not the style.
+- Include the main topic keyword naturally (not keyword stuffing).
+- No brand spam, no duplicate words.
+
+Examples:
+- GOOD: "Смартфон с открытым каталогом кроссовок Nike на Poizon"
+- GOOD: "Эксперт проверяет подлинность Jordan 1 под лупой"
+- BAD: "Объёмная 3D-сцена с парящим в воздухе щитом-эмблемой, от которого расходятся лучи разных цветов —" (too long, trailing dash)
+- BAD: "кроссовки" (too short, no context)`,
+          userMessage: `Image scene: ${desc}\nArticle topic: ${targetQuery}\nMain keyword for image ${index + 1}: ${index === 0 ? targetQuery : (keywords[index % keywords.length] ?? targetQuery)}`,
+        });
+        alt = alt.trim().replace(/^["']|["']$/g, '').replace(/[—–\-:,;.\s]+$/, '').trim();
+        if (alt.length < 50 || alt.length > 125) {
+          alt = alt.length > 80 ? alt.slice(0, 80).replace(/\s\S*$/, '').trim() : alt;
+          if (alt.length < 50) alt = `${alt} — ${targetQuery}`.slice(0, 80).replace(/\s\S*$/, '').trim();
+        }
+      } catch {
+        alt = `${targetQuery} — иллюстрация ${index + 1}`.slice(0, 80);
       }
 
       return {

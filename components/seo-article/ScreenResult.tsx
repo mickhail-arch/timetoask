@@ -4,6 +4,7 @@ import { QualityPanel } from './QualityPanel';
 import { MetaPanel } from './MetaPanel';
 import { MetadataPanel } from './MetadataPanel';
 import { ExportPanel } from './ExportPanel';
+import { ArticleEditor } from './ArticleEditor';
 import '@/components/seo-article/tokens.css';
 
 interface ArticleResult {
@@ -25,14 +26,25 @@ interface ScreenResultProps {
   onDownloadMetadata: () => void;
   onNewArticle: () => void;
   onRegenerate?: () => void;
+  sessionId?: string | null;
+  onSave?: (data: { articleHtml: string; metadata: ArticleResult['metadata'] }) => Promise<void>;
 }
 
-export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate }: ScreenResultProps) {
+export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, sessionId, onSave }: ScreenResultProps) {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
+  const [editedHtml, setEditedHtml] = useState(result.article_html);
+  const [editedTitle, setEditedTitle] = useState(result.metadata.title);
+  const [editedDescription, setEditedDescription] = useState(result.metadata.description);
+  const [editedSlug, setEditedSlug] = useState(result.metadata.slug);
+  const [editedBreadcrumb, setEditedBreadcrumb] = useState(result.metadata.breadcrumb);
+  const [editedPageName, setEditedPageName] = useState(query);
+  const [editedAltTexts, setEditedAltTexts] = useState(result.metadata.alt_texts);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const m = result.quality_metrics;
 
   const renderedHtml = useMemo(() => {
-    let html = result.article_html;
+    let html = editedHtml;
     const map = result.images_map ?? {};
     for (const [imageId, imgData] of Object.entries(map)) {
       const src = imgData.base64
@@ -44,10 +56,10 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
       );
     }
     return html;
-  }, [result.article_html, result.images_map]);
+  }, [editedHtml, result.images_map]);
 
   const codeHtml = useMemo(() => {
-    let html = result.article_html;
+    let html = editedHtml;
     const map = result.images_map ?? {};
     for (const [imageId, imgData] of Object.entries(map)) {
       const src = imgData.url ?? '[base64 image]';
@@ -57,7 +69,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
       );
     }
     return html;
-  }, [result.article_html, result.images_map]);
+  }, [editedHtml, result.images_map]);
 
   return (
     <div className="mx-auto max-w-[680px] space-y-3">
@@ -73,7 +85,28 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
 
       <QualityPanel metrics={m as any} />
 
-      <MetaPanel title={result.metadata.title} titleLength={result.metadata.title.length} description={result.metadata.description} descriptionLength={result.metadata.description.length} />
+      <MetadataPanel
+        pageName={editedPageName}
+        slug={editedSlug}
+        breadcrumb={editedBreadcrumb}
+        altTexts={editedAltTexts}
+        jsonLd={result.metadata.json_ld}
+        editable={true}
+        onChangePageName={(v) => { setEditedPageName(v); setIsDirty(true); }}
+        onChangeSlug={(v) => { setEditedSlug(v); setIsDirty(true); }}
+        onChangeBreadcrumb={(v) => { setEditedBreadcrumb(v); setIsDirty(true); }}
+        onChangeAltText={(i, v) => { setEditedAltTexts(prev => { const next = [...prev]; next[i] = v; return next; }); setIsDirty(true); }}
+      />
+
+      <MetaPanel
+        title={editedTitle}
+        titleLength={editedTitle.length}
+        description={editedDescription}
+        descriptionLength={editedDescription.length}
+        editable={true}
+        onChangeTitle={(v) => { setEditedTitle(v); setIsDirty(true); }}
+        onChangeDescription={(v) => { setEditedDescription(v); setIsDirty(true); }}
+      />
 
       {/* Статья */}
       <div>
@@ -82,7 +115,11 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
           <button onClick={() => setTab('code')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'code' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>HTML-код</button>
         </div>
         {tab === 'preview' ? (
-          <div className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed" style={{ resize: 'vertical' }} dangerouslySetInnerHTML={{ __html: `<style>.seo-preview a[href]{position:relative;cursor:pointer}.seo-preview a[href]:hover::before{content:attr(href);position:absolute;bottom:100%;left:0;background:#fff;border:1px solid #E0E0E0;border-radius:6px;padding:4px 8px;font-size:11px;color:#666;white-space:nowrap;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.08);pointer-events:none}</style>${renderedHtml}` }} />
+          <ArticleEditor
+            html={renderedHtml}
+            onChange={(html) => { setEditedHtml(html); setIsDirty(true); }}
+            className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed"
+          />
         ) : (
           <pre className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4 font-mono text-xs leading-relaxed text-[#444] whitespace-pre-wrap break-all" style={{ resize: 'vertical' }}>
             {codeHtml}
@@ -90,7 +127,23 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
         )}
       </div>
 
-      <MetadataPanel pageName={query} slug={result.metadata.slug} breadcrumb={result.metadata.breadcrumb} altTexts={result.metadata.alt_texts} jsonLd={result.metadata.json_ld} />
+      {isDirty && onSave && (
+        <button
+          onClick={async () => {
+            setSaving(true);
+            await onSave({
+              articleHtml: editedHtml,
+              metadata: { ...result.metadata, title: editedTitle, description: editedDescription, slug: editedSlug, breadcrumb: editedBreadcrumb, alt_texts: editedAltTexts },
+            });
+            setIsDirty(false);
+            setSaving(false);
+          }}
+          disabled={saving}
+          className="w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? 'Сохранение...' : 'Сохранить изменения'}
+        </button>
+      )}
 
       <ExportPanel articleHtml={result.article_html} onCopyArticle={onCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
 

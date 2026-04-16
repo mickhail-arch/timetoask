@@ -23,7 +23,7 @@ export function BalanceWidget() {
       className={cn(available <= 0 ? 'text-error' : '')}
       style={available > 0 ? { color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' } : { fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}
     >
-      {available} тк
+      {available.toLocaleString('ru-RU')} ₽
     </span>
   );
 }
