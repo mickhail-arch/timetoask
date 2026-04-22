@@ -25,7 +25,8 @@
       "perImage": 20,
       "perFaq": 3,
       "charBlockSize": 1000,
-      "sonnetMultiplier": 0.35
+      "sonnetMultiplier": 0.35,
+      "geminiMultiplier": 0.25
     }
   }
 }

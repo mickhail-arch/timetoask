@@ -1,10 +1,8 @@
 // modules/seo/steps/step-5-ai-detect-revisions.ts — AI-детект + правки + повторный детект
 import type { StepResult, PipelineContext, SeoIssue, QualityMetrics } from '../types';
-import { getStepModel } from '../config';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { sanitizeArticleHtml } from './sanitize-html';
-import type { ToolConfig } from '@/core/types';
 
 /**
  * Шаг 5: AI-детект + правки (до 2 итераций) + повторный детект (если первый >35%).
@@ -18,8 +16,12 @@ export async function executeAiDetectRevisions(
 ): Promise<StepResult> {
   const start = Date.now();
 
-  const config = ctx.config as ToolConfig | null;
-  const revisionsModel = getStepModel(config, 'revisions', 'anthropic/claude-opus-4.6');
+  const analysisModelChoice = (ctx.input.analysis_model as string) ?? 'sonnet';
+  const ANALYSIS_MODEL_MAP: Record<string, string> = {
+    sonnet: 'anthropic/claude-sonnet-4.6',
+    opus47: 'anthropic/claude-opus-4-7',
+  };
+  const revisionsModel = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
 
   // Получить текст статьи из предыдущего шага
   const draftData = ctx.data.draft as Record<string, unknown>

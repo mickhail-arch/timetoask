@@ -58,7 +58,7 @@ export class ToolRegistry {
           executionMode: manifest.executionMode,
           tokenCost: manifest.token_cost,
           freeUsesLimit: manifest.free_uses_limit,
-          config: manifest.config ?? null,
+          config: (manifest.config ?? undefined) as any,
           version: 1,
         },
         update: {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { calculatePriceClient } from '@/lib/seo-article/price-calculator';
 import type { PricingConfig } from '@/lib/seo-article/price-calculator';
 import { frontFilterClient } from '@/lib/seo-article/front-filter';
@@ -40,9 +40,10 @@ interface ScreenInputProps {
   onSubmit: (input: Record<string, unknown>) => void;
   pricingConfig?: Partial<PricingConfig> | null;
   initialValues?: Record<string, unknown>;
+  onQueryChange?: (query: string) => void;
 }
 
-export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenInputProps) {
+export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryChange }: ScreenInputProps) {
   const iv = initialValues;
 
   const toneRevMap: Record<string, string> = { expert: 'Экспертный', casual: 'Разговорный', business: 'Деловой', sales: 'Продающий', scientific: 'Научный', simple: 'Простой' };
@@ -60,11 +61,12 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   const [intent, setIntent] = useState((iv?.intent as string) ?? 'informational');
   const [charCount, setCharCount] = useState(Math.max(6000, (iv?.target_char_count as number) ?? 8000));
   const [imageCount, setImageCount] = useState((iv?.image_count as number) ?? 0);
-  const [aiModel, setAiModel] = useState<'sonnet' | 'opus'>((iv?.ai_model as 'sonnet' | 'opus') ?? 'opus');
+  const [aiModel, setAiModel] = useState<'gemini' | 'sonnet' | 'opus47'>((iv?.ai_model as 'gemini' | 'sonnet' | 'opus47') ?? 'opus47');
 
   const [tone, setTone] = useState(ivToneDisplay ?? (ivIsCustomTone ? '' : 'Экспертный'));
   const [customTone, setCustomTone] = useState(ivIsCustomTone ? ivToneRaw : '');
   const [showCustomTone, setShowCustomTone] = useState(ivIsCustomTone);
+  const [toneComment, setToneComment] = useState((iv?.tone_comment as string) ?? '');
   const [gender, setGender] = useState(genderRevMap[ta?.gender ?? ''] ?? 'Все');
   const [ages, setAges] = useState<string[]>(ta?.age?.map(a => ageRevMap[a] ?? a) ?? ['Все']);
   const [geo, setGeo] = useState((iv?.geo_location as string) ?? '');
@@ -87,13 +89,38 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   const [comparisonEnabled, setComparisonEnabled] = useState((iv?.comparison_enabled as boolean) ?? false);
   const [comparisonObjects, setComparisonObjects] = useState((iv?.comparison_objects as number) ?? 3);
   const [comparisonCriteria, setComparisonCriteria] = useState((iv?.comparison_criteria as number) ?? 3);
+  const [analysisModel, setAnalysisModel] = useState<'sonnet' | 'opus47'>((iv?.analysis_model as 'sonnet' | 'opus47') ?? 'sonnet');
+
+  const comparisonAllowed = charCount >= 8000;
+
+  const comparisonLimits = useMemo(() => {
+    if (charCount <= 9000) return { maxObjects: 2, maxCriteria: 3 };
+    if (charCount <= 12000) return { maxObjects: 3, maxCriteria: 4 };
+    if (charCount <= 16000) return { maxObjects: 4, maxCriteria: 4 };
+    return { maxObjects: 5, maxCriteria: 5 };
+  }, [charCount]);
+
+  useEffect(() => {
+    if (!comparisonAllowed && comparisonEnabled) {
+      setComparisonEnabled(false);
+    }
+    if (comparisonObjects > comparisonLimits.maxObjects) {
+      setComparisonObjects(comparisonLimits.maxObjects);
+    }
+    if (comparisonCriteria > comparisonLimits.maxCriteria) {
+      setComparisonCriteria(comparisonLimits.maxCriteria);
+    }
+  }, [charCount, comparisonAllowed, comparisonLimits]); // eslint-disable-line react-hooks/exhaustive-deps
   const [brand, setBrand] = useState((iv?.brand as string) ?? '');
   const [brandUrl, setBrandUrl] = useState((iv?.brand_url as string) ?? '');
   const [brandDescription, setBrandDescription] = useState((iv?.brand_description as string) ?? '');
   const [cta, setCta] = useState((iv?.cta as string) ?? '');
   const [ctaUrl, setCtaUrl] = useState((iv?.cta_url as string) ?? '');
-  const [externalLinks, setExternalLinks] = useState<Array<{url: string; anchor: string}>>(
-    (iv?.external_links as Array<{url: string; anchor: string}>) ?? [{ url: '', anchor: '' }]
+  const [internalLinks, setInternalLinks] = useState<Array<{url: string; anchor: string}>>(
+    (iv?.internal_links as Array<{url: string; anchor: string}>) ?? (iv?.external_links as Array<{url: string; anchor: string}>) ?? [{ url: '', anchor: '' }]
+  );
+  const [sourceLinks, setSourceLinks] = useState<Array<{url: string; anchor: string}>>(
+    (iv?.source_links as Array<{url: string; anchor: string}>) ?? [{ url: '', anchor: '' }]
   );
   const [forbiddenWords, setForbiddenWords] = useState((iv?.forbidden_words as string) ?? '');
   const [legalRestrictions, setLegalRestrictions] = useState((iv?.legal_restrictions as string) ?? '');
@@ -107,12 +134,16 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
   const [filterWarning, setFilterWarning] = useState(false);
 
   const maxImages = useMemo(() => getMaxImages(charCount), [charCount]);
-  const maxLinks = charCount <= 5000 ? 2 : charCount <= 10000 ? 3 : charCount <= 15000 ? 4 : 5;
+  const maxTotalLinks = Math.floor(charCount / 2000);
+  const brandLinkCount = brand && brandUrl ? 1 : 0;
+  const remainingLinks = maxTotalLinks - brandLinkCount;
+  const maxInternalLinks = Math.min(5, Math.max(1, Math.ceil(remainingLinks * 0.6)));
+  const maxSourceLinks = Math.min(5, Math.max(1, remainingLinks - maxInternalLinks));
   const maxFaq = Math.min(10, Math.max(2, Math.floor(charCount / 2000)));
 
   const price = useMemo(
-    () => calculatePriceClient(charCount, imageCount, faqEnabled ? faqCount : 0, pricingConfig, aiModel),
-    [charCount, imageCount, faqCount, faqEnabled, pricingConfig, aiModel],
+    () => calculatePriceClient(charCount, imageCount, faqEnabled ? faqCount : 0, pricingConfig, aiModel, analysisModel),
+    [charCount, imageCount, faqCount, faqEnabled, pricingConfig, aiModel, analysisModel],
   );
 
   const geoSuggestions = useMemo(() => {
@@ -126,7 +157,8 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
     !filterWarning &&
     getUrlError(brandUrl) === null &&
     getUrlError(ctaUrl) === null &&
-    externalLinks.every(l => getUrlError(l.url) === null) &&
+    internalLinks.every(l => getUrlError(l.url) === null) &&
+    sourceLinks.every(l => getUrlError(l.url) === null) &&
     getUrlError(authorUrl) === null;
 
   const checkForbidden = useCallback((text: string) => {
@@ -170,16 +202,28 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
     });
   }, []);
 
-  const updateExternalLink = useCallback((index: number, field: 'url' | 'anchor', value: string) => {
-    setExternalLinks(prev => prev.map((l, i) => i === index ? { ...l, [field]: value } : l));
+  const updateInternalLink = useCallback((index: number, field: 'url' | 'anchor', value: string) => {
+    setInternalLinks(prev => prev.map((l, i) => i === index ? { ...l, [field]: value } : l));
   }, []);
 
-  const removeExternalLink = useCallback((index: number) => {
-    setExternalLinks(prev => prev.filter((_, i) => i !== index));
+  const removeInternalLink = useCallback((index: number) => {
+    setInternalLinks(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  const addExternalLink = useCallback(() => {
-    setExternalLinks(prev => [...prev, { url: '', anchor: '' }]);
+  const addInternalLink = useCallback(() => {
+    setInternalLinks(prev => [...prev, { url: '', anchor: '' }]);
+  }, []);
+
+  const updateSourceLink = useCallback((index: number, field: 'url' | 'anchor', value: string) => {
+    setSourceLinks(prev => prev.map((l, i) => i === index ? { ...l, [field]: value } : l));
+  }, []);
+
+  const removeSourceLink = useCallback((index: number) => {
+    setSourceLinks(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addSourceLink = useCallback(() => {
+    setSourceLinks(prev => [...prev, { url: '', anchor: '' }]);
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -195,6 +239,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
         const map: Record<string, string> = { 'Экспертный': 'expert', 'Разговорный': 'casual', 'Деловой': 'business', 'Продающий': 'sales', 'Научный': 'scientific', 'Простой': 'simple' };
         return map[tone] ?? tone.toLowerCase();
       })(),
+      tone_comment: toneComment || undefined,
       target_audience: {
         gender: gender === 'Мужчины' ? 'male' : gender === 'Женщины' ? 'female' : 'all',
         age: ages.includes('Все') ? ['all'] : ages.map(a => {
@@ -208,13 +253,17 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       comparison_enabled: comparisonEnabled,
       comparison_objects: comparisonEnabled ? comparisonObjects : undefined,
       comparison_criteria: comparisonEnabled ? comparisonCriteria : undefined,
+      analysis_model: analysisModel,
       brand: brand || undefined,
       brand_url: brand && brandUrl ? brandUrl : undefined,
       brand_description: brand && brandDescription ? brandDescription : undefined,
       cta: cta || undefined,
       cta_url: cta && ctaUrl ? ctaUrl : undefined,
-      external_links: externalLinks.filter(l => l.url && l.anchor).length > 0
-        ? externalLinks.filter(l => l.url && l.anchor)
+      internal_links: internalLinks.filter(l => l.url && l.anchor).length > 0
+        ? internalLinks.filter(l => l.url && l.anchor)
+        : undefined,
+      source_links: sourceLinks.filter(l => l.url && l.anchor).length > 0
+        ? sourceLinks.filter(l => l.url && l.anchor)
         : undefined,
       forbidden_words: forbiddenWords || undefined,
       legal_restrictions: legalRestrictions || undefined,
@@ -224,7 +273,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
       author_url: authorUrl || undefined,
       publication_date: useTodayDate ? new Date().toLocaleDateString('ru-RU') : (publicationDate || undefined),
     });
-  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, gender, ages, geo, imageStyles, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, brand, brandUrl, brandDescription, cta, ctaUrl, externalLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
+  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, gender, ages, geo, imageStyles, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, brand, brandUrl, brandDescription, cta, ctaUrl, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
@@ -240,7 +289,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
           <input
             type="text"
             value={targetQuery}
-            onChange={e => { setTargetQuery(e.target.value); checkForbidden(e.target.value); }}
+            onChange={e => { setTargetQuery(e.target.value); checkForbidden(e.target.value); onQueryChange?.(e.target.value); }}
             placeholder="как выбрать кофемашину для дома"
             className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
           />
@@ -275,16 +324,21 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
 
         <div className="mt-4">
           <label className="mb-1.5 block text-[13px] font-medium text-[var(--color-text-primary)]">Модель AI</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setAiModel('opus')}
-              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'opus' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
-              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Claude Opus 4.6</div>
-              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Максимум качества. Дороже и медленнее</div>
+          <div className="grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => setAiModel('gemini')}
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'gemini' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Gemini 3.1 Pro</div>
+              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Самая быстрая и дешёвая</div>
             </button>
             <button type="button" onClick={() => setAiModel('sonnet')}
               className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
-              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Claude Sonnet 4.6</div>
-              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Быстрее и дешевле. Хорошее качество</div>
+              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Sonnet 4.6</div>
+              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Баланс цены и качества</div>
+            </button>
+            <button type="button" onClick={() => setAiModel('opus47')}
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.7</div>
+              <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Лучшее качество текста</div>
             </button>
           </div>
           <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Применяется только к основной генерации статьи</div>
@@ -351,6 +405,19 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
               className="mt-2 w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
           )}
           <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">По умолчанию: Экспертный</div>
+          <div className="mt-2">
+            <textarea
+              value={toneComment}
+              onChange={e => setToneComment(e.target.value)}
+              maxLength={300}
+              rows={2}
+              placeholder="Пиши с юмором, как будто объясняешь другу..."
+              className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+            />
+            <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+              Необязательно. Дополнит выбранный стиль вашими пожеланиями
+            </div>
+          </div>
         </div>
 
         <div className="mb-4">
@@ -458,30 +525,61 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
             {/* Блок сравнения */}
             <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Блок сравнения</div>
-              <label className="mb-3 flex items-center gap-2 text-[13px] text-[var(--color-text-primary)] cursor-pointer">
-                <input type="checkbox" checked={comparisonEnabled} onChange={e => setComparisonEnabled(e.target.checked)} className="accent-[var(--color-accent)]" />
+              <label className="mb-1 flex items-center gap-2 text-[13px] text-[var(--color-text-primary)] cursor-pointer">
+                <input type="checkbox" checked={comparisonEnabled} onChange={e => setComparisonEnabled(e.target.checked)} disabled={!comparisonAllowed} className="accent-[var(--color-accent)]" />
                 Включить сравнительную таблицу
               </label>
-              {comparisonEnabled && (
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Объектов сравнения</label>
-                    <div className="flex items-center gap-3">
-                      <input type="range" min={2} max={5} step={1} value={comparisonObjects} onChange={e => setComparisonObjects(Number(e.target.value))}
-                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
-                      <span className="min-w-[24px] text-right text-sm font-medium">{comparisonObjects}</span>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Критериев</label>
-                    <div className="flex items-center gap-3">
-                      <input type="range" min={2} max={5} step={1} value={comparisonCriteria} onChange={e => setComparisonCriteria(Number(e.target.value))}
-                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
-                      <span className="min-w-[24px] text-right text-sm font-medium">{comparisonCriteria}</span>
-                    </div>
-                  </div>
-                </div>
+              {!comparisonAllowed && (
+                <div className="mb-2 text-[11px] text-[var(--color-text-secondary)]">Доступно от 8 000 символов</div>
               )}
+              {comparisonEnabled && (
+                <>
+                  <div className="mt-3 flex gap-3">
+                    <div className="flex-1">
+                      <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Объектов сравнения</label>
+                      {comparisonLimits.maxObjects === 2 ? (
+                        <div className="text-sm font-medium text-[var(--color-text-primary)]">2</div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <input type="range" min={2} max={comparisonLimits.maxObjects} step={1} value={comparisonObjects} onChange={e => setComparisonObjects(Number(e.target.value))}
+                            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
+                          <span className="min-w-[24px] text-right text-sm font-medium">{comparisonObjects}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Критериев</label>
+                      {comparisonLimits.maxCriteria === 2 ? (
+                        <div className="text-sm font-medium text-[var(--color-text-primary)]">2</div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <input type="range" min={2} max={comparisonLimits.maxCriteria} step={1} value={comparisonCriteria} onChange={e => setComparisonCriteria(Number(e.target.value))}
+                            className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-[var(--seo-card-border)] accent-[var(--color-accent)] outline-none" />
+                          <span className="min-w-[24px] text-right text-sm font-medium">{comparisonCriteria}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">от 2 до {comparisonLimits.maxObjects} объектов и до {comparisonLimits.maxCriteria} критериев для {charCount.toLocaleString('ru-RU')} символов</div>
+                </>
+              )}
+            </div>
+            {/* Модель анализа текста */}
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+              <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Модель анализа текста</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setAnalysisModel('sonnet')}
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Sonnet 4.6</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">По умолчанию. Быстрый анализ</div>
+                </button>
+                <button type="button" onClick={() => setAnalysisModel('opus47')}
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.7</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Глубокий анализ и правки</div>
+                </button>
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Используется для SEO-аудита, AI-детекта и финальных правок</div>
             </div>
             {/* Автор статьи */}
             <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
@@ -566,23 +664,24 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
             </div>
             <div>
               <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
-                Ссылки на источники
-                <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxLinks})</span>
+                Перелинковка
+                <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxInternalLinks})</span>
               </label>
+              <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Ссылки на свои статьи и страницы</div>
               <div className="space-y-2">
-                {externalLinks.map((link, i) => (
+                {internalLinks.map((link, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <div className="grid flex-1 grid-cols-2 gap-3">
                       <div>
-                        <input type="url" value={link.url} onChange={e => updateExternalLink(i, 'url', e.target.value)} onBlur={() => updateExternalLink(i, 'url', formatUrlInput(link.url))} placeholder="https://site.ru/page"
+                        <input type="url" value={link.url} onChange={e => updateInternalLink(i, 'url', e.target.value)} onBlur={() => updateInternalLink(i, 'url', formatUrlInput(link.url))} placeholder="https://site.ru/article"
                           className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                         {getUrlError(link.url) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(link.url)}</div>}
                       </div>
-                      <input type="text" value={link.anchor} onChange={e => updateExternalLink(i, 'anchor', e.target.value)} placeholder="текст ссылки" disabled={!link.url}
+                      <input type="text" value={link.anchor} onChange={e => updateInternalLink(i, 'anchor', e.target.value)} placeholder="анкор страницы" disabled={!link.url}
                         className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
                     </div>
-                    {externalLinks.length > 1 && (
-                      <button type="button" onClick={() => removeExternalLink(i)}
+                    {internalLinks.length > 1 && (
+                      <button type="button" onClick={() => removeInternalLink(i)}
                         className="mt-1.5 cursor-pointer text-lg leading-none text-[var(--color-text-secondary)] hover:text-[#DC2626]">×</button>
                     )}
                   </div>
@@ -590,14 +689,60 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues }: ScreenIn
               </div>
               <button
                 type="button"
-                onClick={addExternalLink}
-                disabled={externalLinks.length >= maxLinks || !(externalLinks[externalLinks.length - 1]?.url && externalLinks[externalLinks.length - 1]?.anchor)}
+                onClick={addInternalLink}
+                disabled={internalLinks.length >= maxInternalLinks || !(internalLinks[internalLinks.length - 1]?.url && internalLinks[internalLinks.length - 1]?.anchor)}
                 className={`mt-2 cursor-pointer text-[13px] ${
-                  externalLinks.length >= maxLinks || !(externalLinks[externalLinks.length - 1]?.url && externalLinks[externalLinks.length - 1]?.anchor)
+                  internalLinks.length >= maxInternalLinks || !(internalLinks[internalLinks.length - 1]?.url && internalLinks[internalLinks.length - 1]?.anchor)
                     ? 'text-[var(--color-text-secondary)] opacity-50 !cursor-not-allowed'
                     : 'text-[var(--color-accent)] hover:underline'
                 }`}
               >+ Добавить ссылку</button>
+            </div>
+            <div>
+              <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
+                Ссылки на источники
+                <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxSourceLinks})</span>
+              </label>
+              <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Авторитетные внешние ресурсы для подтверждения фактов</div>
+              <div className="space-y-2">
+                {sourceLinks.map((link, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <div className="grid flex-1 grid-cols-2 gap-3">
+                      <div>
+                        <input type="url" value={link.url} onChange={e => updateSourceLink(i, 'url', e.target.value)} onBlur={() => updateSourceLink(i, 'url', formatUrlInput(link.url))} placeholder="https://source.ru/research"
+                          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                        {getUrlError(link.url) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(link.url)}</div>}
+                      </div>
+                      <input type="text" value={link.anchor} onChange={e => updateSourceLink(i, 'anchor', e.target.value)} placeholder="название источника" disabled={!link.url}
+                        className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                    </div>
+                    {sourceLinks.length > 1 && (
+                      <button type="button" onClick={() => removeSourceLink(i)}
+                        className="mt-1.5 cursor-pointer text-lg leading-none text-[var(--color-text-secondary)] hover:text-[#DC2626]">×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addSourceLink}
+                disabled={sourceLinks.length >= maxSourceLinks || !(sourceLinks[sourceLinks.length - 1]?.url && sourceLinks[sourceLinks.length - 1]?.anchor)}
+                className={`mt-2 cursor-pointer text-[13px] ${
+                  sourceLinks.length >= maxSourceLinks || !(sourceLinks[sourceLinks.length - 1]?.url && sourceLinks[sourceLinks.length - 1]?.anchor)
+                    ? 'text-[var(--color-text-secondary)] opacity-50 !cursor-not-allowed'
+                    : 'text-[var(--color-accent)] hover:underline'
+                }`}
+              >+ Добавить ссылку</button>
+              {(() => {
+                const filledInternalLinks = internalLinks.filter(l => l.url && l.anchor).length;
+                const filledSourceLinks = sourceLinks.filter(l => l.url && l.anchor).length;
+                return (filledInternalLinks + filledSourceLinks + brandLinkCount > 0) && (
+                  <div className="mt-2 text-[11px] text-[var(--color-text-secondary)]">
+                    Всего ссылок: {filledInternalLinks + filledSourceLinks + brandLinkCount} из {maxTotalLinks} (1 на 2000 символов)
+                    {brandLinkCount > 0 && ' · включая бренд'}
+                  </div>
+                );
+              })()}
             </div>
             <div className="flex gap-3">
               <div className="flex-1">

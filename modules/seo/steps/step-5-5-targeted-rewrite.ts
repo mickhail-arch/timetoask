@@ -1,10 +1,8 @@
 // modules/seo/steps/step-5-5-targeted-rewrite.ts — Точечный рерайт проблемных абзацев
 import type { StepResult, PipelineContext } from '../types';
-import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { sanitizeArticleHtml } from './sanitize-html';
-import type { ToolConfig } from '@/core/types';
 
 const STOP_STARTS = [
   'важно отметить',
@@ -227,9 +225,13 @@ export async function executeTargetedRewrite(
   const originalTextLength = articleHtml.replace(/<[^>]*>/g, '').length;
   const originalMarkerCount = (articleHtml.match(/\[IMAGE_\d+\]/g) ?? []).length;
 
-  // 4. Один вызов Sonnet с полным текстом
-  const config = ctx.config as ToolConfig | null;
-  const model = getStepModel(config, 'revisions', 'anthropic/claude-sonnet-4');
+  // 4. Один вызов модели с полным текстом
+  const analysisModelChoice = (ctx.input.analysis_model as string) ?? 'sonnet';
+  const ANALYSIS_MODEL_MAP: Record<string, string> = {
+    sonnet: 'anthropic/claude-sonnet-4.6',
+    opus47: 'anthropic/claude-opus-4-7',
+  };
+  const model = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
 
   const systemPrompt = `Ты — редактор-антидетектор. Твоя задача — переписать статью так, чтобы AI-детекторы не могли отличить её от написанной человеком.
 

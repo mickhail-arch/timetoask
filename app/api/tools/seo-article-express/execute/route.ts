@@ -39,7 +39,8 @@ export async function POST(req: Request) {
       input.image_count,
       input.faq_count,
       pricingConfig as any,
-      input.ai_model,
+      input.ai_model ?? 'opus47',
+      input.analysis_model ?? 'sonnet',
     );
 
     const user = await prisma.user.findUnique({

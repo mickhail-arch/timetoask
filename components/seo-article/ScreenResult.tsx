@@ -1,11 +1,10 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { QualityPanel } from './QualityPanel';
 import { MetaPanel } from './MetaPanel';
 import { MetadataPanel } from './MetadataPanel';
 import { ExportPanel } from './ExportPanel';
-import { ArticleEditor } from './ArticleEditor';
-import '@/components/seo-article/tokens.css';
+import { RichEditor } from '@/components/ui/rich-editor';
 
 interface ArticleResult {
   article_html: string;
@@ -32,7 +31,7 @@ interface ScreenResultProps {
 
 export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, sessionId, onSave }: ScreenResultProps) {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
-  const [editedHtml, setEditedHtml] = useState(result.article_html);
+  const [editedHtml, setEditedHtml] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState(result.metadata.title);
   const [editedDescription, setEditedDescription] = useState(result.metadata.description);
   const [editedSlug, setEditedSlug] = useState(result.metadata.slug);
@@ -44,7 +43,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
   const m = result.quality_metrics;
 
   const renderedHtml = useMemo(() => {
-    let html = editedHtml;
+    let html = result.article_html;
     const map = result.images_map ?? {};
     for (const [imageId, imgData] of Object.entries(map)) {
       const src = imgData.base64
@@ -56,10 +55,10 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
       );
     }
     return html;
-  }, [editedHtml, result.images_map]);
+  }, [result.article_html, result.images_map]);
 
   const codeHtml = useMemo(() => {
-    let html = editedHtml;
+    let html = result.article_html;
     const map = result.images_map ?? {};
     for (const [imageId, imgData] of Object.entries(map)) {
       const src = imgData.url ?? '[base64 image]';
@@ -69,7 +68,14 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
       );
     }
     return html;
-  }, [editedHtml, result.images_map]);
+  }, [result.article_html, result.images_map]);
+
+  const currentHtml = editedHtml ?? renderedHtml;
+
+  const handleCopyArticle = useCallback(() => {
+    const htmlToCopy = editedHtml ?? renderedHtml;
+    navigator.clipboard.writeText(htmlToCopy);
+  }, [editedHtml, renderedHtml]);
 
   return (
     <div className="mx-auto max-w-[680px] space-y-3">
@@ -85,6 +91,16 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
 
       <QualityPanel metrics={m as any} />
 
+      <MetaPanel
+        title={editedTitle}
+        titleLength={editedTitle.length}
+        description={editedDescription}
+        descriptionLength={editedDescription.length}
+        editable={true}
+        onChangeTitle={(v) => { setEditedTitle(v); setIsDirty(true); }}
+        onChangeDescription={(v) => { setEditedDescription(v); setIsDirty(true); }}
+      />
+
       <MetadataPanel
         pageName={editedPageName}
         slug={editedSlug}
@@ -98,31 +114,22 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
         onChangeAltText={(i, v) => { setEditedAltTexts(prev => { const next = [...prev]; next[i] = v; return next; }); setIsDirty(true); }}
       />
 
-      <MetaPanel
-        title={editedTitle}
-        titleLength={editedTitle.length}
-        description={editedDescription}
-        descriptionLength={editedDescription.length}
-        editable={true}
-        onChangeTitle={(v) => { setEditedTitle(v); setIsDirty(true); }}
-        onChangeDescription={(v) => { setEditedDescription(v); setIsDirty(true); }}
-      />
-
       {/* Статья */}
-      <div>
+      <div className="overflow-visible">
         <div className="flex overflow-hidden rounded-t-[var(--radius-md)] border border-b-0 border-[var(--seo-card-border)]">
           <button onClick={() => setTab('preview')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'preview' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>Превью</button>
           <button onClick={() => setTab('code')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'code' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>HTML-код</button>
         </div>
         {tab === 'preview' ? (
-          <ArticleEditor
+          <RichEditor
             html={renderedHtml}
             onChange={(html) => { setEditedHtml(html); setIsDirty(true); }}
             className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed"
+            articleTitle={result.metadata?.title ?? query}
           />
         ) : (
           <pre className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4 font-mono text-xs leading-relaxed text-[#444] whitespace-pre-wrap break-all" style={{ resize: 'vertical' }}>
-            {codeHtml}
+            {editedHtml ?? codeHtml}
           </pre>
         )}
       </div>
@@ -132,7 +139,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
           onClick={async () => {
             setSaving(true);
             await onSave({
-              articleHtml: editedHtml,
+              articleHtml: editedHtml ?? result.article_html,
               metadata: { ...result.metadata, title: editedTitle, description: editedDescription, slug: editedSlug, breadcrumb: editedBreadcrumb, alt_texts: editedAltTexts },
             });
             setIsDirty(false);
@@ -145,7 +152,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
         </button>
       )}
 
-      <ExportPanel articleHtml={result.article_html} onCopyArticle={onCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
+      <ExportPanel articleHtml={result.article_html} onCopyArticle={handleCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
 
       <div className="text-center text-[11px] text-[var(--color-step-pending)]">Сгенерировано за {duration} сек · {stepCount} шагов</div>
     </div>

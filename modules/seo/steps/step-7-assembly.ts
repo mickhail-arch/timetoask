@@ -1,8 +1,6 @@
 // modules/seo/steps/step-7-assembly.ts — сборка HTML + .docx + метаданные + панель качества
 import type { StepResult, PipelineContext, QualityMetrics } from '../types';
-import type { ToolConfig } from '@/core/types';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
-import { getStepModel } from '../config';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { sanitizeArticleHtml } from './sanitize-html';
 import { generateDocxFromHtml } from './generate-docx';
@@ -198,11 +196,12 @@ export async function executeAssembly(
   let slug: string = buildSlug(targetQuery, h1Text);
 
   try {
-    const metaModel = getStepModel(
-      ctx.config as ToolConfig | null,
-      'assembly',
-      'anthropic/claude-opus-4.6',
-    );
+    const analysisModelChoice = (ctx.input.analysis_model as string) ?? 'sonnet';
+    const ANALYSIS_MODEL_MAP: Record<string, string> = {
+      sonnet: 'anthropic/claude-sonnet-4.6',
+      opus47: 'anthropic/claude-opus-4-7',
+    };
+    const metaModel = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
 
     const raw = await generateText({
       model: metaModel,

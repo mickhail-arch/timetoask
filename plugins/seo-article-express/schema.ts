@@ -11,6 +11,7 @@ export const inputSchema = z.object({
   image_count: z.number().min(0).max(11).default(0).describe('Количество изображений'),
 
   tone_of_voice: z.string().max(300).default('expert').describe('Tone of voice'),
+  tone_comment: z.string().max(300).optional().describe('Комментарий к стилю текста'),
   target_audience: z.object({
     gender: z.enum(['all', 'male', 'female']).default('all'),
     age: z.array(z.string()).default(['all']),
@@ -18,8 +19,12 @@ export const inputSchema = z.object({
   geo_location: z.string().max(200).optional().describe('Гео (город или регион)'),
   image_style: z.array(z.string()).max(2).optional().describe('Стиль изображений'),
 
-  ai_model: z.enum(['sonnet', 'opus']).default('opus').describe('Модель для генерации статьи'),
+  ai_model: z.enum(['gemini', 'sonnet', 'opus47']).default('opus47').describe('Модель для генерации статьи'),
+  analysis_model: z.enum(['sonnet', 'opus47']).default('sonnet').describe('Модель для анализа и правок текста'),
   comparison_enabled: z.boolean().default(false).describe('Включить блок сравнения'),
+  // Лимиты comparison_objects / comparison_criteria контролируются на клиенте по объёму статьи
+  // (≤9000 симв → 2/3, ≤12000 → 3/4, ≤16000 → 4/4, >16000 → 5/5).
+  // Серверная валидация намеренно ослаблена — LLM просто рисует то, что пришло в input.
   comparison_objects: z.number().int().min(2).max(5).default(3).describe('Количество объектов сравнения'),
   comparison_criteria: z.number().int().min(2).max(5).default(3).describe('Количество критериев сравнения'),
   faq_count: z.number().min(0).max(10).default(5).describe('Количество FAQ-вопросов'),
@@ -28,10 +33,14 @@ export const inputSchema = z.object({
   brand_description: z.string().max(300).optional().describe('Краткое описание компании/бренда'),
   cta: z.string().max(500).optional().describe('CTA в конце статьи'),
   cta_url: z.string().url().max(300).optional().describe('Ссылка в CTA'),
-  external_links: z.array(z.object({
+  internal_links: z.array(z.object({
     url: z.string().url(),
     anchor: z.string().max(100),
-  })).max(5).optional().describe('Внешние ссылки с анкорами'),
+  })).max(5).optional().describe('Перелинковка — ссылки на свои страницы'),
+  source_links: z.array(z.object({
+    url: z.string().url(),
+    anchor: z.string().max(100),
+  })).max(5).optional().describe('Ссылки на источники — внешние авторитетные ресурсы'),
   forbidden_words: z.string().optional().describe('Запрещённые слова (по одному на строку)'),
   legal_restrictions: z.string().max(500).optional().describe('Юридические ограничения'),
 

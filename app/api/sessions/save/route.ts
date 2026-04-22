@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@/generated/prisma';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,14 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { toolSlug, title, inputParams, outputMeta, contentText, tokensUsed, durationSec, parentId } = body;
+  const toolSlug = body.toolSlug as string | undefined;
+  const title = body.title as string | undefined;
+  const inputParams = (body.inputParams ?? {}) as Record<string, unknown>;
+  const outputMeta = (body.outputMeta ?? {}) as Record<string, unknown>;
+  const contentText = (body.contentText as string) ?? null;
+  const tokensUsed = (body.tokensUsed as number) ?? 0;
+  const durationSec = (body.durationSec as number) ?? 0;
+  const parentId = (body.parentId as string) ?? null;
 
   if (!toolSlug || !title) {
     return NextResponse.json(
@@ -59,9 +67,9 @@ export async function POST(req: Request) {
       toolId: tool.id,
       parentId: parentId ?? null,
       title: parentId ? `${title} v${version}` : title,
-      status: 'completed',
-      inputParams: inputParams ?? {},
-      outputMeta: outputMeta ?? {},
+      status: (body.status as string) ?? 'completed',
+      inputParams: (inputParams ?? {}) as Prisma.InputJsonValue,
+      outputMeta: (outputMeta ?? {}) as Prisma.InputJsonValue,
       contentText: contentText ?? null,
       tokensUsed: tokensUsed ?? 0,
       durationSec: durationSec ?? 0,

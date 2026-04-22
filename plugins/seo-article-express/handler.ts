@@ -22,7 +22,10 @@ export function buildUserMessage(input: SeoArticleInput): string {
   if (input.faq_count) lines.push(`FAQ вопросов: ${input.faq_count}`);
   if (input.brand) lines.push(`Бренд: ${input.brand}`);
   if (input.cta) lines.push(`CTA: ${input.cta}`);
-  if (input.own_sources) lines.push(`Собственные источники:\n${input.own_sources}`);
+  if (input.source_links?.length) {
+    const formatted = input.source_links.map((s) => `${s.anchor}: ${s.url}`).join('\n');
+    lines.push(`Ссылки на источники:\n${formatted}`);
+  }
   if (input.forbidden_words) lines.push(`Запрещённые слова: ${input.forbidden_words}`);
   if (input.legal_restrictions) lines.push(`Юридические ограничения: ${input.legal_restrictions}`);
 

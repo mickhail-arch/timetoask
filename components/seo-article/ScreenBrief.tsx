@@ -7,9 +7,18 @@ import '@/components/seo-article/tokens.css';
 
 interface BriefData {
   h1: string;
-  h2_list: Array<{ text: string; h3s: string[] }>;
+  h2_list: Array<{
+    text: string;
+    h3s: string[];
+    thesis?: string;
+    facts?: string[];
+    target_keywords?: string[];
+  }>;
   subtopics?: string[];
   lsi_keywords?: string[];
+  main_keyword?: string;
+  table_topic?: string;
+  case_topic?: string;
 }
 
 interface ScreenBriefProps {
@@ -18,6 +27,7 @@ interface ScreenBriefProps {
   imageCount: number;
   faqCount: number;
   calculatedPrice: number;
+  comparisonEnabled?: boolean;
   onConfirm: (updatedBrief: BriefData, userEdited: boolean) => void;
   onBack: () => void;
 }
@@ -61,6 +71,7 @@ export function ScreenBrief({
   imageCount,
   faqCount,
   calculatedPrice,
+  comparisonEnabled,
   onConfirm,
   onBack,
 }: ScreenBriefProps) {
@@ -92,6 +103,28 @@ export function ScreenBrief({
       }))
   );
 
+  const [mainKeyword, setMainKeyword] = useState(brief.main_keyword ?? '');
+  const [lsiKeywords, setLsiKeywords] = useState<string[]>(brief.lsi_keywords ?? []);
+  const [newLsi, setNewLsi] = useState('');
+  const [tableTopic, setTableTopic] = useState(brief.table_topic ?? '');
+  const [caseTopic, setCaseTopic] = useState(brief.case_topic ?? '');
+
+  const [h2Theses, setH2Theses] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    brief.h2_list.filter(h2 => !FAQ_RE.test(h2.text)).forEach((h2, i) => {
+      map[`h2-${i}`] = h2.thesis ?? '';
+    });
+    return map;
+  });
+
+  const [h2Facts, setH2Facts] = useState<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    brief.h2_list.filter(h2 => !FAQ_RE.test(h2.text)).forEach((h2, i) => {
+      map[`h2-${i}`] = h2.facts ?? [];
+    });
+    return map;
+  });
+
   const [edited, setEdited] = useState(false);
 
   const [faqEditingId, setFaqEditingId] = useState<string | null>(null);
@@ -115,18 +148,30 @@ export function ScreenBrief({
     const h2ListPlain = h2List.map(h2 => ({
       text: h2.text,
       h3s: h2.h3s.map(h3 => h3.text),
+      thesis: h2Theses[h2.id] ?? '',
+      facts: h2Facts[h2.id] ?? [],
     }));
 
     if (faqCount > 0 && faqQuestions.length > 0) {
       h2ListPlain.push({
         text: faqHeading,
         h3s: faqQuestions.map(q => q.text),
+        thesis: '',
+        facts: [],
       });
     }
 
-    const updatedBrief: BriefData = { ...brief, h1, h2_list: h2ListPlain };
+    const updatedBrief: BriefData = {
+      ...brief,
+      h1,
+      h2_list: h2ListPlain,
+      main_keyword: mainKeyword,
+      lsi_keywords: lsiKeywords,
+      table_topic: tableTopic,
+      case_topic: caseTopic,
+    };
     onConfirm(updatedBrief, edited);
-  }, [brief, h1, h2List, faqQuestions, faqCount, faqHeading, edited, onConfirm]);
+  }, [brief, h1, h2List, h2Theses, h2Facts, faqQuestions, faqCount, faqHeading, mainKeyword, lsiKeywords, tableTopic, caseTopic, edited, onConfirm]);
 
   const faqSaveEdit = useCallback((id: string, text: string) => {
     const val = text.trim() || 'Без названия';
@@ -255,6 +300,130 @@ export function ScreenBrief({
         </div>
         <BriefHeadings h1={h1} h2List={h2List} onH1Change={handleH1Change} onChange={handleH2Change} limits={structureLimits} />
       </div>
+
+      {/* Карточка 1: Основной ключ */}
+      <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
+        <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">Основной ключ</div>
+        <input
+          value={mainKeyword}
+          onChange={e => { setMainKeyword(e.target.value); setEdited(true); }}
+          maxLength={200}
+          placeholder="Основной поисковый запрос"
+          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
+        />
+        <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">LLM выбрал этот ключ как главный. Можете изменить</div>
+      </div>
+
+      {/* Карточка 2: LSI-ключи */}
+      <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
+        <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">LSI-ключи ({lsiKeywords.length})</div>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {lsiKeywords.map((kw, i) => (
+            <span key={i} className="flex items-center gap-1 rounded-full bg-[#F5F5F5] px-2.5 py-1 text-[12px] text-[var(--color-text-primary)]">
+              {kw}
+              <button onClick={() => { setLsiKeywords(prev => prev.filter((_, j) => j !== i)); setEdited(true); }}
+                className="text-[var(--color-text-secondary)] hover:text-[var(--color-step-error)]">×</button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={newLsi}
+            onChange={e => setNewLsi(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && newLsi.trim()) {
+                setLsiKeywords(prev => [...prev, newLsi.trim()]);
+                setNewLsi('');
+                setEdited(true);
+              }
+            }}
+            placeholder="Добавить LSI-ключ..."
+            className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-1.5 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
+          />
+          <button
+            onClick={() => { if (newLsi.trim()) { setLsiKeywords(prev => [...prev, newLsi.trim()]); setNewLsi(''); setEdited(true); }}}
+            disabled={!newLsi.trim()}
+            className="rounded-[var(--radius-md)] bg-[#F5F5F5] px-3 py-1.5 text-[12px] text-[var(--color-text-secondary)] hover:bg-[#E8E8E8] disabled:opacity-40"
+          >+</button>
+        </div>
+        <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Семантически связанные слова. Enter для добавления</div>
+      </div>
+
+      {/* Карточка 3: Тезисы и факты к разделам */}
+      <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
+        <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">Тезисы и факты к разделам</div>
+        <div className="space-y-3">
+          {h2List.map(h2 => (
+            <div key={h2.id} className="rounded-[var(--radius-md)] border border-[#F0F0F0] bg-[#FAFAFA] p-3">
+              <div className="mb-1.5 text-[12px] font-medium text-[var(--color-text-primary)]">{h2.text}</div>
+              <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Тезис — о чём этот раздел:</div>
+              <input
+                value={h2Theses[h2.id] ?? ''}
+                onChange={e => { setH2Theses(prev => ({ ...prev, [h2.id]: e.target.value })); setEdited(true); }}
+                maxLength={300}
+                placeholder="Краткое описание фокуса раздела..."
+                className="mb-2 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
+              />
+              <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Факты и цифры для раздела:</div>
+              {(h2Facts[h2.id] ?? []).map((fact, fi) => (
+                <div key={fi} className="mb-1 flex items-center gap-1.5">
+                  <input
+                    value={fact}
+                    onChange={e => {
+                      setH2Facts(prev => {
+                        const facts = [...(prev[h2.id] ?? [])];
+                        facts[fi] = e.target.value;
+                        return { ...prev, [h2.id]: facts };
+                      });
+                      setEdited(true);
+                    }}
+                    className="flex-1 rounded border border-[var(--seo-input-border)] bg-white px-2 py-1 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
+                  />
+                  <button onClick={() => {
+                    setH2Facts(prev => ({ ...prev, [h2.id]: (prev[h2.id] ?? []).filter((_, j) => j !== fi) }));
+                    setEdited(true);
+                  }} className="text-[var(--color-text-secondary)] hover:text-[var(--color-step-error)] text-sm">×</button>
+                </div>
+              ))}
+              <button
+                onClick={() => { setH2Facts(prev => ({ ...prev, [h2.id]: [...(prev[h2.id] ?? []), ''] })); setEdited(true); }}
+                className="mt-1 text-[11px] text-[var(--color-accent)] hover:underline"
+              >+ Добавить факт</button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Добавьте реальные цифры и факты из вашего бизнеса — LLM использует их при написании</div>
+      </div>
+
+      {/* Карточка 4: Темы контентных блоков */}
+      {(comparisonEnabled || true) && (
+        <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
+          <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">Темы контентных блоков</div>
+          {comparisonEnabled && (
+            <div className="mb-3">
+              <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Тема блока сравнения</div>
+              <input
+                value={tableTopic}
+                onChange={e => { setTableTopic(e.target.value); setEdited(true); }}
+                maxLength={200}
+                placeholder="Что именно сравнивать..."
+                className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
+              />
+            </div>
+          )}
+          <div>
+            <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Тема личного опыта / кейса</div>
+            <input
+              value={caseTopic}
+              onChange={e => { setCaseTopic(e.target.value); setEdited(true); }}
+              maxLength={300}
+              placeholder="Опишите свой реальный кейс или опыт по теме..."
+              className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
+            />
+            <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">LLM встроит ваш опыт в текст. Чем конкретнее — тем лучше</div>
+          </div>
+        </div>
+      )}
 
       {/* FAQ блок */}
       {faqCount > 0 && (

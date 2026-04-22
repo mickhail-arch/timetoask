@@ -95,6 +95,9 @@ export async function PATCH(
   const updateData: Record<string, unknown> = {};
   if (contentText !== undefined) updateData.contentText = contentText;
   if (outputMeta !== undefined) updateData.outputMeta = outputMeta;
+  if (body.title !== undefined) updateData.title = body.title;
+  if (body.inputParams !== undefined) updateData.inputParams = body.inputParams;
+  if (body.status !== undefined) updateData.status = body.status;
 
   const updated = await prisma.toolSession.update({
     where: { id: sessionId },

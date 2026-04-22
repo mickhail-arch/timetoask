@@ -21,7 +21,8 @@ export function SessionHistory({
   onDelete,
   onNewArticle,
 }: SessionHistoryProps) {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
+  const deleteSession = sessions.find(s => s.id === deleteModalId);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -39,6 +40,7 @@ export function SessionHistory({
       case 'completed': return 'bg-[var(--color-step-done)]';
       case 'generating': return 'bg-[var(--color-step-running)]';
       case 'failed': return 'bg-[var(--color-step-error)]';
+      case 'draft': return 'bg-[var(--color-step-pending)]';
       default: return 'bg-[var(--color-step-pending)]';
     }
   };
@@ -89,6 +91,9 @@ export function SessionHistory({
                   <span className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">
                     {s.title}
                   </span>
+                  {s.status === 'draft' && (
+                    <span className="ml-1 text-[10px] text-[var(--color-text-secondary)]">Черновик</span>
+                  )}
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--color-text-secondary)]">
                   <span>{formatDate(s.createdAt)}</span>
@@ -97,25 +102,43 @@ export function SessionHistory({
                 </div>
               </div>
 
-              {confirmDeleteId === s.id ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(s.id); setConfirmDeleteId(null); }}
-                  className="shrink-0 text-[10px] text-[var(--color-step-error)]"
-                >
-                  Удалить?
-                </button>
-              ) : (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(s.id); }}
-                  className="shrink-0 text-[12px] text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  ×
-                </button>
-              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeleteModalId(s.id); }}
+                className="shrink-0 text-[12px] text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                ×
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {deleteModalId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteModalId(null)}>
+          <div className="w-[320px] rounded-[var(--radius-lg)] bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="mb-4 text-[14px] font-medium text-[var(--color-text-primary)]">
+              Вы точно хотите удалить статью?
+            </div>
+            <div className="mb-4 truncate text-[13px] text-[var(--color-text-secondary)]">
+              {deleteSession?.title}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onDelete(deleteModalId); setDeleteModalId(null); }}
+                className="flex-1 rounded-[var(--radius-md)] bg-[#DC2626] py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#B91C1C]"
+              >
+                Удалить
+              </button>
+              <button
+                onClick={() => setDeleteModalId(null)}
+                className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white py-2 text-[13px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]"
+              >
+                Оставить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

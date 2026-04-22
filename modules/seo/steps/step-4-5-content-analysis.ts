@@ -1,8 +1,6 @@
 // modules/seo/steps/step-4-5-content-analysis.ts — Анализ стиля + фактчек (1 вызов)
 import type { StepResult, PipelineContext } from '../types';
-import { getStepModel } from '../config';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
-import type { ToolConfig } from '@/core/types';
 
 interface WritingIssue {
   sentence: string;
@@ -58,8 +56,12 @@ export async function executeContentAnalysis(
 ): Promise<StepResult> {
   const start = Date.now();
 
-  const config = ctx.config as ToolConfig | null;
-  const model = getStepModel(config, 'revisions', 'anthropic/claude-opus-4.6');
+  const analysisModelChoice = (ctx.input.analysis_model as string) ?? 'sonnet';
+  const ANALYSIS_MODEL_MAP: Record<string, string> = {
+    sonnet: 'anthropic/claude-sonnet-4.6',
+    opus47: 'anthropic/claude-opus-4-7',
+  };
+  const model = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
 
   const draftData = ctx.data.draft as Record<string, unknown>
     ?? ctx.data.step_3 as Record<string, unknown>

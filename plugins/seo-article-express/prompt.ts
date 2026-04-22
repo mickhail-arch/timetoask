@@ -288,12 +288,18 @@ const TONE_MAP: Record<string, string> = {
     'Максимально простой и понятный язык. 6-12 слов. Обращение: «вы».',
 };
 
-function buildToneBlock(tone: string): string {
+function buildToneBlock(tone: string, toneComment?: string): string {
   const desc =
     TONE_MAP[tone] ??
     `Стиль текста: ${tone}. Следуй этому описанию стиля.`;
-  return `=== СТИЛЬ ТЕКСТА ===
-${desc}`;
+
+  let block = `=== СТИЛЬ ТЕКСТА ===\n${desc}`;
+
+  if (toneComment) {
+    block += `\n\nДополнительные пожелания автора к стилю:\n${toneComment}\n\nЭти пожелания ДОПОЛНЯЮТ базовый тон, а не заменяют его. Совмести базовый стиль с пожеланиями. Если пожелания противоречат базовому тону — приоритет у пожеланий.`;
+  }
+
+  return block;
 }
 
 const AGE_MAP: Record<string, string> = {
@@ -514,14 +520,14 @@ CTA должен быть естественным продолжением за
   return block;
 }
 
-function buildExternalLinksBlock(
+function buildInternalLinksBlock(
   links: Array<{ url: string; anchor: string }>,
 ): string {
   const linkLines = links
     .map((l) => `- ${l.url} → анкор: "${l.anchor}"`)
     .join('\n');
 
-  return `=== ВНЕШНИЕ ССЫЛКИ (ПЕРЕЛИНКОВКА) ===
+  return `=== ПЕРЕЛИНКОВКА (ссылки на свои страницы) ===
 Ссылки для вставки:
 ${linkLines}
 
@@ -544,6 +550,30 @@ ${linkLines}
 - Ссылка бренда считается в общий лимит.
 - Минимум 500 символов между двумя ссылками. Две ссылки в одном абзаце — запрещено.
 - Распределяй ссылки равномерно по тексту, не скапливай в конце.`;
+}
+
+function buildSourceLinksBlock(
+  links: Array<{ url: string; anchor: string }>,
+  charCount: number,
+): string {
+  const linkLines = links
+    .map((l) => `- ${l.url} → анкор: "${l.anchor}"`)
+    .join('\n');
+
+  return `=== ССЫЛКИ НА ИСТОЧНИКИ ===
+Ссылки на авторитетные внешние ресурсы:
+${linkLines}
+
+Назначение: каждая ссылка подкрепляет факт, цифру или утверждение в тексте. Ставится рядом с конкретным фактом как подтверждение.
+
+Правила:
+- Формат: <a href="URL" target="_blank">анкор</a>
+- Ссылка ставится в конце предложения с фактом или данными, которые она подтверждает.
+- Анкор — название источника или краткое описание: "по данным РБК", "исследование Data Insight".
+- Не ставить ссылку на источник в предложении без конкретных данных.
+- Не в FAQ, не в CTA, не в блоке «Кратко».
+- Минимум 800 символов между двумя ссылками на источники.
+- Источники не дублируют перелинковку — это разные типы ссылок.`;
 }
 
 function buildForbiddenWordsBlock(forbiddenWords: string): string {
@@ -649,7 +679,7 @@ function buildIntroTldrBlock(profile: ArticleProfile): string {
 - Первое предложение — главный ключ вписан естественно, не в лоб.
 - Второе-третье предложение — проблема читателя, зачем он пришёл.
 - Последнее предложение — что конкретно узнает из статьи. БЕЗ фразы «в этой статье мы расскажем».
-- Максимум 1 главный ключ + 1 LSI на весь блок введения + TL;DR.
+- Максимум 1 главный ключ + 1 LSI на весь блок введения + блок «Кратко».
 - Запрещено: общие фразы («все знают что...»), вода («данная тема очень актуальна»), повтор H1 своими словами.
 
 БЛОК «КРАТКО» (~${profile.tldr.chars} символов):
@@ -905,6 +935,7 @@ export function buildSystemPrompt(
   const faqCount = (input.faq_count as number) ?? 5;
   const intent = (input.intent as string) ?? 'informational';
   const tone = (input.tone_of_voice as string) ?? 'expert';
+  const toneComment = (input.tone_comment as string) ?? '';
   const geo = (input.geo_location as string) ?? '';
   const brand = (input.brand as string) ?? '';
   const brandUrl = input.brand_url as string | undefined;
@@ -914,8 +945,8 @@ export function buildSystemPrompt(
   const keywords = (input.keywords as string) ?? '';
   const forbiddenWords = (input.forbidden_words as string) ?? '';
   const legalRestrictions = (input.legal_restrictions as string) ?? '';
-  const extLinks =
-    (input.external_links as Array<{ url: string; anchor: string }>) ?? [];
+  const internalLinks = (input.internal_links as Array<{ url: string; anchor: string }>) ?? [];
+  const sourceLinks = (input.source_links as Array<{ url: string; anchor: string }>) ?? [];
   const audience = input.target_audience as
     | { gender: string; age: string[] }
     | undefined;
@@ -989,7 +1020,7 @@ ${cta ? '10. CTA (после FAQ, отдельный абзац, не счита
 
   // 7. Стиль и аудитория
   blocks.push(buildIntentBlock(intent));
-  blocks.push(buildToneBlock(tone));
+  blocks.push(buildToneBlock(tone, toneComment || undefined));
 
   const audienceBlock = buildAudienceBlock(gender, ages);
   if (audienceBlock) blocks.push(audienceBlock);
@@ -1023,11 +1054,28 @@ ${cta ? '10. CTA (после FAQ, отдельный абзац, не счита
     blocks.push(buildCtaBlock(cta, intent, ctaUrl));
   }
 
-  const allLinks: Array<{ url: string; anchor: string }> = [];
-  if (brand && brandUrl) allLinks.push({ url: brandUrl, anchor: brand });
-  allLinks.push(...extLinks);
-  if (allLinks.length > 0) {
-    blocks.push(buildExternalLinksBlock(allLinks));
+  // Перелинковка (свои страницы + бренд)
+  const intLinks: Array<{ url: string; anchor: string }> = [];
+  if (brand && brandUrl) intLinks.push({ url: brandUrl, anchor: brand });
+  intLinks.push(...internalLinks);
+  if (intLinks.length > 0) {
+    blocks.push(buildInternalLinksBlock(intLinks));
+  }
+
+  // Ссылки на источники
+  if (sourceLinks.length > 0) {
+    blocks.push(buildSourceLinksBlock(sourceLinks, charCount));
+  }
+
+  // Общий лимит ссылок
+  const totalLinkCount = intLinks.length + sourceLinks.length;
+  const maxTotalLinks = Math.floor(charCount / 2000);
+  if (totalLinkCount > 0) {
+    blocks.push(`=== ОБЩИЙ ЛИМИТ ССЫЛОК ===
+В статье суммарно ${totalLinkCount} ссылок (перелинковка: ${intLinks.length}, источники: ${sourceLinks.length}${brand && brandUrl ? ', включая бренд' : ''}).
+Максимум для ${charCount} символов: ${maxTotalLinks} ссылок (1 на 2000 символов).
+${totalLinkCount > maxTotalLinks ? `ВНИМАНИЕ: превышен лимит. Расставь только ${maxTotalLinks} самых релевантных, остальные пропусти.` : 'Лимит не превышен.'}
+Правило: между любыми двумя ссылками (независимо от типа) минимум 500 символов. Две ссылки в одном абзаце — запрещено.`);
   }
 
   // 12. Ограничения

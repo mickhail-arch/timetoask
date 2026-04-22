@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ScreenInput } from '@/components/seo-article/ScreenInput';
 import { ScreenProgress } from '@/components/seo-article/ScreenProgress';
 import type { ProgressStep } from '@/components/seo-article/ScreenProgress';
@@ -64,6 +64,8 @@ export function SeoArticleExpressClient() {
   const [savedImages, setSavedImages] = useState<Record<string, unknown> | null>(null);
   const [inputKey, setInputKey] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
+  const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession } = useSessionHistory('seo-article-express');
 
   useEffect(() => {
@@ -120,36 +122,130 @@ export function SeoArticleExpressClient() {
           warnings: flatResult.warnings,
         };
 
-        fetch('/api/sessions/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            toolSlug: 'seo-article-express',
-            title,
-            inputParams,
-            outputMeta: meta,
-            contentText: flatResult.article_html,
-            tokensUsed: calculatedPrice,
-            durationSec: Math.round((Date.now() - startTime) / 1000),
-          }),
-        }).then(async (res) => {
-          if (res.ok) {
-            const json = await res.json();
-            setActiveSessionId(json.data?.id ?? null);
+        const sessionIdToUpdate = activeSessionId ?? draftSessionId;
+        if (sessionIdToUpdate) {
+          fetch(`/api/sessions/${sessionIdToUpdate}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contentText: flatResult.article_html,
+              outputMeta: meta,
+              status: 'completed',
+            }),
+          }).then(() => {
+            setDraftSessionId(null);
             refreshSessions();
-          }
-        });
+          });
+        } else {
+          fetch('/api/sessions/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toolSlug: 'seo-article-express',
+              title,
+              inputParams,
+              outputMeta: meta,
+              contentText: flatResult.article_html,
+              tokensUsed: calculatedPrice,
+              durationSec: Math.round((Date.now() - startTime) / 1000),
+            }),
+          }).then(async (res) => {
+            if (res.ok) {
+              const json = await res.json();
+              setActiveSessionId(json.data?.id ?? null);
+              refreshSessions();
+            }
+          });
+        }
       } catch (err) {
         console.error('Failed to save session:', err);
       }
     }
   }, [jobState, screen]);
 
+  const handleQueryChange = useCallback((query: string) => {
+    const trimmed = query.trim();
+
+    if (!trimmed && draftSessionId) {
+      deleteSession(draftSessionId);
+      setDraftSessionId(null);
+      return;
+    }
+
+    if (!trimmed) return;
+
+    if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current);
+    draftDebounceRef.current = setTimeout(async () => {
+      if (draftSessionId) {
+        await fetch(`/api/sessions/${draftSessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: trimmed }),
+        });
+        refreshSessions();
+      } else {
+        try {
+          const res = await fetch('/api/sessions/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toolSlug: 'seo-article-express',
+              title: trimmed,
+              inputParams: {},
+              outputMeta: {},
+              contentText: null,
+              tokensUsed: 0,
+              durationSec: 0,
+              status: 'draft',
+            }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            setDraftSessionId(json.data?.id ?? null);
+            setActiveSessionId(json.data?.id ?? null);
+            refreshSessions();
+          }
+        } catch {}
+      }
+    }, 800);
+  }, [draftSessionId, deleteSession, refreshSessions]);
+
   const handleSubmit = useCallback(async (formInput: Record<string, unknown>) => {
     setInput(formInput);
     setSubmitError(null);
     setStartTime(Date.now());
     setScreen('progress_analysis');
+
+    const title = (formInput.target_query as string) ?? 'Без названия';
+    if (draftSessionId) {
+      fetch(`/api/sessions/${draftSessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputParams: formInput, status: 'generating' }),
+      }).then(() => refreshSessions());
+    } else if (title.trim()) {
+      try {
+        const draftRes = await fetch('/api/sessions/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            toolSlug: 'seo-article-express',
+            title,
+            inputParams: formInput,
+            outputMeta: {},
+            contentText: null,
+            tokensUsed: 0,
+            durationSec: 0,
+            status: 'generating',
+          }),
+        });
+        if (draftRes.ok) {
+          const draftJson = await draftRes.json();
+          setActiveSessionId(draftJson.data?.id ?? null);
+          refreshSessions();
+        }
+      } catch {}
+    }
 
     try {
       const res = await fetch('/api/tools/seo-article-express/execute', {
@@ -194,10 +290,17 @@ export function SeoArticleExpressClient() {
 
   const handleSelectSession = useCallback(async (sessionId: string) => {
     const data = await loadSession(sessionId);
-    if (!data || !data.contentText) return;
+    if (!data) return;
 
     setActiveSessionId(sessionId);
     setInput(data.inputParams ?? {});
+
+    if (!data.contentText) {
+      setScreen('input');
+      setResult(null);
+      setInputKey(k => k + 1);
+      return;
+    }
 
     const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
     setResult({
@@ -224,6 +327,7 @@ export function SeoArticleExpressClient() {
 
   const handleNewFromHistory = useCallback(() => {
     setActiveSessionId(null);
+    setDraftSessionId(null);
     setScreen('input');
     setResult(null);
     setJobId(null);
@@ -291,7 +395,7 @@ export function SeoArticleExpressClient() {
                   {submitError}
                 </div>
               )}
-              <ScreenInput key={inputKey} onSubmit={handleSubmit} initialValues={input} />
+              <ScreenInput key={inputKey} onSubmit={handleSubmit} initialValues={input} onQueryChange={handleQueryChange} />
             </>
           )}
 
@@ -311,8 +415,9 @@ export function SeoArticleExpressClient() {
               brief={brief as any}
               charCount={(input.target_char_count as number) ?? 8000}
               imageCount={(input.image_count as number) ?? 0}
-              faqCount={(input.faq_count as number) ?? 5}
+              faqCount={(input.faq_count as number) ?? 0}
               calculatedPrice={calculatedPrice}
+              comparisonEnabled={(input.comparison_enabled as boolean) ?? false}
               onConfirm={handleConfirm as any}
               onBack={handleBack}
             />

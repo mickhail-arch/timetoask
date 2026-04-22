@@ -8,6 +8,7 @@ export interface PricingConfig {
   perFaq: number;
   charBlockSize: number;
   sonnetMultiplier: number;
+  geminiMultiplier: number;
 }
 
 const DEFAULT_PRICING: PricingConfig = {
@@ -17,6 +18,7 @@ const DEFAULT_PRICING: PricingConfig = {
   perFaq: 5,
   charBlockSize: 1000,
   sonnetMultiplier: 0.35,
+  geminiMultiplier: 0.25,
 };
 
 /**
@@ -29,25 +31,30 @@ export function calculatePrice(
   imageCount: number,
   faqCount: number,
   config?: Partial<PricingConfig> | null,
-  aiModel: string = 'opus',
+  aiModel: string = 'opus47',
+  analysisModel: string = 'sonnet',
 ): PriceBreakdown {
   const c = { ...DEFAULT_PRICING, ...config };
 
   const chars = Math.ceil(charCount / c.charBlockSize) * c.perCharBlock;
   const images = imageCount * c.perImage;
   const faq = faqCount * c.perFaq;
-  const total = c.base + chars + images + faq;
+  const baseCost = c.base + chars + images + faq;
 
-  const multiplier = aiModel === 'sonnet' ? c.sonnetMultiplier : 1;
-  const finalTotal = Math.round(total * multiplier);
+  const draftMultiplier = aiModel === 'gemini' ? c.geminiMultiplier
+    : aiModel === 'sonnet' ? c.sonnetMultiplier
+    : 1;
+
+  const analysisExtra = analysisModel === 'opus47' ? 0.4 : 0;
+  const total = Math.round(baseCost * draftMultiplier * (1 + analysisExtra));
 
   return {
     base: c.base,
     chars,
     images,
     faq,
-    multiplier,
-    totalBeforeMultiplier: total,
-    total: finalTotal,
+    multiplier: draftMultiplier,
+    totalBeforeMultiplier: baseCost,
+    total,
   };
 }

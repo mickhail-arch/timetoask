@@ -10,12 +10,14 @@ export async function executeDraft(
 ): Promise<StepResult> {
   const start = Date.now();
 
-  const aiModelChoice = (ctx.input.ai_model as string) ?? 'opus';
-  const MODEL_MAP: Record<string, string> = {
+  const aiModelChoice = (ctx.input.ai_model as string) ?? 'opus47';
+  const DRAFT_MODEL_MAP: Record<string, string> = {
+    gemini: 'google/gemini-3.1-pro-preview',
     sonnet: 'anthropic/claude-sonnet-4.6',
-    opus: 'anthropic/claude-opus-4.6',
+    opus47: 'anthropic/claude-opus-4-7',
   };
-  const model = MODEL_MAP[aiModelChoice] ?? MODEL_MAP.opus;
+  const model = DRAFT_MODEL_MAP[aiModelChoice] ?? DRAFT_MODEL_MAP.opus47;
+  const isGemini = model.includes('gemini');
 
   const brief = (ctx.data.confirmation as Record<string, unknown>)?.brief as BriefData
     ?? (ctx.data.brief as Record<string, unknown>)?.brief as BriefData;
@@ -27,9 +29,18 @@ export async function executeDraft(
 
   const builtPrompt = buildSystemPrompt(ctx.input, brief);
   const h2Count = brief.h2_list?.length || Math.round(charCount / 2000);
-  const maxOutputTokens = Math.max(4000, Math.ceil(charCount * 0.7));
+  const maxOutputTokens = isGemini
+    ? Math.max(8000, Math.ceil(charCount * 1.2))
+    : Math.max(4000, Math.ceil(charCount * 0.7));
 
-  const userMessage = `Напиши статью по заданным параметрам. Все правила — в системном промпте.
+  const userMessage = isGemini
+    ? `Напиши статью по заданным параметрам. Все правила — в системном промпте.
+
+Тема: ${targetQuery}
+Ключевые слова: ${keywords}
+
+КРИТИЧНО ПО ОБЪЁМУ: статья должна быть ровно ${charCount} символов чистого текста. Это абсолютное требование. Пиши каждый H2-раздел развёрнуто — минимум ${Math.round(charCount / h2Count)} символов на раздел. Статья короче ${Math.round(charCount * 0.93)} символов — БРАК.`
+    : `Напиши статью по заданным параметрам. Все правила — в системном промпте.
 
 Тема: ${targetQuery}
 Ключевые слова: ${keywords}`;
@@ -68,6 +79,31 @@ export async function executeDraft(
       });
       articleHtml = articleHtml.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
+      // Gemini часто выдаёт текст без <p> тегов — оборачиваем голые строки
+      // Проверяем: если в тексте мало <p> тегов относительно длины — это Gemini-формат
+      const pTagCount = (articleHtml.match(/<p[\s>]/gi) ?? []).length;
+      const rawTextLength = articleHtml.replace(/<[^>]*>/g, '').length;
+      const hasFewParagraphs = pTagCount < Math.floor(rawTextLength / 1000);
+
+      if (hasFewParagraphs) {
+        // Разбиваем по двойным переносам строк, оборачиваем в <p>
+        // Но не трогаем строки, которые уже начинаются с HTML-тега
+        articleHtml = articleHtml
+          .split(/\n{2,}/)
+          .map(block => {
+            const trimmed = block.trim();
+            if (!trimmed) return '';
+            // Уже обёрнут в HTML-тег — не трогаем
+            if (/^<(h[1-6]|p|ul|ol|li|blockquote|div|table|nav|img|a\s)/i.test(trimmed)) return trimmed;
+            // Голый текст — оборачиваем в <p>
+            return `<p>${trimmed}</p>`;
+          })
+          .filter(Boolean)
+          .join('\n');
+
+        console.info(`[step-3-draft] Auto-wrapped ${articleHtml.match(/<p>/g)?.length ?? 0} paragraphs (Gemini format detected)`);
+      }
+
       // Конвертируем Markdown-артефакты в HTML если модель выдала смешанный формат
       // 1. Нумерованные списки вида "1. **Заголовок.** Текст" (Opus часто так делает)
       articleHtml = articleHtml.replace(/^(\d+)\.\s+\*\*([^*]+)\*\*\s*([\s\S]*?)(?=\n\d+\.\s+\*\*|\n*$)/gm, '<p><strong>$2</strong> $3</p>');
@@ -96,6 +132,11 @@ export async function executeDraft(
       articleHtml = articleHtml.replace(/<p><strong>Кратко\s*\/ TL;?DR:?<\/strong><\/p>/gi, '<p><strong>Кратко</strong></p>');
       articleHtml = articleHtml.replace(/<h2[^>]*>\s*Кратко.*?<\/h2>/gi, '<p><strong>Кратко</strong></p>');
       articleHtml = articleHtml.replace(/<h3[^>]*>\s*Кратко.*?<\/h3>/gi, '<p><strong>Кратко</strong></p>');
+      // Агрессивная зачистка оставшихся вариантов TL;DR вне тегов <strong>
+      articleHtml = articleHtml.replace(/\s*\(TL;?DR\)/gi, '');
+      articleHtml = articleHtml.replace(/\s*\(TLDR\)/gi, '');
+      articleHtml = articleHtml.replace(/\bTL;?DR:?\s*/gi, '');
+      articleHtml = articleHtml.replace(/\bTLDR:?\s*/gi, '');
 
       const currentTextLength = articleHtml.replace(/<[^>]*>/g, '').length;
       lastTextLength = currentTextLength;
@@ -138,7 +179,8 @@ export async function executeDraft(
       }
 
       // Если текст в допустимом диапазоне (85%-115%) — принимаем
-      if (currentTextLength >= charCount * 0.85) {
+      const acceptThreshold = isGemini ? 0.90 : 0.85;
+      if (currentTextLength >= charCount * acceptThreshold) {
         break;
       }
 
