@@ -16,33 +16,22 @@ async function saveImageToDisk(jobId: string, markerNum: string, base64: string)
   return `/uploads/images/${fileName}`;
 }
 
-/**
- * Для каждого маркера [IMAGE_N] находит ближайший H2 после маркера
- * и первый абзац этого H2-блока. Возвращает контекст для промпта.
- */
-function extractMarkerContext(
-  html: string,
-  markerNum: string,
-): string {
-  const markerPos = html.indexOf(`[IMAGE_${markerNum}]`);
+function extractMarkerContext(html: string, markerNum: string): string {
+  const markerTag = `[IMAGE_${markerNum}]`;
+  const markerPos = html.indexOf(markerTag);
   if (markerPos < 0) return '';
 
-  const afterMarker = html.slice(markerPos);
-  const h2Match = afterMarker.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
-  if (!h2Match) return '';
+  const before = html.slice(Math.max(0, markerPos - 2000), markerPos)
+    .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(-600);
 
-  const h2Text = h2Match[1].replace(/<[^>]*>/g, '').trim();
+  const after = html.slice(markerPos + markerTag.length, markerPos + markerTag.length + 2000)
+    .replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
 
-  const h2End = afterMarker.indexOf('</h2>');
-  if (h2End < 0) return h2Text;
+  const beforeMarker = html.slice(0, markerPos);
+  const lastH2 = beforeMarker.match(/<h2[^>]*>([\s\S]*?)<\/h2>/gi);
+  const h2Text = lastH2 ? lastH2[lastH2.length - 1].replace(/<[^>]*>/g, '').trim() : '';
 
-  const afterH2 = afterMarker.slice(h2End);
-  const pMatch = afterH2.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
-  const pText = pMatch ? pMatch[1].replace(/<[^>]*>/g, '').trim() : '';
-
-  return pText
-    ? `Section: ${h2Text}. Content: ${pText.slice(0, 300)}`
-    : `Section: ${h2Text}`;
+  return `Section heading: ${h2Text}\nContext before image: ${before}\nContext after image: ${after}`;
 }
 
 /**
@@ -74,6 +63,17 @@ export async function executeImages(
     ?? {};
   let articleHtml = (revisionsData.article_html as string) ?? '';
 
+  // Получить комментарий к стилю изображений
+  const imageComment = (ctx.input.image_comment as string) ?? '';
+  const commentSuffix = imageComment ? `\n\nДополнительные пожелания к стилю изображений: ${imageComment}` : '';
+
+  const imageTextOverlay = (ctx.input.image_text_overlay as boolean) ?? false;
+  const imageAspect = (ctx.input.image_aspect as string) ?? '16:9';
+  const imagePalette = (ctx.input.image_palette as string) ?? 'warm';
+  const imagePaletteHex = (ctx.input.image_palette_hex as string) ?? '';
+  const imageMood = (ctx.input.image_mood as string) ?? 'professional';
+  const imageExclude = (ctx.input.image_exclude as string) ?? '';
+
   // Получить стили изображений
   const rawStyle = ctx.input.image_style;
   const imageStyles: string[] = Array.isArray(rawStyle)
@@ -91,6 +91,36 @@ export async function executeImages(
   const styleEN = imageStyles
     .map(s => styleMap[s.toLowerCase()] ?? s)
     .join(', ');
+
+  const paletteMap: Record<string, string> = {
+    warm: 'warm color palette: amber, golden, terracotta, soft orange tones',
+    cold: 'cool color palette: blue, teal, silver, icy tones',
+    pastel: 'pastel color palette: soft pink, light blue, lavender, mint',
+    vibrant: 'vibrant high-contrast palette: saturated colors, bold contrasts',
+    monochrome: 'monochrome palette: black, white, and shades of gray only',
+    custom: imagePaletteHex ? `specific brand colors: ${imagePaletteHex}` : 'neutral balanced palette',
+  };
+  const paletteEN = paletteMap[imagePalette] ?? paletteMap.warm;
+
+  const moodMap: Record<string, string> = {
+    professional: 'professional and clean atmosphere, corporate feel, sharp focus',
+    cozy: 'warm and cozy atmosphere, soft lighting, comfort, homely feel',
+    tech: 'futuristic technology atmosphere, neon accents, digital elements, sci-fi feel',
+    nature: 'natural organic atmosphere, green tones, sunlight, outdoors',
+    medical: 'clean medical atmosphere, soft calming colors, clinical precision, trustworthy',
+  };
+  const moodEN = moodMap[imageMood] ?? moodMap.professional;
+
+  const excludeEN = imageExclude
+    ? `MUST NOT include: ${imageExclude}. `
+    : 'No people faces (silhouettes, back views, or hands only). ';
+
+  const sizeMap: Record<string, string> = {
+    '16:9': '1792x1024',
+    '1:1': '1024x1024',
+    '9:16': '1024x1792',
+  };
+  const imageSize = sizeMap[imageAspect] ?? '1792x1024';
 
   // Найти маркеры [IMAGE_N] и описания [IMAGE_N_DESC: ...]
   const markerRegex = /\[IMAGE_(\d+)\]/g;
@@ -138,7 +168,7 @@ export async function executeImages(
           model: promptModel,
           systemPrompt:
             'Describe a suitable visual scene for an article illustration in 1-2 sentences in English. The scene must match the article section topic. Output ONLY the scene description, nothing else.',
-          userMessage: `Article topic: ${targetQuery}\nSection: ${nearestH2 || targetQuery}\nImage ${num} of ${imageCount}. Style: ${styleEN}. Describe a unique, relevant scene that visually represents the section topic.`,
+          userMessage: `Article topic: ${targetQuery}\nSection: ${nearestH2 || targetQuery}\nImage ${num} of ${imageCount}. Style: ${styleEN}. Describe a unique, relevant scene that visually represents the section topic.${commentSuffix}`,
         });
         descriptions[num] = desc.trim();
       } catch {
@@ -171,26 +201,30 @@ export async function executeImages(
         systemPrompt: `Generate a detailed image generation prompt in English for an AI image generator. Output ONLY the prompt text, nothing else. Max 150 words.
 
 MANDATORY STYLE: ${styleEN}
-This style MUST be the dominant visual characteristic of the image. Every element must follow this style.
+COLOR PALETTE: ${paletteEN}
+MOOD: ${moodEN}
+${excludeEN}
+${imageTextOverlay ? `The image MUST contain readable text overlay: the section heading will be composited on top, so leave a clean area (top or bottom 20%) with low detail for text placement.` : 'No text, watermarks, logos, or UI elements in the image.'}
 
 Rules:
 - Start the prompt with the style: "${styleEN}".
-- The image MUST visually represent the SPECIFIC topic of the article section, not a generic concept.
-- Include concrete objects, specific details, composition, lighting, colors, perspective.
-- Image ${parseInt(markerNum)} of ${imageCount}: ${index === 0 ? 'Hero/cover image — wide establishing shot showing the main subject.' : 'Section illustration — focused on a specific detail or process from this section.'}
-- Each image must be visually DIFFERENT: vary angle, color palette, objects, composition.
-- No text, watermarks, logos, or UI elements.
-- No people faces (silhouettes, back views, or hands only).`,
+- The image MUST visually represent the SPECIFIC topic described in the context below.
+- Include concrete objects, specific details, composition, lighting that match the COLOR PALETTE and MOOD.
+- Image ${parseInt(markerNum)} of ${imageCount}: ${index === 0 ? 'Hero/cover image — wide establishing shot.' : 'Section illustration — focused on specific detail.'}
+- Each image must be visually DIFFERENT: vary angle, color shade, objects, composition.`,
         userMessage: `Scene description: ${desc}
 Style: ${styleEN}
-Topic: ${targetQuery}${sectionContext ? `\nArticle section context: ${sectionContext}` : ''}`,
+Palette: ${paletteEN}
+Mood: ${moodEN}
+Topic: ${targetQuery}
+${sectionContext ? `\nFull article context around this image:\n${sectionContext}` : ''}${commentSuffix}`,
       });
 
       // 6.2: Seedream генерирует картинку
       const imageResult = await generateImage({
         model: genModel,
         prompt: `${styleEN}. ${detailedPrompt.trim()}`,
-        size: '1792x1024',
+        size: imageSize,
       });
 
       // 6.3: Alt-тег — отдельный запрос к LLM на русском, 50-80 символов
@@ -265,6 +299,17 @@ Examples:
           src = '';
         }
         altTexts.push(img.alt);
+        if (imageTextOverlay) {
+          const h2Matches = [...articleHtml.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+          const h2Index = Math.min(parseInt(img.marker) - 1, h2Matches.length - 1);
+          const overlayText = h2Index >= 0 && h2Matches[h2Index]
+            ? h2Matches[h2Index][1].replace(/<[^>]*>/g, '').trim()
+            : targetQuery;
+          return `<figure style="position:relative;overflow:hidden;">
+    <img src="${src}" alt="${img.alt}" loading="lazy" style="width:100%;display:block;">
+    <div style="position:absolute;bottom:0;left:0;right:0;padding:16px 20px;background:linear-gradient(transparent,rgba(0,0,0,0.7));color:#fff;font-size:18px;font-weight:600;line-height:1.3;">${overlayText}</div>
+  </figure>`;
+        }
         return `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
       };
 
@@ -335,7 +380,20 @@ Examples:
         src = '';
       }
 
-      const figureTag = `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
+      let figureTag: string;
+      if (imageTextOverlay) {
+        const beforeMarkerHtml = articleHtml.slice(0, articleHtml.indexOf(`[IMAGE_${img.marker}]`));
+        const h2Matches = [...beforeMarkerHtml.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+        const overlayText = h2Matches.length > 0
+          ? h2Matches[h2Matches.length - 1][1].replace(/<[^>]*>/g, '').trim()
+          : targetQuery;
+        figureTag = `<figure style="position:relative;overflow:hidden;">
+    <img src="${src}" alt="${img.alt}" loading="lazy" style="width:100%;display:block;">
+    <div style="position:absolute;bottom:0;left:0;right:0;padding:16px 20px;background:linear-gradient(transparent,rgba(0,0,0,0.7));color:#fff;font-size:18px;font-weight:600;line-height:1.3;">${overlayText}</div>
+  </figure>`;
+      } else {
+        figureTag = `<figure><img src="${src}" alt="${img.alt}" loading="lazy"></figure>`;
+      }
 
       articleHtml = articleHtml.replace(
         new RegExp(`\\[IMAGE_${img.marker}\\]`, 'g'),

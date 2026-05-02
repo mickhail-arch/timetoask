@@ -11,13 +11,15 @@ import type {
 } from './types';
 import { calculatePrice } from './pricing';
 import type { PricingConfig } from './pricing';
+import { finalizeTokens, rollbackTokens } from '@/modules/billing/billing.service';
 
 const REDIS_TTL = 7200; // 2 часа
 const redisKey = (jobId: string) => `seo:job:${jobId}`;
 
 const STEP_PROGRESS: Record<string, [number, number]> = {
   'moderation': [0, 5],
-  'brief': [5, 15],
+  'research': [5, 10],
+  'brief': [10, 15],
   'confirmation': [15, 15],
   'moderation_headings': [15, 20],
   'draft': [20, 50],
@@ -29,7 +31,7 @@ const STEP_PROGRESS: Record<string, [number, number]> = {
   'assembly': [97, 100],
 };
 
-async function saveRedisState(jobId: string, state: Partial<PipelineState>): Promise<void> {
+export async function saveRedisState(jobId: string, state: Partial<PipelineState>): Promise<void> {
   await redis.setex(redisKey(jobId), REDIS_TTL, JSON.stringify(state));
 }
 
@@ -67,6 +69,7 @@ export async function runPipeline(
   input: Record<string, unknown>,
   config: Record<string, unknown> | null,
   steps: StepDefinition[],
+  analysisCost: number,
 ): Promise<void> {
   const ctx: PipelineContext = {
     jobId,
@@ -129,6 +132,7 @@ export async function runPipeline(
           calculatedPrice: price.total,
           priceBreakdown: price,
           originalInput: input,
+          competitorMeta: ctx.data.competitorMeta ?? [],
         });
 
         await updateJobStep(jobId, {
@@ -138,6 +142,10 @@ export async function runPipeline(
             calculatedPrice: price.total,
           } as unknown as Prisma.JsonObject,
         });
+
+        await prisma.$transaction(async (tx) => {
+          await finalizeTokens(userId, analysisCost, tx);
+        }, { isolationLevel: 'Serializable' });
 
         return;
       }
@@ -175,6 +183,12 @@ export async function runPipeline(
         endedAt: new Date(),
       });
 
+      if (i <= 2) {
+        await prisma.$transaction(async (tx) => {
+          await rollbackTokens(userId, analysisCost, tx);
+        }, { isolationLevel: 'Serializable' });
+      }
+
       return;
     }
   }
@@ -207,6 +221,7 @@ export async function resumePipeline(
   config: Record<string, unknown> | null,
   steps: StepDefinition[],
   resumeFromIndex: number,
+  remainingCost: number,
 ): Promise<void> {
   const state = await getRedisState(jobId);
   if (!state) throw new Error('Job state not found in Redis');
@@ -280,9 +295,17 @@ export async function resumePipeline(
         endedAt: new Date(),
       });
 
+      await prisma.$transaction(async (tx) => {
+        await rollbackTokens(userId, remainingCost, tx);
+      }, { isolationLevel: 'Serializable' });
+
       return;
     }
   }
+
+  await prisma.$transaction(async (tx) => {
+    await finalizeTokens(userId, remainingCost, tx);
+  }, { isolationLevel: 'Serializable' });
 
   await saveRedisState(jobId, {
     jobId,
@@ -313,6 +336,7 @@ export async function regeneratePipeline(
   savedImages: Record<string, unknown> | null,
   config: Record<string, unknown> | null,
   steps: StepDefinition[],
+  regenerateCost: number,
 ): Promise<void> {
   const state = await getRedisState(jobId);
   if (!state) throw new Error('Job state not found in Redis');
@@ -385,9 +409,16 @@ export async function regeneratePipeline(
         error: `Regenerate step "${step.name}" failed: ${message}`,
         endedAt: new Date(),
       });
+      await prisma.$transaction(async (tx) => {
+        await rollbackTokens(userId, regenerateCost, tx);
+      }, { isolationLevel: 'Serializable' });
       return;
     }
   }
+
+  await prisma.$transaction(async (tx) => {
+    await finalizeTokens(userId, regenerateCost, tx);
+  }, { isolationLevel: 'Serializable' });
 
   await saveRedisState(jobId, {
     jobId,

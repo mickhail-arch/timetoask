@@ -1,6 +1,7 @@
  // modules/seo/steps/index.ts
 
 import type { StepDefinition } from '../types';
+import { executeResearch } from './step-0-research';
 import { executeModeration } from './step-1-1-moderation';
 import { executeBrief } from './step-1-2-brief';
 import { executeModerationHeadings } from './step-2-5-moderation-headings';
@@ -25,6 +26,11 @@ export const seoExpressSteps: StepDefinition[] = [
     name: 'moderation',
     displayName: 'Модерация',
     execute: executeModeration,
+  },
+  {
+    name: 'research',
+    displayName: 'Исследование',
+    execute: executeResearch,
   },
   {
     name: 'brief',
@@ -74,5 +80,7 @@ export const seoExpressSteps: StepDefinition[] = [
   },
 ];
 
+export { executeResearch };
+
 /** Индекс шага, с которого продолжать после confirmation (moderation_headings) */
-export const RESUME_FROM_INDEX = 2;
+export const RESUME_FROM_INDEX = 3;

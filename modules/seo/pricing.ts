@@ -9,6 +9,7 @@ export interface PricingConfig {
   charBlockSize: number;
   sonnetMultiplier: number;
   geminiMultiplier: number;
+  analysisShare: number;
 }
 
 const DEFAULT_PRICING: PricingConfig = {
@@ -19,6 +20,7 @@ const DEFAULT_PRICING: PricingConfig = {
   charBlockSize: 1000,
   sonnetMultiplier: 0.35,
   geminiMultiplier: 0.25,
+  analysisShare: 0.15,
 };
 
 /**
@@ -47,6 +49,7 @@ export function calculatePrice(
 
   const analysisExtra = analysisModel === 'opus47' ? 0.4 : 0;
   const total = Math.round(baseCost * draftMultiplier * (1 + analysisExtra));
+  const analysisCost = Math.round(total * c.analysisShare);
 
   return {
     base: c.base,
@@ -56,5 +59,6 @@ export function calculatePrice(
     multiplier: draftMultiplier,
     totalBeforeMultiplier: baseCost,
     total,
+    analysisCost,
   };
 }

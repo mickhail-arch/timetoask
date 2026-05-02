@@ -5,6 +5,12 @@ export type ParsedPage = {
   title: string;
   headings: string[];
   text: string;
+  metaTitle: string;
+  metaDescription: string;
+  ogTitle: string;
+  ogDescription: string;
+  canonicalUrl: string;
+  slug: string;
 };
 
 const MAX_TEXT_LENGTH = 8_000;
@@ -30,9 +36,22 @@ export async function fetchAndParse(url: string): Promise<ParsedPage> {
     const html = await res.text();
     const $ = cheerio.load(html);
 
+    const metaTitle = $('title').first().text().trim() || '';
+    const metaDescription = $('meta[name="description"]').attr('content')?.trim() || '';
+    const ogTitle = $('meta[property="og:title"]').attr('content')?.trim() || '';
+    const ogDescription = $('meta[property="og:description"]').attr('content')?.trim() || '';
+    const canonicalUrl = $('link[rel="canonical"]').attr('href')?.trim() || '';
+
+    let slug = '';
+    try {
+      const urlPath = new URL(url).pathname;
+      const segments = urlPath.split('/').filter(Boolean);
+      slug = segments[segments.length - 1] || '';
+    } catch {}
+
     $('script, style, nav, footer, header, aside, iframe, noscript').remove();
 
-    const title = $('title').first().text().trim();
+    const title = metaTitle;
 
     const headings: string[] = [];
     $('h1, h2, h3').each((_, el) => {
@@ -45,7 +64,7 @@ export async function fetchAndParse(url: string): Promise<ParsedPage> {
       text = text.slice(0, MAX_TEXT_LENGTH) + '…';
     }
 
-    return { url, title, headings, text };
+    return { url, title, headings, text, metaTitle, metaDescription, ogTitle, ogDescription, canonicalUrl, slug };
   } finally {
     clearTimeout(timer);
   }

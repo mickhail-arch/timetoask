@@ -8,6 +8,8 @@ import { calculatePrice } from '@/modules/seo/pricing';
 import { runPipeline } from '@/modules/seo/pipeline';
 import { seoExpressSteps } from '@/modules/seo/steps';
 import { ToolRegistry } from '@/plugins/registry';
+import { reserveTokens } from '@/modules/billing/billing.service';
+import { InsufficientBalanceError } from '@/core/errors';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -57,31 +59,46 @@ export async function POST(req: Request) {
     const balance = await prisma.balance.findUnique({
       where: { userId: session.user.id },
     });
-    if (!balance || Number(balance.amount) < price.total) {
-      return NextResponse.json(
-        { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов. Нужно: ${price.total}, доступно: ${Number(balance?.amount ?? 0)}`, statusCode: 402 } },
-        { status: 402 },
-      );
-    }
-
-    await prisma.balance.update({
-      where: { userId: session.user.id },
-      data: { amount: { decrement: price.total } },
-    });
 
     const jobStep = await prisma.jobStep.create({
       data: {
-        status: 'processing',
+        status: 'pending',
         stepIndex: 0,
         stepName: 'moderation',
         toolId: tool.id,
         userId: session.user.id,
-        input: input as any,
+        input: {
+          ...input,
+          analysisCost: price.analysisCost,
+          fullCost: price.total,
+        } as any,
       },
     });
 
+    const idempotencyKey = `seo-analysis:${session.user.id}:${jobStep.id}`;
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await reserveTokens(session.user.id, price.analysisCost, idempotencyKey, tx);
+      }, { isolationLevel: 'Serializable' });
+    } catch (err) {
+      await prisma.jobStep.delete({ where: { id: jobStep.id } });
+      if (err instanceof InsufficientBalanceError) {
+        return NextResponse.json(
+          { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов. Нужно: ${price.analysisCost}, доступно: ${Number(balance?.amount ?? 0)}`, statusCode: 402 } },
+          { status: 402 },
+        );
+      }
+      throw err;
+    }
+
+    await prisma.jobStep.update({
+      where: { id: jobStep.id },
+      data: { status: 'processing' },
+    });
+
     const config = tool.config as Record<string, unknown> | null;
-    runPipeline(jobStep.id, session.user.id, input as any, config, seoExpressSteps)
+    runPipeline(jobStep.id, session.user.id, input as any, config, seoExpressSteps, price.analysisCost)
       .catch(err => console.error('[seo-express] Pipeline fatal error:', err));
 
     return NextResponse.json({

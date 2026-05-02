@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ScreenInput } from '@/components/seo-article/ScreenInput';
 import { ScreenProgress } from '@/components/seo-article/ScreenProgress';
 import type { ProgressStep } from '@/components/seo-article/ScreenProgress';
@@ -41,6 +41,7 @@ type Screen = 'input' | 'progress_analysis' | 'brief' | 'progress_generation' | 
 
 const ANALYSIS_STEPS: ProgressStep[] = [
   { name: 'Модерация', description: 'Проверка контента...', status: 'pending', timeLabel: '~5 сек' },
+  { name: 'Анализ конкурентов', description: 'Serper + мета-теги...', status: 'pending', timeLabel: '~15 сек' },
   { name: 'Формирование ТЗ', description: 'Структура H1/H2/H3, LSI-ключи...', status: 'pending', timeLabel: '~20 сек' },
 ];
 
@@ -65,6 +66,8 @@ export function SeoArticleExpressClient() {
   const [inputKey, setInputKey] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
+  const [runningJobs, setRunningJobs] = useState<Record<string, string>>({}); // sessionId → jobId
+  const [unseenIds, setUnseenIds] = useState<string[]>([]);
   const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession } = useSessionHistory('seo-article-express');
 
@@ -74,6 +77,33 @@ export function SeoArticleExpressClient() {
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+    setUnseenIds(ls);
+  }, [sessions]);
+
+  useEffect(() => {
+    if (jobId) return;
+    if (sessionsLoading) return;
+    const active = sessions.find(s => s.status === 'generating' || s.status === 'awaiting_confirmation');
+    if (!active) return;
+    loadSession(active.id).then((data) => {
+      if (!data) return;
+      const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
+      const storedJobId = (meta.jobId as string | undefined) ?? null;
+      if (!storedJobId) return;
+      setActiveSessionId(active.id);
+      setInput(data.inputParams ?? {});
+      setJobId(storedJobId);
+      if (data.status === 'awaiting_confirmation') {
+        setScreen('brief');
+      } else {
+        setScreen('progress_analysis');
+      }
+    });
+  }, [sessionsLoading, sessions, jobId, loadSession]);
+
   const { state: jobState } = useSeoJobPolling(
     screen !== 'input' && screen !== 'result' ? jobId : null,
   );
@@ -81,10 +111,43 @@ export function SeoArticleExpressClient() {
   useEffect(() => {
     if (!jobState) return;
 
+    if (jobState.status === 'processing' && screen === 'progress_analysis' && jobState.progress >= 20) {
+      setScreen('progress_generation');
+    }
+    if (jobState.status === 'processing' && screen === 'progress_generation' && jobState.progress < 20) {
+      setScreen('progress_analysis');
+    }
+
     if ((jobState.status === 'awaiting_confirmation' || jobState.progress === 15) && screen === 'progress_analysis' && jobState.brief) {
       setBrief(jobState.brief ?? null);
       setCalculatedPrice(jobState.calculatedPrice ?? 0);
       setScreen('brief');
+      const sid = activeSessionId ?? draftSessionId;
+      if (sid) {
+        fetch(`/api/sessions/${sid}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'awaiting_confirmation' }),
+        }).then(() => refreshSessions());
+      }
+    }
+
+    if (jobState.status === 'awaiting_confirmation' && jobState.brief && screen === 'brief' && !brief) {
+      setBrief(jobState.brief ?? null);
+      setCalculatedPrice(jobState.calculatedPrice ?? 0);
+    }
+
+    if (jobState.status === 'failed') {
+      setScreen('input');
+      setSubmitError(jobState.error ?? 'Ошибка генерации');
+      const sid = activeSessionId ?? draftSessionId;
+      if (sid) {
+        fetch(`/api/sessions/${sid}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'failed' }),
+        }).then(() => refreshSessions());
+      }
     }
 
     if ((jobState.status === 'completed' || jobState.progress >= 100) && screen === 'progress_generation') {
@@ -133,7 +196,13 @@ export function SeoArticleExpressClient() {
               status: 'completed',
             }),
           }).then(() => {
+            const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+            if (!ls.includes(sessionIdToUpdate)) {
+              localStorage.setItem('seo:unseen', JSON.stringify([...ls, sessionIdToUpdate]));
+            }
+            setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
             setDraftSessionId(null);
+            setRunningJobs(prev => { const next = { ...prev }; delete next[sessionIdToUpdate]; return next; });
             refreshSessions();
           });
         } else {
@@ -152,7 +221,15 @@ export function SeoArticleExpressClient() {
           }).then(async (res) => {
             if (res.ok) {
               const json = await res.json();
-              setActiveSessionId(json.data?.id ?? null);
+              const newSessionId = json.data?.id ?? null;
+              if (newSessionId) {
+                const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+                if (!ls.includes(newSessionId)) {
+                  localStorage.setItem('seo:unseen', JSON.stringify([...ls, newSessionId]));
+                }
+                setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
+              }
+              setActiveSessionId(newSessionId);
               refreshSessions();
             }
           });
@@ -258,14 +335,25 @@ export function SeoArticleExpressClient() {
         throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
       }
       const json = await res.json();
-      setJobId(json.data.jobId);
+      const newJobId = json.data.jobId;
+      setJobId(newJobId);
+      const sid = draftSessionId ?? activeSessionId;
+      if (sid && newJobId) {
+        setRunningJobs(prev => ({ ...prev, [sid]: newJobId }));
+        await fetch(`/api/sessions/${sid}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ outputMeta: { jobId: newJobId }, status: 'generating' }),
+        });
+        refreshSessions();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка отправки';
       console.error('Submit error:', message);
       setSubmitError(message);
       setScreen('input');
     }
-  }, []);
+  }, [draftSessionId]);
 
   const handleConfirm = useCallback(async (updatedBrief: Record<string, unknown>, userEdited: boolean) => {
     setScreen('progress_generation');
@@ -294,15 +382,61 @@ export function SeoArticleExpressClient() {
 
     setActiveSessionId(sessionId);
     setInput(data.inputParams ?? {});
+    setSubmitError(null);
 
-    if (!data.contentText) {
+    const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
+    const storedJobId = runningJobs[sessionId] ?? (meta.jobId as string | undefined) ?? null;
+
+    if (typeof window !== 'undefined') {
+      const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+      if (ls.includes(sessionId)) {
+        localStorage.setItem('seo:unseen', JSON.stringify(ls.filter(id => id !== sessionId)));
+        setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
+        refreshSessions();
+      }
+    }
+
+    if (data.status === 'awaiting_confirmation') {
+      if (storedJobId) {
+        setJobId(storedJobId);
+        setResult(null);
+        setScreen('brief');
+        return;
+      }
       setScreen('input');
-      setResult(null);
       setInputKey(k => k + 1);
       return;
     }
 
-    const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
+    if (data.status === 'generating') {
+      if (storedJobId) {
+        setJobId(storedJobId);
+        setBrief(null);
+        setResult(null);
+        setScreen('progress_analysis');
+        return;
+      }
+      setScreen('input');
+      setInputKey(k => k + 1);
+      return;
+    }
+
+    if (data.status === 'failed') {
+      setScreen('input');
+      setSubmitError('Предыдущая генерация завершилась ошибкой');
+      setInputKey(k => k + 1);
+      return;
+    }
+
+    if (!data.contentText) {
+      setScreen('input');
+      setInputKey(k => k + 1);
+      return;
+    }
+
+    if (runningJobs[sessionId]) {
+      setRunningJobs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
+    }
     setResult({
       article_html: data.contentText,
       article_docx_base64: '',
@@ -310,11 +444,10 @@ export function SeoArticleExpressClient() {
       quality_metrics: meta.quality_metrics ?? {},
       warnings: (meta.warnings as string[]) ?? [],
     });
-
     setBrief(null);
     setJobId(null);
     setScreen('result');
-  }, [loadSession]);
+  }, [loadSession, runningJobs, refreshSessions]);
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     await deleteSession(sessionId);
@@ -326,13 +459,13 @@ export function SeoArticleExpressClient() {
   }, [deleteSession, activeSessionId]);
 
   const handleNewFromHistory = useCallback(() => {
+    // НЕ сбрасываем jobId — polling автоматически встаёт на паузу когда screen='input'
     setActiveSessionId(null);
     setDraftSessionId(null);
-    setScreen('input');
     setResult(null);
-    setJobId(null);
-    setInput({});
+    setScreen('input');
     setInputKey(k => k + 1);
+    setInput({});
   }, []);
 
   const handleSaveEdits = useCallback(async (data: { articleHtml: string; metadata: Record<string, unknown> }) => {
@@ -354,9 +487,32 @@ export function SeoArticleExpressClient() {
     setScreen('input');
   }, []);
 
+  const handleInputChange = useCallback((formData: Record<string, unknown>) => {
+    setInput(formData);
+  }, []);
+
   const handleBack = useCallback(() => {
     setScreen('input');
   }, []);
+
+  const activeJobs = useMemo(() => {
+    const jobs: Record<string, { status: string; progress: number; stepName: string }> = {};
+    // Текущая активная генерация (с реальным прогрессом из polling)
+    if (activeSessionId && jobState && jobState.status === 'processing') {
+      jobs[activeSessionId] = {
+        status: jobState.status,
+        progress: jobState.progress ?? 0,
+        stepName: jobState.stepName ?? '',
+      };
+    }
+    // Фоновые генерации (без точного прогресса — просто "в процессе")
+    for (const sid of Object.keys(runningJobs)) {
+      if (!jobs[sid]) {
+        jobs[sid] = { status: 'processing', progress: 0, stepName: '' };
+      }
+    }
+    return jobs;
+  }, [activeSessionId, jobState, runningJobs]);
 
   const duration = Math.round((Date.now() - startTime) / 1000);
 
@@ -385,6 +541,8 @@ export function SeoArticleExpressClient() {
         onSelect={handleSelectSession}
         onDelete={handleDeleteSession}
         onNewArticle={handleNewFromHistory}
+        activeJobs={activeJobs}
+        unseenIds={unseenIds}
       />
       <div className="flex-1 overflow-y-auto p-6">
         <div className="flex flex-col gap-6">
@@ -395,7 +553,7 @@ export function SeoArticleExpressClient() {
                   {submitError}
                 </div>
               )}
-              <ScreenInput key={inputKey} onSubmit={handleSubmit} initialValues={input} onQueryChange={handleQueryChange} />
+              <ScreenInput key={inputKey} onSubmit={handleSubmit} initialValues={input} onQueryChange={handleQueryChange} onInputChange={handleInputChange} />
             </>
           )}
 
@@ -411,16 +569,19 @@ export function SeoArticleExpressClient() {
           )}
 
           {screen === 'brief' && brief && (
-            <ScreenBrief
-              brief={brief as any}
-              charCount={(input.target_char_count as number) ?? 8000}
-              imageCount={(input.image_count as number) ?? 0}
-              faqCount={(input.faq_count as number) ?? 0}
-              calculatedPrice={calculatedPrice}
-              comparisonEnabled={(input.comparison_enabled as boolean) ?? false}
-              onConfirm={handleConfirm as any}
-              onBack={handleBack}
-            />
+            <>
+              <ScreenBrief
+                brief={brief as any}
+                charCount={(input.target_char_count as number) ?? 8000}
+                imageCount={(input.image_count as number) ?? 0}
+                faqCount={(input.faq_count as number) ?? 0}
+                calculatedPrice={calculatedPrice}
+                comparisonEnabled={(input.comparison_enabled as boolean) ?? false}
+                competitorMeta={jobState?.competitorMeta ?? jobState?.result?.competitorMeta ?? jobState?.result?.research?.competitorMeta ?? []}
+                onConfirm={handleConfirm as any}
+                onBack={handleBack}
+              />
+            </>
           )}
 
           {screen === 'progress_generation' && (

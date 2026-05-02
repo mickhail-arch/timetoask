@@ -1,5 +1,15 @@
 // modules/seo/types.ts — типы SEO-пайплайна
 
+export interface CompetitorMeta {
+  url: string;
+  metaTitle: string;
+  metaDescription: string;
+  ogTitle: string;
+  ogDescription: string;
+  canonicalUrl: string;
+  slug: string;
+}
+
 export interface StepResult {
   success: boolean;
   data: Record<string, unknown>;
@@ -99,6 +109,7 @@ export interface PipelineState {
   qualityMetrics?: QualityMetrics;
   warnings?: string[];
   originalInput?: Record<string, unknown>;
+  competitorMeta?: CompetitorMeta[];
 }
 
 export interface PriceBreakdown {
@@ -109,6 +120,7 @@ export interface PriceBreakdown {
   multiplier: number;
   totalBeforeMultiplier: number;
   total: number;
+  analysisCost: number;
 }
 
 export interface StepDefinition {
@@ -117,10 +129,15 @@ export interface StepDefinition {
   execute: (ctx: PipelineContext) => Promise<StepResult>;
 }
 
+export interface PipelineData {
+  competitorMeta?: CompetitorMeta[];
+  [key: string]: unknown;
+}
+
 export interface PipelineContext {
   jobId: string;
   userId: string;
   input: Record<string, unknown>;
   config: Record<string, unknown> | null;
-  data: Record<string, unknown>;
+  data: PipelineData;
 }

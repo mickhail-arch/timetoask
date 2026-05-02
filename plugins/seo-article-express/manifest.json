@@ -26,7 +26,8 @@
       "perFaq": 3,
       "charBlockSize": 1000,
       "sonnetMultiplier": 0.35,
-      "geminiMultiplier": 0.25
+      "geminiMultiplier": 0.25,
+      "analysisShare": 0.15
     }
   }
 }

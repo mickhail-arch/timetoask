@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { calculatePriceClient } from '@/lib/seo-article/price-calculator';
 import type { PricingConfig } from '@/lib/seo-article/price-calculator';
 import { frontFilterClient } from '@/lib/seo-article/front-filter';
@@ -31,7 +31,7 @@ const INTENTS = [
   { value: 'problem_solution', label: 'Проблема–Решение' },
 ];
 
-const TONES = ['Экспертный', 'Разговорный', 'Деловой', 'Продающий', 'Научный', 'Простой'];
+const TONES = ['Экспертный', 'Разговорный', 'Деловой', 'Продающий', 'Научный', 'Медицинский', 'Простой'];
 const GENDERS = ['Все', 'Мужчины', 'Женщины'];
 const AGES = ['Все', '0–18', '18–24', '25–34', '35–44', '45–54', '55+'];
 const IMG_STYLES = ['Реалистичные', 'Абстрактные', '3D', 'Минимализм', 'Иллюстрации'];
@@ -41,12 +41,13 @@ interface ScreenInputProps {
   pricingConfig?: Partial<PricingConfig> | null;
   initialValues?: Record<string, unknown>;
   onQueryChange?: (query: string) => void;
+  onInputChange?: (input: Record<string, unknown>) => void;
 }
 
-export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryChange }: ScreenInputProps) {
+export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryChange, onInputChange }: ScreenInputProps) {
   const iv = initialValues;
 
-  const toneRevMap: Record<string, string> = { expert: 'Экспертный', casual: 'Разговорный', business: 'Деловой', sales: 'Продающий', scientific: 'Научный', simple: 'Простой' };
+  const toneRevMap: Record<string, string> = { expert: 'Экспертный', casual: 'Разговорный', business: 'Деловой', sales: 'Продающий', scientific: 'Научный', medical: 'Медицинский', simple: 'Простой' };
   const ivToneRaw = (iv?.tone_of_voice as string) ?? '';
   const ivToneDisplay = toneRevMap[ivToneRaw];
   const ivIsCustomTone = !!ivToneRaw && !ivToneDisplay;
@@ -73,6 +74,13 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
   const [imageStyles, setImageStyles] = useState<string[]>(
     (iv?.image_style as string[])?.map(s => styleRevMap[s] ?? s) ?? ['Реалистичные']
   );
+  const [imageComment, setImageComment] = useState((iv?.image_comment as string) ?? '');
+  const [imageTextOverlay, setImageTextOverlay] = useState((iv?.image_text_overlay as boolean) ?? false);
+  const [imageAspect, setImageAspect] = useState<'16:9' | '1:1' | '9:16'>((iv?.image_aspect as '16:9' | '1:1' | '9:16') ?? '16:9');
+  const [imagePalette, setImagePalette] = useState((iv?.image_palette as string) ?? 'warm');
+  const [imagePaletteHex, setImagePaletteHex] = useState((iv?.image_palette_hex as string) ?? '');
+  const [imageMood, setImageMood] = useState((iv?.image_mood as string) ?? 'professional');
+  const [imageExclude, setImageExclude] = useState((iv?.image_exclude as string) ?? '');
 
   const [geoFocused, setGeoFocused] = useState(false);
 
@@ -90,6 +98,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
   const [comparisonObjects, setComparisonObjects] = useState((iv?.comparison_objects as number) ?? 3);
   const [comparisonCriteria, setComparisonCriteria] = useState((iv?.comparison_criteria as number) ?? 3);
   const [analysisModel, setAnalysisModel] = useState<'sonnet' | 'opus47'>((iv?.analysis_model as 'sonnet' | 'opus47') ?? 'sonnet');
+  const [metadataModel, setMetadataModel] = useState<'sonnet' | 'opus47' | 'gemini_flash'>((iv?.metadata_model as 'sonnet' | 'opus47' | 'gemini_flash') ?? 'sonnet');
 
   const comparisonAllowed = charCount >= 8000;
 
@@ -116,6 +125,9 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
   const [brandDescription, setBrandDescription] = useState((iv?.brand_description as string) ?? '');
   const [cta, setCta] = useState((iv?.cta as string) ?? '');
   const [ctaUrl, setCtaUrl] = useState((iv?.cta_url as string) ?? '');
+  const [ctaType, setCtaType] = useState<'service' | 'product'>((iv?.cta_type as 'service' | 'product') ?? 'service');
+  const [ctaStyle, setCtaStyle] = useState<'native' | 'standard'>((iv?.cta_style as 'native' | 'standard') ?? 'standard');
+  const [ctaPosition, setCtaPosition] = useState<'start' | 'middle' | 'end' | 'all'>((iv?.cta_position as 'start' | 'middle' | 'end' | 'all') ?? 'end');
   const [internalLinks, setInternalLinks] = useState<Array<{url: string; anchor: string}>>(
     (iv?.internal_links as Array<{url: string; anchor: string}>) ?? (iv?.external_links as Array<{url: string; anchor: string}>) ?? [{ url: '', anchor: '' }]
   );
@@ -226,6 +238,66 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
     setSourceLinks(prev => [...prev, { url: '', anchor: '' }]);
   }, []);
 
+  const inputChangeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!onInputChange) return;
+    if (inputChangeRef.current) clearTimeout(inputChangeRef.current);
+    inputChangeRef.current = setTimeout(() => {
+      const toneMap: Record<string, string> = { 'Экспертный': 'expert', 'Разговорный': 'casual', 'Деловой': 'business', 'Продающий': 'sales', 'Научный': 'scientific', 'Медицинский': 'medical', 'Простой': 'simple' };
+      onInputChange({
+        target_query: targetQuery.trim(),
+        keywords: keywords.trim(),
+        intent,
+        ai_model: aiModel,
+        target_char_count: charCount,
+        image_count: imageCount,
+        tone_of_voice: showCustomTone ? customTone : (toneMap[tone] ?? tone.toLowerCase()),
+        tone_comment: toneComment || undefined,
+        target_audience: {
+          gender: gender === 'Мужчины' ? 'male' : gender === 'Женщины' ? 'female' : 'all',
+          age: ages.includes('Все') ? ['all'] : ages.map(a => {
+            const map: Record<string, string> = { '0–18': '0-18', '18–24': '18-24', '25–34': '25-34', '35–44': '35-44', '45–54': '45-54', '55+': '55+' };
+            return map[a] ?? a.toLowerCase();
+          }),
+        },
+        geo_location: geo || undefined,
+        image_style: imageCount > 0 ? imageStyles.map(s => s.toLowerCase()) : undefined,
+        image_comment: imageComment || undefined,
+        image_text_overlay: imageTextOverlay,
+        image_aspect: imageAspect,
+        image_palette: imagePalette,
+        image_palette_hex: imagePalette === 'custom' ? imagePaletteHex : undefined,
+        image_mood: imageMood || undefined,
+        image_exclude: imageExclude || undefined,
+        faq_count: faqEnabled ? faqCount : 0,
+        comparison_enabled: comparisonEnabled,
+        comparison_objects: comparisonEnabled ? comparisonObjects : undefined,
+        comparison_criteria: comparisonEnabled ? comparisonCriteria : undefined,
+        analysis_model: analysisModel,
+        brand: brand || undefined,
+        brand_url: brand && brandUrl ? brandUrl : undefined,
+        brand_description: brand && brandDescription ? brandDescription : undefined,
+        cta: cta || undefined,
+        cta_url: cta && ctaUrl ? ctaUrl : undefined,
+        internal_links: internalLinks.filter(l => l.url && l.anchor).length > 0
+          ? internalLinks.filter(l => l.url && l.anchor)
+          : undefined,
+        source_links: sourceLinks.filter(l => l.url && l.anchor).length > 0
+          ? sourceLinks.filter(l => l.url && l.anchor)
+          : undefined,
+        forbidden_words: forbiddenWords || undefined,
+        legal_restrictions: legalRestrictions || undefined,
+        author_name: authorName || undefined,
+        author_position: authorPosition || undefined,
+        author_company: authorCompany || undefined,
+        author_url: authorUrl || undefined,
+        publication_date: useTodayDate ? new Date().toLocaleDateString('ru-RU') : (publicationDate || undefined),
+      });
+    }, 500);
+    return () => { if (inputChangeRef.current) clearTimeout(inputChangeRef.current); };
+  }, [targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, gender, ages, geo, imageStyles, imageComment, imageTextOverlay, imageAspect, imagePalette, imagePaletteHex, imageMood, imageExclude, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, brand, brandUrl, brandDescription, cta, ctaUrl, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onInputChange]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
     onSubmit({
@@ -236,7 +308,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       target_char_count: charCount,
       image_count: imageCount,
       tone_of_voice: showCustomTone ? customTone : (() => {
-        const map: Record<string, string> = { 'Экспертный': 'expert', 'Разговорный': 'casual', 'Деловой': 'business', 'Продающий': 'sales', 'Научный': 'scientific', 'Простой': 'simple' };
+        const map: Record<string, string> = { 'Экспертный': 'expert', 'Разговорный': 'casual', 'Деловой': 'business', 'Продающий': 'sales', 'Научный': 'scientific', 'Медицинский': 'medical', 'Простой': 'simple' };
         return map[tone] ?? tone.toLowerCase();
       })(),
       tone_comment: toneComment || undefined,
@@ -249,16 +321,27 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       },
       geo_location: geo || undefined,
       image_style: imageCount > 0 ? imageStyles.map(s => s.toLowerCase()) : undefined,
+      image_comment: imageComment || undefined,
+      image_text_overlay: imageTextOverlay,
+      image_aspect: imageAspect,
+      image_palette: imagePalette,
+      image_palette_hex: imagePalette === 'custom' ? imagePaletteHex : undefined,
+      image_mood: imageMood || undefined,
+      image_exclude: imageExclude || undefined,
       faq_count: faqEnabled ? faqCount : 0,
       comparison_enabled: comparisonEnabled,
       comparison_objects: comparisonEnabled ? comparisonObjects : undefined,
       comparison_criteria: comparisonEnabled ? comparisonCriteria : undefined,
       analysis_model: analysisModel,
+      metadata_model: metadataModel,
       brand: brand || undefined,
       brand_url: brand && brandUrl ? brandUrl : undefined,
       brand_description: brand && brandDescription ? brandDescription : undefined,
       cta: cta || undefined,
       cta_url: cta && ctaUrl ? ctaUrl : undefined,
+      cta_type: cta ? ctaType : undefined,
+      cta_style: cta ? ctaStyle : undefined,
+      cta_position: cta ? ctaPosition : undefined,
       internal_links: internalLinks.filter(l => l.url && l.anchor).length > 0
         ? internalLinks.filter(l => l.url && l.anchor)
         : undefined,
@@ -273,7 +356,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       author_url: authorUrl || undefined,
       publication_date: useTodayDate ? new Date().toLocaleDateString('ru-RU') : (publicationDate || undefined),
     });
-  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, gender, ages, geo, imageStyles, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, brand, brandUrl, brandDescription, cta, ctaUrl, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
+  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, gender, ages, geo, imageStyles, imageComment, imageTextOverlay, imageAspect, imagePalette, imagePaletteHex, imageMood, imageExclude, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, metadataModel, brand, brandUrl, brandDescription, cta, ctaUrl, ctaType, ctaStyle, ctaPosition, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
@@ -373,6 +456,98 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                       : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[#F5F5F5]'
                   }`}>{s}</button>
               ))}
+            </div>
+          )}
+          {imageCount > 0 && (
+            <div className="mt-2">
+              <textarea
+                value={imageComment}
+                onChange={e => setImageComment(e.target.value)}
+                maxLength={300}
+                rows={2}
+                placeholder="Генерируй в мягких медицинских тонах, пастельные цвета..."
+                className="mt-2 w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+              />
+              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                Необязательно. Дополнит выбранный стиль вашими пожеланиями
+              </div>
+
+              {/* Текст на картинке */}
+              <label className="mt-3 flex items-center gap-2 text-[13px] text-[var(--color-text-primary)] cursor-pointer">
+                <input type="checkbox" checked={imageTextOverlay} onChange={e => setImageTextOverlay(e.target.checked)} className="accent-[var(--color-accent)]" />
+                Добавлять текст H2 на картинку
+              </label>
+
+              {/* Соотношение сторон */}
+              <div className="mt-3">
+                <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Соотношение сторон</div>
+                <div className="flex gap-2">
+                  {(['16:9', '1:1', '9:16'] as const).map(a => (
+                    <button key={a} type="button" onClick={() => setImageAspect(a)}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imageAspect === a ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      {a === '16:9' ? 'Горизонтальная' : a === '1:1' ? 'Квадрат' : 'Вертикальная'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Цветовая палитра */}
+              <div className="mt-3">
+                <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Цветовая палитра</div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'warm', label: 'Тёплые' },
+                    { key: 'cold', label: 'Холодные' },
+                    { key: 'pastel', label: 'Пастельные' },
+                    { key: 'vibrant', label: 'Яркие' },
+                    { key: 'monochrome', label: 'Монохром' },
+                    { key: 'custom', label: 'Свои цвета' },
+                  ].map(p => (
+                    <button key={p.key} type="button" onClick={() => setImagePalette(p.key)}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imagePalette === p.key ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                {imagePalette === 'custom' && (
+                  <input
+                    value={imagePaletteHex}
+                    onChange={e => setImagePaletteHex(e.target.value)}
+                    placeholder="#A6E800, #1F1F1F, #FFFFFF"
+                    maxLength={50}
+                    className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+                  />
+                )}
+              </div>
+
+              {/* Настроение */}
+              <div className="mt-3">
+                <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Настроение</div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'professional', label: 'Профессиональное' },
+                    { key: 'cozy', label: 'Уютное' },
+                    { key: 'tech', label: 'Технологичное' },
+                    { key: 'nature', label: 'Природное' },
+                    { key: 'medical', label: 'Медицинское' },
+                  ].map(m => (
+                    <button key={m.key} type="button" onClick={() => setImageMood(m.key)}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imageMood === m.key ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Исключения */}
+              <input
+                value={imageExclude}
+                onChange={e => setImageExclude(e.target.value)}
+                placeholder="без людей, без логотипов..."
+                maxLength={200}
+                className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+              />
+              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Что исключить из изображений</div>
             </div>
           )}
         </div>
@@ -581,6 +756,28 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
               </div>
               <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Используется для SEO-аудита, AI-детекта и финальных правок</div>
             </div>
+            {/* Модель метаданных */}
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+              <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Модель метаданных</div>
+              <div className="grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => setMetadataModel('sonnet')}
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Sonnet 4.6</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">По умолчанию</div>
+                </button>
+                <button type="button" onClick={() => setMetadataModel('opus47')}
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.7</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Максимум качества</div>
+                </button>
+                <button type="button" onClick={() => setMetadataModel('gemini_flash')}
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'gemini_flash' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Gemini Flash</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Быстро и дёшево</div>
+                </button>
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Title, Description, Slug — генерируются на финальном шаге с учётом анализа конкурентов</div>
+            </div>
             {/* Автор статьи */}
             <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Автор статьи (E-E-A-T)</div>
@@ -662,6 +859,68 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Станет ссылкой в CTA-блоке</div>
               </div>
             </div>
+            {cta.trim() && (
+              <div className="mt-3 space-y-3">
+                {/* Тип CTA */}
+                <div>
+                  <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Тип</div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setCtaType('service')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaType === 'service' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      Услуга
+                    </button>
+                    <button type="button" onClick={() => setCtaType('product')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaType === 'product' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      Товар
+                    </button>
+                  </div>
+                </div>
+
+                {/* Стиль встройки */}
+                <div>
+                  <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Встройка</div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setCtaStyle('standard')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaStyle === 'standard' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      Стандартная
+                    </button>
+                    <button type="button" onClick={() => setCtaStyle('native')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaStyle === 'native' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      Нативная
+                    </button>
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                    {ctaStyle === 'native' ? 'CTA вплетается в текст как естественная рекомендация' : 'CTA выделяется отдельным блоком-цитатой'}
+                  </div>
+                </div>
+
+                {/* Позиция */}
+                <div>
+                  <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Позиция в статье</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setCtaPosition('start')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'start' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      В начале
+                    </button>
+                    <button type="button" onClick={() => setCtaPosition('middle')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'middle' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      В середине
+                    </button>
+                    <button type="button" onClick={() => setCtaPosition('end')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'end' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      В конце
+                    </button>
+                    <button type="button" onClick={() => setCtaPosition('all')}
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'all' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      Везде
+                    </button>
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+                    {ctaPosition === 'all' ? 'CTA появится 3 раза: начало, середина, конец. Текст каждый раз перефразируется' : `CTA появится 1 раз — ${ctaPosition === 'start' ? 'в первом разделе' : ctaPosition === 'middle' ? 'в середине статьи' : 'перед заключением'}`}
+                  </div>
+                </div>
+              </div>
+            )}
             <div>
               <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
                 Перелинковка

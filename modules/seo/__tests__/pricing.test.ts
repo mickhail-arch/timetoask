@@ -9,6 +9,7 @@ describe('calculatePrice', () => {
     expect(r.images).toBe(0);
     expect(r.faq).toBe(25); // 5*5
     expect(r.total).toBe(149);
+    expect(r.analysisCost).toBe(22); // round(149 * 0.15)
   });
 
   it('min values: 4000 chars, 0 images, 0 faq', () => {

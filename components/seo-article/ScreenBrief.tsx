@@ -28,6 +28,12 @@ interface ScreenBriefProps {
   faqCount: number;
   calculatedPrice: number;
   comparisonEnabled?: boolean;
+  competitorMeta?: Array<{
+    url: string;
+    metaTitle: string;
+    metaDescription: string;
+    slug: string;
+  }>;
   onConfirm: (updatedBrief: BriefData, userEdited: boolean) => void;
   onBack: () => void;
 }
@@ -72,6 +78,7 @@ export function ScreenBrief({
   faqCount,
   calculatedPrice,
   comparisonEnabled,
+  competitorMeta,
   onConfirm,
   onBack,
 }: ScreenBriefProps) {
@@ -348,6 +355,30 @@ export function ScreenBrief({
         </div>
         <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Семантически связанные слова. Enter для добавления</div>
       </div>
+
+      {/* Карточка: Мета-теги конкурентов */}
+      {competitorMeta && competitorMeta.length > 0 && (
+        <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
+          <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">
+            Мета-теги конкурентов ({competitorMeta.length})
+          </div>
+          <div className="max-h-[300px] overflow-y-auto space-y-2">
+            {competitorMeta.map((c, i) => (
+              <div key={i} className="rounded-[var(--radius-md)] border border-[#F0F0F0] bg-[#FAFAFA] p-2.5">
+                <div className="mb-1 text-[12px] font-medium text-[var(--color-text-primary)] truncate">{c.metaTitle || 'Без title'}</div>
+                <div className="mb-1 text-[11px] text-[var(--color-text-secondary)] line-clamp-2">{c.metaDescription || 'Без description'}</div>
+                <div className="flex items-center gap-2 text-[10px] text-[#999]">
+                  <span className="truncate max-w-[200px]">{c.slug}</span>
+                  <a href={c.url} target="_blank" rel="noopener" className="text-[#2563eb] hover:underline truncate max-w-[200px]">{new URL(c.url).hostname}</a>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+            LLM использует эти данные при генерации ваших Title, Description и Slug на финальном шаге
+          </div>
+        </div>
+      )}
 
       {/* Карточка 3: Тезисы и факты к разделам */}
       <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">

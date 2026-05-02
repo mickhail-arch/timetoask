@@ -18,9 +18,17 @@ export const inputSchema = z.object({
   }).default({ gender: 'all', age: ['all'] }).describe('Целевая аудитория'),
   geo_location: z.string().max(200).optional().describe('Гео (город или регион)'),
   image_style: z.array(z.string()).max(2).optional().describe('Стиль изображений'),
+  image_comment: z.string().max(300).optional().describe('Дополнение к стилю изображений'),
+  image_text_overlay: z.boolean().default(false).describe('Добавлять текст H2 на картинку'),
+  image_aspect: z.enum(['16:9', '1:1', '9:16']).default('16:9').describe('Соотношение сторон изображений'),
+  image_palette: z.enum(['warm', 'cold', 'pastel', 'vibrant', 'monochrome', 'custom']).default('warm').optional().describe('Цветовая палитра'),
+  image_palette_hex: z.string().max(50).optional().describe('HEX-цвета для палитры custom'),
+  image_mood: z.enum(['professional', 'cozy', 'tech', 'nature', 'medical']).default('professional').optional().describe('Настроение изображений'),
+  image_exclude: z.string().max(200).optional().describe('Что исключить из изображений'),
 
   ai_model: z.enum(['gemini', 'sonnet', 'opus47']).default('opus47').describe('Модель для генерации статьи'),
   analysis_model: z.enum(['sonnet', 'opus47']).default('sonnet').describe('Модель для анализа и правок текста'),
+  metadata_model: z.enum(['sonnet', 'opus47', 'gemini_flash']).default('sonnet').describe('Модель для генерации метаданных'),
   comparison_enabled: z.boolean().default(false).describe('Включить блок сравнения'),
   // Лимиты comparison_objects / comparison_criteria контролируются на клиенте по объёму статьи
   // (≤9000 симв → 2/3, ≤12000 → 3/4, ≤16000 → 4/4, >16000 → 5/5).
@@ -31,8 +39,11 @@ export const inputSchema = z.object({
   brand: z.string().max(100).optional().describe('Бренд'),
   brand_url: z.string().url().max(300).optional().describe('Ссылка на бренд'),
   brand_description: z.string().max(300).optional().describe('Краткое описание компании/бренда'),
-  cta: z.string().max(500).optional().describe('CTA в конце статьи'),
-  cta_url: z.string().url().max(300).optional().describe('Ссылка в CTA'),
+  cta: z.string().max(200).optional().describe('Текст CTA'),
+  cta_url: z.string().url().optional().describe('Ссылка в CTA'),
+  cta_type: z.enum(['service', 'product']).optional().describe('Тип CTA: услуга или товар'),
+  cta_style: z.enum(['native', 'standard']).default('standard').optional().describe('Стиль встройки CTA'),
+  cta_position: z.enum(['start', 'middle', 'end', 'all']).default('end').optional().describe('Позиция CTA в статье'),
   internal_links: z.array(z.object({
     url: z.string().url(),
     anchor: z.string().max(100),

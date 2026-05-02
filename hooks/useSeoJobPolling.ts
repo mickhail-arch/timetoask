@@ -13,7 +13,11 @@ interface PipelineState {
   progress: number;
   partialData?: string;
   brief?: Record<string, unknown>;
-  result?: Record<string, unknown>;
+  competitorMeta?: Array<{ url: string; metaTitle: string; metaDescription: string; slug: string }>;
+  result?: Record<string, unknown> & {
+    competitorMeta?: Array<{ url: string; metaTitle: string; metaDescription: string; slug: string }>;
+    research?: { competitorMeta?: Array<{ url: string; metaTitle: string; metaDescription: string; slug: string }> };
+  };
   error?: string;
   failedStep?: string;
   calculatedPrice?: number;
