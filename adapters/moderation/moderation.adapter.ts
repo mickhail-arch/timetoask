@@ -33,7 +33,7 @@ export function frontFilter(text: string): FrontFilterResult {
 /**
  * LLM-классификатор: Gemini Flash оценивает контент.
  * Категории: A (блокировка), B (sensitive), C (дисклеймер), OK.
- * Таймаут 3 сек → OK + лог.
+ * Таймаут 8 сек → OK + лог.
  */
 export async function llmModerate(
   text: string,
@@ -50,18 +50,20 @@ OK — чистый контент без ограничений.
 Ответь ТОЛЬКО JSON: {"category": "A"|"B"|"C"|"OK", "reason": "краткая причина если не OK"}`;
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-
-    const result = await generateText({
-      model,
-      systemPrompt,
-      userMessage: text,
-    });
-
-    clearTimeout(timeout);
+    const result = await Promise.race([
+      generateText({ model, systemPrompt, userMessage: text }),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('moderation timeout')), 8000)
+      ),
+    ]);
 
     const cleaned = result.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+    if (!cleaned) {
+      console.warn('[moderation] LLM returned empty response, defaulting to OK');
+      return { category: 'OK' };
+    }
+
     const parsed = JSON.parse(cleaned);
     return {
       category: parsed.category ?? 'OK',

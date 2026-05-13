@@ -86,6 +86,10 @@ export function SeoArticleExpressClient() {
   useEffect(() => {
     if (jobId) return;
     if (sessionsLoading) return;
+    // Если пользователь уже на каком-то экране с выбранной сессией — не лезть
+    if (activeSessionId) return;
+    if (screen !== 'input') return;
+
     const active = sessions.find(s => s.status === 'generating' || s.status === 'awaiting_confirmation');
     if (!active) return;
     loadSession(active.id).then((data) => {
@@ -102,7 +106,7 @@ export function SeoArticleExpressClient() {
         setScreen('progress_analysis');
       }
     });
-  }, [sessionsLoading, sessions, jobId, loadSession]);
+  }, [sessionsLoading, sessions, jobId, activeSessionId, screen, loadSession]);
 
   const { state: jobState } = useSeoJobPolling(
     screen !== 'input' && screen !== 'result' ? jobId : null,
@@ -111,134 +115,150 @@ export function SeoArticleExpressClient() {
   useEffect(() => {
     if (!jobState) return;
 
-    if (jobState.status === 'processing' && screen === 'progress_analysis' && jobState.progress >= 20) {
-      setScreen('progress_generation');
-    }
-    if (jobState.status === 'processing' && screen === 'progress_generation' && jobState.progress < 20) {
-      setScreen('progress_analysis');
-    }
-
-    if ((jobState.status === 'awaiting_confirmation' || jobState.progress === 15) && screen === 'progress_analysis' && jobState.brief) {
-      setBrief(jobState.brief ?? null);
-      setCalculatedPrice(jobState.calculatedPrice ?? 0);
-      setScreen('brief');
-      const sid = activeSessionId ?? draftSessionId;
-      if (sid) {
-        fetch(`/api/sessions/${sid}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'awaiting_confirmation' }),
-        }).then(() => refreshSessions());
-      }
-    }
-
-    if (jobState.status === 'awaiting_confirmation' && jobState.brief && screen === 'brief' && !brief) {
-      setBrief(jobState.brief ?? null);
-      setCalculatedPrice(jobState.calculatedPrice ?? 0);
-    }
-
+    // FAILED: всегда возвращаем на input, что бы ни было
     if (jobState.status === 'failed') {
-      setScreen('input');
-      setSubmitError(jobState.error ?? 'Ошибка генерации');
-      const sid = activeSessionId ?? draftSessionId;
-      if (sid) {
-        fetch(`/api/sessions/${sid}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'failed' }),
-        }).then(() => refreshSessions());
-      }
-    }
-
-    if ((jobState.status === 'completed' || jobState.progress >= 100) && screen === 'progress_generation') {
-      const raw = jobState.result as Record<string, unknown> ?? {};
-      const assembly = raw.assembly as Record<string, unknown> ?? {};
-      const imagesData = raw.images as Record<string, unknown> ?? {};
-      setSavedImages(imagesData);
-      const aiRevisions = raw.ai_detect_revisions as Record<string, unknown> ?? {};
-
-      const flatResult = {
-        article_html: (assembly.article_html as string) ?? '',
-        article_docx_base64: (assembly.article_docx_base64 as string) ?? '',
-        metadata: (assembly.metadata as Record<string, unknown>) ?? {},
-        quality_metrics: (assembly.qualityMetrics as Record<string, number>)
-          ?? (aiRevisions.qualityMetrics as Record<string, number>)
-          ?? {},
-        warnings: [
-          ...((assembly.warnings as string[]) ?? []),
-          ...((aiRevisions.warnings as string[]) ?? []),
-        ],
-        images_map: (imagesData.images_map as Record<string, { base64?: string; url?: string }>) ?? {},
-      };
-
-      setResult(flatResult);
-      setScreen('result');
-      notifyArticleReady((input.target_query as string) ?? '');
-
-      // Автосохранение сессии
-      try {
-        const inputParams = input;
-        const title = (inputParams.target_query as string) ?? 'Без названия';
-        const meta = {
-          metadata: flatResult.metadata,
-          quality_metrics: flatResult.quality_metrics,
-          warnings: flatResult.warnings,
-        };
-
-        const sessionIdToUpdate = activeSessionId ?? draftSessionId;
-        if (sessionIdToUpdate) {
-          fetch(`/api/sessions/${sessionIdToUpdate}`, {
+      if (screen !== 'input' && screen !== 'result') {
+        setSubmitError(jobState.error ?? 'Ошибка генерации');
+        setScreen('input');
+        const sid = activeSessionId ?? draftSessionId;
+        if (sid) {
+          fetch(`/api/sessions/${sid}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contentText: flatResult.article_html,
-              outputMeta: meta,
-              status: 'completed',
-            }),
-          }).then(() => {
-            const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
-            if (!ls.includes(sessionIdToUpdate)) {
-              localStorage.setItem('seo:unseen', JSON.stringify([...ls, sessionIdToUpdate]));
-            }
-            setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
-            setDraftSessionId(null);
-            setRunningJobs(prev => { const next = { ...prev }; delete next[sessionIdToUpdate]; return next; });
-            refreshSessions();
-          });
-        } else {
-          fetch('/api/sessions/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              toolSlug: 'seo-article-express',
-              title,
-              inputParams,
-              outputMeta: meta,
-              contentText: flatResult.article_html,
-              tokensUsed: calculatedPrice,
-              durationSec: Math.round((Date.now() - startTime) / 1000),
-            }),
-          }).then(async (res) => {
-            if (res.ok) {
-              const json = await res.json();
-              const newSessionId = json.data?.id ?? null;
-              if (newSessionId) {
-                const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
-                if (!ls.includes(newSessionId)) {
-                  localStorage.setItem('seo:unseen', JSON.stringify([...ls, newSessionId]));
-                }
-                setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
-              }
-              setActiveSessionId(newSessionId);
-              refreshSessions();
-            }
-          });
+            body: JSON.stringify({ status: 'failed' }),
+          }).then(() => refreshSessions());
         }
-      } catch (err) {
-        console.error('Failed to save session:', err);
+      }
+      return;
+    }
+
+    // AWAITING_CONFIRMATION: показываем brief, если он есть
+    if (jobState.status === 'awaiting_confirmation') {
+      if (jobState.brief && (jobState.brief as any).h2_list) {
+        if (screen === 'progress_analysis' || screen === 'progress_generation' || (screen === 'brief' && !brief)) {
+          setBrief(jobState.brief);
+          setCalculatedPrice(jobState.calculatedPrice ?? 0);
+          if (screen !== 'brief') {
+            setScreen('brief');
+            const sid = activeSessionId ?? draftSessionId;
+            if (sid) {
+              fetch(`/api/sessions/${sid}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'awaiting_confirmation' }),
+              }).then(() => refreshSessions());
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    // COMPLETED: всегда переключаем на result, независимо от screen
+    if (jobState.status === 'completed' || jobState.progress >= 100) {
+      if (screen === 'progress_analysis' || screen === 'progress_generation' || screen === 'brief') {
+        const raw = jobState.result as Record<string, unknown> ?? {};
+        const assembly = raw.assembly as Record<string, unknown> ?? {};
+        const imagesData = raw.images as Record<string, unknown> ?? {};
+        setSavedImages(imagesData);
+        const aiRevisions = raw.ai_detect_revisions as Record<string, unknown> ?? {};
+
+        const flatResult = {
+          article_html: (assembly.article_html as string) ?? '',
+          article_docx_base64: (assembly.article_docx_base64 as string) ?? '',
+          metadata: (assembly.metadata as Record<string, unknown>) ?? {},
+          quality_metrics: (assembly.qualityMetrics as Record<string, number>)
+            ?? (aiRevisions.qualityMetrics as Record<string, number>)
+            ?? {},
+          warnings: [
+            ...((assembly.warnings as string[]) ?? []),
+            ...((aiRevisions.warnings as string[]) ?? []),
+          ],
+          images_map: (imagesData.images_map as Record<string, { base64?: string; url?: string }>) ?? {},
+        };
+
+        setResult(flatResult);
+        setScreen('result');
+        notifyArticleReady((input.target_query as string) ?? '');
+
+        try {
+          const inputParams = input;
+          const title = (inputParams.target_query as string) ?? 'Без названия';
+          const meta = {
+            metadata: flatResult.metadata,
+            quality_metrics: flatResult.quality_metrics,
+            warnings: flatResult.warnings,
+          };
+
+          const sessionIdToUpdate = activeSessionId ?? draftSessionId;
+          if (sessionIdToUpdate) {
+            fetch(`/api/sessions/${sessionIdToUpdate}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contentText: flatResult.article_html,
+                outputMeta: meta,
+                status: 'completed',
+              }),
+            }).then(() => {
+              const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+              if (!ls.includes(sessionIdToUpdate)) {
+                localStorage.setItem('seo:unseen', JSON.stringify([...ls, sessionIdToUpdate]));
+              }
+              setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
+              setDraftSessionId(null);
+              setRunningJobs(prev => { const next = { ...prev }; delete next[sessionIdToUpdate]; return next; });
+              refreshSessions();
+            });
+          } else {
+            fetch('/api/sessions/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                toolSlug: 'seo-article-express',
+                title,
+                inputParams,
+                outputMeta: meta,
+                contentText: flatResult.article_html,
+                tokensUsed: calculatedPrice,
+                durationSec: Math.round((Date.now() - startTime) / 1000),
+              }),
+            }).then(async (res) => {
+              if (res.ok) {
+                const json = await res.json();
+                const newSessionId = json.data?.id ?? null;
+                if (newSessionId) {
+                  const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+                  if (!ls.includes(newSessionId)) {
+                    localStorage.setItem('seo:unseen', JSON.stringify([...ls, newSessionId]));
+                  }
+                  setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
+                }
+                setActiveSessionId(newSessionId);
+                refreshSessions();
+              }
+            });
+          }
+        } catch (err) {
+          console.error('Failed to save session:', err);
+        }
+      }
+      return;
+    }
+
+    // PROCESSING: переключаем экраны по progress
+    if (jobState.status === 'processing') {
+      if (jobState.progress >= 20 && screen === 'progress_analysis') {
+        setScreen('progress_generation');
+      }
+      if (jobState.progress < 20 && screen === 'progress_generation') {
+        setScreen('progress_analysis');
+      }
+      if (screen === 'input' || screen === 'result') {
+        setScreen(jobState.progress >= 20 ? 'progress_generation' : 'progress_analysis');
       }
     }
-  }, [jobState, screen]);
+  }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, startTime, refreshSessions]);
 
   const handleQueryChange = useCallback((query: string) => {
     const trimmed = query.trim();
@@ -396,28 +416,56 @@ export function SeoArticleExpressClient() {
       }
     }
 
-    if (data.status === 'awaiting_confirmation') {
-      if (storedJobId) {
-        setJobId(storedJobId);
-        setResult(null);
+    if (storedJobId) {
+      setJobId(storedJobId);
+      setBrief(null);
+      setResult(null);
+
+      let realStatus: string | null = null;
+      let realBrief: any = null;
+      let realPrice: number | undefined;
+      try {
+        const jobRes = await fetch(`/api/jobs/${storedJobId}/status`);
+        if (jobRes.ok) {
+          const json = await jobRes.json();
+          realStatus = json.data?.status ?? null;
+          realBrief = json.data?.brief ?? null;
+          realPrice = json.data?.calculatedPrice;
+        }
+      } catch {}
+
+      if (realStatus === 'awaiting_confirmation' && realBrief?.h2_list) {
+        setBrief(realBrief);
+        setCalculatedPrice(realPrice ?? 0);
         setScreen('brief');
         return;
       }
-      setScreen('input');
-      setInputKey(k => k + 1);
-      return;
-    }
-
-    if (data.status === 'generating') {
-      if (storedJobId) {
-        setJobId(storedJobId);
-        setBrief(null);
-        setResult(null);
-        setScreen('progress_analysis');
+      if (realStatus === 'completed') {
+        if (data.contentText) {
+          setResult({
+            article_html: data.contentText,
+            article_docx_base64: '',
+            metadata: meta.metadata ?? {},
+            quality_metrics: meta.quality_metrics ?? {},
+            warnings: (meta.warnings as string[]) ?? [],
+          });
+          setBrief(null);
+          setJobId(null);
+          setScreen('result');
+          return;
+        }
+        setScreen('progress_generation');
         return;
       }
-      setScreen('input');
-      setInputKey(k => k + 1);
+      if (realStatus === 'failed') {
+        setSubmitError('Предыдущая генерация завершилась ошибкой');
+        setScreen('input');
+        setJobId(null);
+        setInputKey(k => k + 1);
+        return;
+      }
+      // processing или null — ставим прогресс, useEffect разрулит
+      setScreen('progress_analysis');
       return;
     }
 

@@ -9,7 +9,7 @@ export async function executeModeration(ctx: PipelineContext): Promise<StepResul
   const model = getStepModel(
     ctx.config as import('@/core/types').ToolConfig | null,
     'moderation',
-    'google/gemini-2.5-flash',
+    'anthropic/claude-haiku-4.5',
   );
 
   // Собрать все текстовые поля для проверки

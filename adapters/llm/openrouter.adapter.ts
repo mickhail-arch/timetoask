@@ -96,6 +96,9 @@ export async function generateText(params: LlmParams): Promise<string> {
         maxOutputTokens: params.maxOutputTokens,
         abortSignal: controller.signal,
       });
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from model');
+      }
       return text;
     } finally {
       clearTimeout(timer);

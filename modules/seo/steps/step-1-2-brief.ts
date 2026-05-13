@@ -7,21 +7,21 @@ import type { StepResult, PipelineContext, BriefData } from '../types';
 
 // SEO-таблица: символы → диапазоны H2/H3, FAQ, заключение
 const SEO_TABLE: Record<number, { h2: [number, number]; h3: [number, number]; maxH3Total: number }> = {
-  6000:  { h2: [3, 3], h3: [0, 0], maxH3Total: 0 },
-  7000:  { h2: [3, 3], h3: [0, 1], maxH3Total: 1 },
-  8000:  { h2: [3, 4], h3: [0, 1], maxH3Total: 2 },
-  9000:  { h2: [4, 4], h3: [0, 1], maxH3Total: 2 },
-  10000: { h2: [4, 5], h3: [0, 1], maxH3Total: 3 },
-  11000: { h2: [5, 5], h3: [0, 1], maxH3Total: 3 },
-  12000: { h2: [5, 6], h3: [0, 2], maxH3Total: 4 },
-  13000: { h2: [6, 6], h3: [0, 2], maxH3Total: 5 },
-  14000: { h2: [6, 7], h3: [0, 2], maxH3Total: 6 },
-  15000: { h2: [7, 7], h3: [0, 2], maxH3Total: 7 },
-  16000: { h2: [7, 8], h3: [1, 2], maxH3Total: 8 },
-  17000: { h2: [8, 8], h3: [1, 2], maxH3Total: 9 },
-  18000: { h2: [8, 9], h3: [1, 2], maxH3Total: 10 },
-  19000: { h2: [9, 9], h3: [1, 3], maxH3Total: 11 },
-  20000: { h2: [9, 10], h3: [1, 3], maxH3Total: 12 },
+  6000:  { h2: [3, 4], h3: [0, 0], maxH3Total: 0 },
+  7000:  { h2: [3, 4], h3: [0, 1], maxH3Total: 1 },
+  8000:  { h2: [4, 5], h3: [0, 1], maxH3Total: 2 },
+  9000:  { h2: [4, 5], h3: [0, 2], maxH3Total: 3 },
+  10000: { h2: [4, 6], h3: [0, 2], maxH3Total: 4 },
+  11000: { h2: [5, 6], h3: [0, 2], maxH3Total: 5 },
+  12000: { h2: [5, 7], h3: [1, 2], maxH3Total: 7 },
+  13000: { h2: [6, 7], h3: [1, 2], maxH3Total: 9 },
+  14000: { h2: [6, 8], h3: [1, 3], maxH3Total: 11 },
+  15000: { h2: [7, 8], h3: [1, 3], maxH3Total: 13 },
+  16000: { h2: [7, 9], h3: [1, 3], maxH3Total: 15 },
+  17000: { h2: [8, 9], h3: [1, 3], maxH3Total: 17 },
+  18000: { h2: [8, 10], h3: [2, 4], maxH3Total: 20 },
+  19000: { h2: [9, 10], h3: [2, 4], maxH3Total: 23 },
+  20000: { h2: [9, 11], h3: [2, 4], maxH3Total: 26 },
 };
 
 function getSeoLimits(chars: number): { h2: [number, number]; h3: [number, number]; maxH3Total: number } {
@@ -49,6 +49,7 @@ function buildBriefPrompt(
   limits: { h2: [number, number]; h3: [number, number]; maxH3Total: number },
   maxKeywords: number,
   faqCount: number,
+  comparisonEnabled: boolean,
 ): string {
   const intent = (input.intent as string) ?? 'informational';
   const geo = (input.geo_location as string) ?? '';
@@ -78,14 +79,14 @@ function buildBriefPrompt(
 }
 
 === СТРУКТУРА ===
-- H2: от ${limits.h2[0]} до ${limits.h2[1]} штук (1 на каждые 1500-2000 символов)
-- H3: от ${limits.h3[0]} до ${limits.h3[1]} штук на каждый H2 (только внутри H2).
-- Общее количество H3 во всей статье: максимум ${limits.maxH3Total}. Если максимум 0 — H3 не создавай вообще.
-- Общее количество H3 во всей статье: максимум ${limits.maxH3Total}. Если maxH3Total равен 0 — НЕ создавай H3 вообще, используй только H2. H3 на каждый H2: от ${limits.h3[0]} до ${limits.h3[1]}.
-- Заключение всегда выделяй в отдельный H2.
-- H2 и H3 не совпадают более чем на 60%
-- H2-заголовки должны полностью покрывать тему. Читатель после прочтения всех H2 должен получить исчерпывающий ответ на запрос.
-- Каждый H2 раскрывает отдельный аспект темы, без пересечений.
+- ВСЕГО H2 в статье: от ${limits.h2[0]} до ${limits.h2[1]} штук. В это число входят:
+  • Контентные H2 (раскрывают аспекты темы) — основная масса
+  • Заключение (всегда отдельный последний H2 перед FAQ)${faqCount > 0 ? `\n  • H2 "Часто задаваемые вопросы" (FAQ-блок) — обязателен` : ''}${comparisonEnabled ? `\n  • H2 со сравнительной таблицей (отдельный раздел, не встраивай в другие H2)` : ''}
+- H3 внутри каждого H2: от ${limits.h3[0]} до ${limits.h3[1]} штук. Если максимум 0 — H3 не используй.
+- Общее количество H3 в основных и заключительном H2: максимум ${limits.maxH3Total}.${faqCount > 0 ? ' H3 внутри FAQ-блока (вопросы) в этот лимит НЕ входят, у них отдельный счётчик ниже.' : ''}
+- H2 и H3 не совпадают по содержанию более чем на 60%.
+- Каждый контентный H2 раскрывает отдельный аспект темы, без пересечений.
+- H2-заголовки должны полностью покрывать тему. После прочтения всех H2 читатель должен получить исчерпывающий ответ на запрос.
 - H4 запрещён. Используй только H1, H2, H3.
 
 === INTENT: ${intent.toUpperCase()} ===
@@ -101,7 +102,7 @@ function buildBriefPrompt(
 - Макс ключей: ${maxKeywords}
 - В поле target_keywords для каждого H2 укажи 1-${Math.min(3, Math.ceil(maxKeywords / limits.h2[0]))} ключа из списка пользователя, которые логически относятся к этому разделу.
 - Каждый ключ должен быть назначен ровно одному H2. Не дублируй ключи между разделами.
-- 30-50% H2 содержат доп.ключ прямо в заголовке.
+- 30-50% контентных H2 содержат доп.ключ прямо в заголовке.
 
 === LSI ===
 - 2-4 уникальных LSI на каждые 2000 символов (итого ${Math.max(2, Math.floor(chars / 2000) * 2)}-${Math.floor(chars / 2000) * 4}).
@@ -117,6 +118,10 @@ function buildBriefPrompt(
 
   if (brand) {
     prompt += `\n\n=== БРЕНД ===\nБренд "${brand}" — не включай в H1 (если не часть ключа). Допустим в 1 H2-заголовке. Учти в тезисах: один H2 может содержать упоминание бренда в контексте.`;
+  }
+
+  if (comparisonEnabled) {
+    prompt += `\n\n=== СРАВНИТЕЛЬНАЯ ТАБЛИЦА ===\nОдин из основных H2 должен быть посвящён сравнению вариантов/продуктов/методов по теме. Именно в этом H2 будет встроена таблица сравнения. Сформулируй H2 так, чтобы заголовок отражал тему сравнения (например: "Сравнение X, Y и Z по ключевым параметрам"). В thesis этого H2 укажи, что раздел содержит таблицу. В table_topic пиши развёрнутую тему таблицы.`;
   }
 
   if (faqCount > 0) {
@@ -213,7 +218,8 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   const mainKeywordMin = Math.max(2, Math.floor(chars / 2500));
   const mainKeywordMax = Math.floor(chars / 1000);
 
-  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount);
+  const comparisonEnabled = (ctx.input.comparison_enabled as boolean) ?? false;
+  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount, comparisonEnabled);
 
   const userMessage = `Тема: ${ctx.input.target_query}
 Ключевые слова: ${ctx.input.keywords}

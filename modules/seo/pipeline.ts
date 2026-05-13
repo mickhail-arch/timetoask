@@ -31,6 +31,33 @@ const STEP_PROGRESS: Record<string, [number, number]> = {
   'assembly': [97, 100],
 };
 
+async function syncSessionStatus(
+  jobId: string,
+  status: 'awaiting_confirmation' | 'completed' | 'failed',
+  extra?: { contentText?: string; outputMeta?: Record<string, unknown> },
+) {
+  try {
+    const sessions = await prisma.toolSession.findMany({
+      where: { outputMeta: { path: ['jobId'], equals: jobId } },
+      select: { id: true, outputMeta: true },
+    });
+    if (sessions.length === 0) return;
+    for (const s of sessions) {
+      const currentMeta = (s.outputMeta as Record<string, unknown> | null) ?? {};
+      await prisma.toolSession.update({
+        where: { id: s.id },
+        data: {
+          status,
+          ...(extra?.contentText ? { contentText: extra.contentText } : {}),
+          ...(extra?.outputMeta ? { outputMeta: { ...currentMeta, ...extra.outputMeta } as Prisma.InputJsonValue } : {}),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('[pipeline] syncSessionStatus failed:', err);
+  }
+}
+
 export async function saveRedisState(jobId: string, state: Partial<PipelineState>): Promise<void> {
   await redis.setex(redisKey(jobId), REDIS_TTL, JSON.stringify(state));
 }
@@ -147,6 +174,8 @@ export async function runPipeline(
           await finalizeTokens(userId, analysisCost, tx);
         }, { isolationLevel: 'Serializable' });
 
+        await syncSessionStatus(jobId, 'awaiting_confirmation');
+
         return;
       }
 
@@ -188,6 +217,8 @@ export async function runPipeline(
           await rollbackTokens(userId, analysisCost, tx);
         }, { isolationLevel: 'Serializable' });
       }
+
+      await syncSessionStatus(jobId, 'failed');
 
       return;
     }
@@ -299,6 +330,8 @@ export async function resumePipeline(
         await rollbackTokens(userId, remainingCost, tx);
       }, { isolationLevel: 'Serializable' });
 
+      await syncSessionStatus(jobId, 'failed');
+
       return;
     }
   }
@@ -306,6 +339,16 @@ export async function resumePipeline(
   await prisma.$transaction(async (tx) => {
     await finalizeTokens(userId, remainingCost, tx);
   }, { isolationLevel: 'Serializable' });
+
+  const finalHtml = (ctx.data.assembly as Record<string, unknown>)?.article_html as string | undefined;
+  const finalMeta = ctx.data.assembly as Record<string, unknown> | undefined;
+  await syncSessionStatus(jobId, 'completed', {
+    contentText: finalHtml,
+    outputMeta: {
+      metadata: finalMeta?.metadata,
+      quality_metrics: finalMeta?.qualityMetrics,
+    },
+  });
 
   await saveRedisState(jobId, {
     jobId,
@@ -412,6 +455,9 @@ export async function regeneratePipeline(
       await prisma.$transaction(async (tx) => {
         await rollbackTokens(userId, regenerateCost, tx);
       }, { isolationLevel: 'Serializable' });
+
+      await syncSessionStatus(jobId, 'failed');
+
       return;
     }
   }
@@ -419,6 +465,16 @@ export async function regeneratePipeline(
   await prisma.$transaction(async (tx) => {
     await finalizeTokens(userId, regenerateCost, tx);
   }, { isolationLevel: 'Serializable' });
+
+  const finalHtml = (ctx.data.assembly as Record<string, unknown>)?.article_html as string | undefined;
+  const finalMeta = ctx.data.assembly as Record<string, unknown> | undefined;
+  await syncSessionStatus(jobId, 'completed', {
+    contentText: finalHtml,
+    outputMeta: {
+      metadata: finalMeta?.metadata,
+      quality_metrics: finalMeta?.qualityMetrics,
+    },
+  });
 
   await saveRedisState(jobId, {
     jobId,
