@@ -64,6 +64,7 @@ export function SeoArticleExpressClient() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedImages, setSavedImages] = useState<Record<string, unknown> | null>(null);
   const [inputKey, setInputKey] = useState(0);
+  const [confirming, setConfirming] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [draftSessionId, setDraftSessionId] = useState<string | null>(null);
   const [runningJobs, setRunningJobs] = useState<Record<string, string>>({}); // sessionId → jobId
@@ -248,14 +249,19 @@ export function SeoArticleExpressClient() {
 
     // PROCESSING: переключаем экраны по progress
     if (jobState.status === 'processing') {
-      if (jobState.progress >= 20 && screen === 'progress_analysis') {
+      // После confirm pipeline идёт дальше — на любом progress > 15 переключаемся
+      if (jobState.progress > 15 && screen === 'progress_analysis') {
         setScreen('progress_generation');
       }
-      if (jobState.progress < 20 && screen === 'progress_generation') {
+      // Если мы на brief (только что нажали Подтвердить) — переключаемся на generation
+      if (screen === 'brief') {
+        setScreen('progress_generation');
+      }
+      if (jobState.progress < 15 && screen === 'progress_generation') {
         setScreen('progress_analysis');
       }
       if (screen === 'input' || screen === 'result') {
-        setScreen(jobState.progress >= 20 ? 'progress_generation' : 'progress_analysis');
+        setScreen(jobState.progress > 15 ? 'progress_generation' : 'progress_analysis');
       }
     }
   }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, startTime, refreshSessions]);
@@ -376,6 +382,8 @@ export function SeoArticleExpressClient() {
   }, [draftSessionId]);
 
   const handleConfirm = useCallback(async (updatedBrief: Record<string, unknown>, userEdited: boolean) => {
+    if (confirming) return;
+    setConfirming(true);
     setScreen('progress_generation');
 
     try {
@@ -386,8 +394,10 @@ export function SeoArticleExpressClient() {
       });
     } catch (err) {
       console.error('Confirm error:', err);
+    } finally {
+      setConfirming(false);
     }
-  }, [jobId]);
+  }, [jobId, confirming]);
 
   const handleRegenerate = useCallback(() => {
     setResult(null);

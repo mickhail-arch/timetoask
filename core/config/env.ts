@@ -66,6 +66,10 @@ const envSchema = z.object({
   SERPER_API_KEY: z.string().optional().default(''),
   SERPAPI_KEY: z.string().optional().default(''),
 
+  // Perplexity authority research (via OpenRouter)
+  PERPLEXITY_AUTHORITY_ENABLED: z.coerce.boolean().default(true),
+  PERPLEXITY_AUTHORITY_CACHE_TTL: z.coerce.number().default(604800), // 7 дней
+
   // Admin seed
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().optional().default(''),

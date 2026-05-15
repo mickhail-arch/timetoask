@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { BriefHeadings } from './BriefHeadings';
 import type { HeadingItem } from './BriefHeadings';
 import '@/components/seo-article/tokens.css';
+import { getStructureLimits } from '@/modules/seo/limits';
 
 interface BriefData {
   h1: string;
@@ -43,33 +44,6 @@ const FAQ_RE = /faq|часто задаваемые|вопрос/i;
 let faqNextId = 500;
 const genFaqId = () => `faq-${faqNextId++}`;
 
-function getMaxFaqForCharCount(charCount: number): number {
-  if (charCount <= 8000) return 3;
-  if (charCount <= 10000) return 4;
-  if (charCount <= 12000) return 5;
-  if (charCount <= 14000) return 6;
-  if (charCount <= 16000) return 7;
-  if (charCount <= 18000) return 8;
-  return 10;
-}
-
-function getStructureLimits(charCount: number) {
-  if (charCount <= 6000) return { maxH2: 3, maxH3PerH2: 0, maxH3Total: 0 };
-  if (charCount <= 7000) return { maxH2: 3, maxH3PerH2: 1, maxH3Total: 1 };
-  if (charCount <= 8000) return { maxH2: 4, maxH3PerH2: 1, maxH3Total: 2 };
-  if (charCount <= 9000) return { maxH2: 4, maxH3PerH2: 1, maxH3Total: 2 };
-  if (charCount <= 10000) return { maxH2: 5, maxH3PerH2: 1, maxH3Total: 3 };
-  if (charCount <= 11000) return { maxH2: 5, maxH3PerH2: 1, maxH3Total: 3 };
-  if (charCount <= 12000) return { maxH2: 6, maxH3PerH2: 2, maxH3Total: 4 };
-  if (charCount <= 13000) return { maxH2: 6, maxH3PerH2: 2, maxH3Total: 5 };
-  if (charCount <= 14000) return { maxH2: 7, maxH3PerH2: 2, maxH3Total: 6 };
-  if (charCount <= 15000) return { maxH2: 7, maxH3PerH2: 2, maxH3Total: 7 };
-  if (charCount <= 16000) return { maxH2: 8, maxH3PerH2: 2, maxH3Total: 8 };
-  if (charCount <= 17000) return { maxH2: 8, maxH3PerH2: 2, maxH3Total: 9 };
-  if (charCount <= 18000) return { maxH2: 9, maxH3PerH2: 2, maxH3Total: 10 };
-  if (charCount <= 19000) return { maxH2: 9, maxH3PerH2: 3, maxH3Total: 11 };
-  return { maxH2: 10, maxH3PerH2: 3, maxH3Total: 12 };
-}
 
 export function ScreenBrief({
   brief,
@@ -82,7 +56,14 @@ export function ScreenBrief({
   onConfirm,
   onBack,
 }: ScreenBriefProps) {
-  const structureLimits = getStructureLimits(charCount);
+  const intent = (brief as unknown as Record<string, unknown>).intent as string | undefined;
+  const fullLimits = getStructureLimits(charCount, intent);
+  const structureLimits = {
+    maxH2: fullLimits.h2[1],
+    maxH3PerH2: fullLimits.h3PerH2[1],
+    maxH3Total: fullLimits.maxH3Total,
+  };
+  const faqLimit = Math.min(fullLimits.maxFaq, 10);
 
   const [h1, setH1] = useState(brief.h1);
 
@@ -100,15 +81,28 @@ export function ScreenBrief({
   });
   const [faqHeadingEditing, setFaqHeadingEditing] = useState(false);
 
-  const [h2List, setH2List] = useState<HeadingItem[]>(() =>
-    brief.h2_list
+  const [h2List, setH2List] = useState<HeadingItem[]>(() => {
+    const filtered = brief.h2_list
       .filter(h2 => !(faqCount > 0 && FAQ_RE.test(h2.text)))
       .map((h2, i) => ({
         id: `h2-${i}`,
         text: h2.text,
         h3s: h2.h3s.map((h3, j) => ({ id: `h3-${i}-${j}`, text: h3 })),
-      }))
-  );
+      }));
+
+    // Клемп H2 до maxH2 (защита от backend-багов)
+    const clampedH2 = filtered.slice(0, fullLimits.h2[1]);
+
+    // Клемп H3: по maxH3PerH2 и общему maxH3Total
+    let totalH3 = 0;
+    return clampedH2.map(h2 => {
+      let h3s = h2.h3s.slice(0, fullLimits.h3PerH2[1]);
+      const allowed = Math.max(0, fullLimits.maxH3Total - totalH3);
+      h3s = h3s.slice(0, allowed);
+      totalH3 += h3s.length;
+      return { ...h2, h3s };
+    });
+  });
 
   const [mainKeyword, setMainKeyword] = useState(brief.main_keyword ?? '');
   const [lsiKeywords, setLsiKeywords] = useState<string[]>(brief.lsi_keywords ?? []);
@@ -137,9 +131,6 @@ export function ScreenBrief({
   const [faqEditingId, setFaqEditingId] = useState<string | null>(null);
   const [faqDragIdx, setFaqDragIdx] = useState<number | null>(null);
   const [faqDragOverIdx, setFaqDragOverIdx] = useState<number | null>(null);
-
-  const maxFaqAllowed = getMaxFaqForCharCount(charCount);
-  const faqLimit = Math.min(maxFaqAllowed, 10);
 
   const handleH1Change = useCallback((text: string) => {
     setH1(text);

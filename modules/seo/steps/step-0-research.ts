@@ -119,6 +119,8 @@ export async function executeResearch(ctx: PipelineContext): Promise<StepResult>
     ogDescription: page.ogDescription,
     canonicalUrl: page.canonicalUrl,
     slug: page.slug,
+    headings: page.headings?.slice(0, 25) ?? [],
+    contentSnippet: page.text ? page.text.slice(0, 1500) : '',
   }));
 
   console.info(

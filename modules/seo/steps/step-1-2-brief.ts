@@ -4,34 +4,7 @@ import { getStepModel } from '@/modules/seo/config';
 import { calculatePrice } from '../pricing';
 import type { PricingConfig } from '../pricing';
 import type { StepResult, PipelineContext, BriefData } from '../types';
-
-// SEO-таблица: символы → диапазоны H2/H3, FAQ, заключение
-const SEO_TABLE: Record<number, { h2: [number, number]; h3: [number, number]; maxH3Total: number }> = {
-  6000:  { h2: [3, 4], h3: [0, 0], maxH3Total: 0 },
-  7000:  { h2: [3, 4], h3: [0, 1], maxH3Total: 1 },
-  8000:  { h2: [4, 5], h3: [0, 1], maxH3Total: 2 },
-  9000:  { h2: [4, 5], h3: [0, 2], maxH3Total: 3 },
-  10000: { h2: [4, 6], h3: [0, 2], maxH3Total: 4 },
-  11000: { h2: [5, 6], h3: [0, 2], maxH3Total: 5 },
-  12000: { h2: [5, 7], h3: [1, 2], maxH3Total: 7 },
-  13000: { h2: [6, 7], h3: [1, 2], maxH3Total: 9 },
-  14000: { h2: [6, 8], h3: [1, 3], maxH3Total: 11 },
-  15000: { h2: [7, 8], h3: [1, 3], maxH3Total: 13 },
-  16000: { h2: [7, 9], h3: [1, 3], maxH3Total: 15 },
-  17000: { h2: [8, 9], h3: [1, 3], maxH3Total: 17 },
-  18000: { h2: [8, 10], h3: [2, 4], maxH3Total: 20 },
-  19000: { h2: [9, 10], h3: [2, 4], maxH3Total: 23 },
-  20000: { h2: [9, 11], h3: [2, 4], maxH3Total: 26 },
-};
-
-function getSeoLimits(chars: number): { h2: [number, number]; h3: [number, number]; maxH3Total: number } {
-  const keys = Object.keys(SEO_TABLE).map(Number).sort((a, b) => a - b);
-  let best = keys[0];
-  for (const k of keys) {
-    if (chars >= k) best = k;
-  }
-  return SEO_TABLE[best];
-}
+import { getStructureLimits, FAQ_RE, CONCLUSION_RE, type StructureLimits } from '../limits';
 
 const INTENT_STRUCTURES: Record<string, string> = {
   informational: 'определение/вводная → разбор основных аспектов → примеры/кейсы → вывод. Первый H2 — ответ на запрос напрямую.',
@@ -46,15 +19,17 @@ const INTENT_STRUCTURES: Record<string, string> = {
 function buildBriefPrompt(
   input: Record<string, unknown>,
   chars: number,
-  limits: { h2: [number, number]; h3: [number, number]; maxH3Total: number },
+  limits: StructureLimits,
   maxKeywords: number,
   faqCount: number,
   comparisonEnabled: boolean,
+  competitorMeta: Array<{ url: string; metaTitle?: string; headings?: string[]; contentSnippet?: string }>,
 ): string {
   const intent = (input.intent as string) ?? 'informational';
   const geo = (input.geo_location as string) ?? '';
   const brand = (input.brand as string) ?? '';
   const intentStructure = INTENT_STRUCTURES[intent] ?? INTENT_STRUCTURES.informational;
+  const currentYear = new Date().getFullYear();
 
   let prompt = `Ты — SEO-архитектор. Создай структуру статьи на русском языке.
 
@@ -78,16 +53,43 @@ function buildBriefPrompt(
   "case_topic": "тема для блока личного опыта/кейса (например: Мой опыт использования X на проекте Y)"
 }
 
+=== ТЕКУЩИЙ ГОД ===
+Сегодня: ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}. Текущий год: ${currentYear}.
+КРИТИЧНО: если упоминаешь год в H1, H2, H3, подтемах, тезисах или фактах — используй ТОЛЬКО ${currentYear}.
+Год ${currentYear - 1} или ${currentYear - 2} допустимы ТОЛЬКО при описании прошлых событий с явным контекстом ("итоги ${currentYear - 1} года", "сравнение с ${currentYear - 1}").
+ЗАПРЕЩЕНО: ставить ${currentYear - 1}, ${currentYear - 2}, ${currentYear - 3} в заголовках или контексте актуальных данных. Если статья про "лучшие X" или "как сделать Y" или "топ Z" — всегда ${currentYear}.
+
 === СТРУКТУРА ===
 - ВСЕГО H2 в статье: от ${limits.h2[0]} до ${limits.h2[1]} штук. В это число входят:
-  • Контентные H2 (раскрывают аспекты темы) — основная масса
-  • Заключение (всегда отдельный последний H2 перед FAQ)${faqCount > 0 ? `\n  • H2 "Часто задаваемые вопросы" (FAQ-блок) — обязателен` : ''}${comparisonEnabled ? `\n  • H2 со сравнительной таблицей (отдельный раздел, не встраивай в другие H2)` : ''}
-- H3 внутри каждого H2: от ${limits.h3[0]} до ${limits.h3[1]} штук. Если максимум 0 — H3 не используй.
-- Общее количество H3 в основных и заключительном H2: максимум ${limits.maxH3Total}.${faqCount > 0 ? ' H3 внутри FAQ-блока (вопросы) в этот лимит НЕ входят, у них отдельный счётчик ниже.' : ''}
+  • Контентные H2 (раскрывают аспекты темы) — минимум ${limits.contentH2Min}
+  • Заключение (всегда отдельный последний H2 перед FAQ)${faqCount > 0 ? `\n  • H2 "Часто задаваемые вопросы" (FAQ-блок) — обязателен` : ''}${comparisonEnabled ? `\n  • H2 со сравнительной таблицей (отдельный раздел)` : ''}
+- НЕ создавай отдельные H2 для: оглавления, времени чтения, блока автора, CTA, личного кейса — это служебные элементы, не разделы.
+- Между двумя смежными H2 минимум ${limits.minCharsBetweenH2} символов содержательного текста.
+
+H3-правила:
+- На каждый контентный H2: от ${limits.h3PerH2[0]} до ${limits.h3PerH2[1]} H3.
+- Общее количество H3 в основных и заключительном H2: максимум ${limits.maxH3Total}. H3 внутри FAQ-блока (вопросы) в этот лимит НЕ входят.
+- H3 ставь только в H2, который будет содержать минимум ${limits.minH2CharsForH3} символов текста. В коротких H2 — H3 не нужны.
+- Правило ноль или два: либо в H2 нет H3 совсем, либо минимум 2 H3. Один одинокий H3 в H2 не имеет смысла.
+- H3 ставь только когда H2-раздел содержит несколько логически разделимых подразделов:
+  • Пошаговый процесс из 3+ шагов → H3 на каждый шаг или группу шагов
+  • Список из 3+ типов / категорий / вариантов → H3 на каждый
+  • Многоаспектная тема (несколько критериев, факторов, параметров) → H3 по аспектам
+- НЕ ставь H3 в H2, который раскрывает одну мысль, одно определение, одну рекомендацию.
+- НЕ ставь H3 в заключении, во введении, в коротких ответах на конкретный вопрос.
+- ЗАПРЕЩЕНО искусственно дробить H2 на H3 ради симметрии или «равномерного распределения» — это антипаттерн с точки зрения Google.
+- Анализируй каждый H2 по тезису: если в thesis написано "расскажем о X, Y и Z" или "разберём 4 способа" — нужны H3 по этим элементам. Если "X — это Y" или "почему стоит выбрать Z" — H3 не нужны.
+- Если из K контентных H2 только 1-2 имеют многоаспектное содержание — пусть H3 будут только в этих 1-2, остальные без H3. Несимметричная структура — это нормально и правильно с точки зрения E-E-A-T и Google Search Quality Guidelines.
+- Целевое использование maxH3Total: 70-100%. Если maxH3Total=4 — оптимально 3-4 H3 (минимум 3). Меньше 70% — структура недоиспользована, статья выглядит плоской для SEO.
+- При этом ставь H3 только в содержательно оправданные места (см. правила выше). Если из K контентных H2 содержательно подходят только 1-2 — это нормально, оставь так.
+- Но если есть 3+ многоаспектных H2 — задействуй их все, пока не достигнешь 70-100% maxH3Total.
+- Запрещено искусственно дробить H2 ради заполнения лимита — лучше 70% по делу, чем 100% «для галочки».
+
+Общие правила:
 - H2 и H3 не совпадают по содержанию более чем на 60%.
 - Каждый контентный H2 раскрывает отдельный аспект темы, без пересечений.
-- H2-заголовки должны полностью покрывать тему. После прочтения всех H2 читатель должен получить исчерпывающий ответ на запрос.
-- H4 запрещён. Используй только H1, H2, H3.
+- После прочтения всех H2 читатель должен получить исчерпывающий ответ на запрос.
+- H4, H5, H6 запрещены полностью. Используй только H1, H2, H3.
 
 === INTENT: ${intent.toUpperCase()} ===
 Логика структуры: ${intentStructure}
@@ -144,6 +146,40 @@ function buildBriefPrompt(
 - table_topic: тема для таблицы сравнения. Таблица должна отвечать на конкретный вопрос — сравнение продуктов, методов или характеристик по теме статьи. Минимум 3 столбца, 4 строки.
 - case_topic: тема для блока личного опыта. Это кейс от первого лица: конкретная ситуация, действие, результат с цифрами. Не повторяет основной текст, а дополняет его практическим примером.`;
 
+  if (competitorMeta.length > 0) {
+    const topCompetitors = competitorMeta.slice(0, 5);
+    prompt += `\n\n=== АНАЛИЗ КОНКУРЕНТОВ ИЗ ТОПА ВЫДАЧИ ===
+Ниже — реальная структура и фрагменты текста статей, которые уже ранжируются в топ-10 по этому запросу. Используй их как ОРИЕНТИР, не копируй.
+
+Что брать из конкурентов:
+- ПОДТЕМЫ: какие аспекты темы покрывают топ-статьи (отрази их в своих H2).
+- LSI и тематическую лексику: профессиональные термины, синонимы, сопутствующие понятия.
+- УРОВЕНЬ ДЕТАЛИЗАЦИИ: насколько глубоко они разбирают каждый аспект.
+- ФАКТЫ И ЦИФРЫ: реальные данные, которые можно использовать в thesis/facts (с указанием источника).
+
+Что НЕ копировать:
+- Дословные формулировки H1/H2.
+- Структуру 1-в-1 — твоя статья должна закрывать тему ПОЛНЕЕ конкурентов.
+
+Конкуренты (топ ${topCompetitors.length}):
+${topCompetitors.map((c, i) => {
+  const headingsList = (c.headings ?? []).slice(0, 12).map(h => `   - ${h}`).join('\n');
+  const snippet = c.contentSnippet ? c.contentSnippet.slice(0, 800).replace(/\s+/g, ' ').trim() : '';
+  return `[${i + 1}] ${c.metaTitle ?? 'Без title'}
+URL: ${c.url}
+Заголовки:
+${headingsList || '   (не извлечены)'}
+Фрагмент: ${snippet || '(пусто)'}
+---`;
+}).join('\n')}
+
+Задача:
+1. Из заголовков конкурентов извлеки 5-10 ключевых подтем — раскрой их в своих H2 (своими формулировками).
+2. Из фрагментов текста собери LSI-лексику — добавь в lsi_keywords семантически близкие термины которые встречаются у конкурентов.
+3. Если у конкурентов есть факты/цифры — включи похожие по типу в facts соответствующих H2 (с формулировкой "по данным исследований..." или с конкретным источником).
+4. ВАЖНО: твоя структура должна быть ПОЛНЕЕ топа выдачи — добавь 1-2 аспекта темы, которые конкуренты пропустили.`;
+  }
+
   return prompt;
 }
 
@@ -154,26 +190,70 @@ function parseBriefResponse(
   maxKeywords: number,
   mainKeywordMin: number,
   mainKeywordMax: number,
+  limits: StructureLimits,
 ): BriefData {
   const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
   const parsed = JSON.parse(cleaned);
 
+  type H2Item = { text: string; h3s: string[]; thesis: string; facts: string[]; target_keywords: string[] };
+  let h2List: H2Item[] = Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
+    text: (h2.text as string) ?? '',
+    h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
+    thesis: (h2.thesis as string) ?? '',
+    facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
+    target_keywords: Array.isArray(h2.target_keywords) ? h2.target_keywords as string[] : [],
+  })) : [];
+
+  // 1. Удалить запрещённые служебные H2 (оглавление, время чтения, CTA, кейс)
+  const FORBIDDEN_H2 = /^(оглавление|содержание|время прочтения|время чтения|автор|cta|призыв|кейс|личный опыт)$/i;
+  h2List = h2List.filter(h2 => !FORBIDDEN_H2.test(h2.text.trim()));
+
+  // 2. Обрезка H2 до limits.h2[1] (сохраняем FAQ/заключение)
+  if (h2List.length > limits.h2[1]) {
+    const faqIdx = h2List.findIndex(h2 => FAQ_RE.test(h2.text));
+    const conclIdx = h2List.findIndex((h2, i) => i >= h2List.length - 3 && CONCLUSION_RE.test(h2.text));
+    const protectedIdxs = new Set<number>();
+    if (faqIdx >= 0) protectedIdxs.add(faqIdx);
+    if (conclIdx >= 0) protectedIdxs.add(conclIdx);
+
+    const result: typeof h2List = [];
+    for (let i = 0; i < h2List.length && result.length < limits.h2[1] - protectedIdxs.size; i++) {
+      if (!protectedIdxs.has(i)) result.push(h2List[i]);
+    }
+    if (conclIdx >= 0) result.push(h2List[conclIdx]);
+    if (faqIdx >= 0) result.push(h2List[faqIdx]);
+    h2List = result.slice(0, limits.h2[1]);
+  }
+
+  // 3. Обрезка H3 с учётом распределения и лимита на H2
+  let totalH3 = 0;
+  h2List = h2List.map(h2 => {
+    if (FAQ_RE.test(h2.text)) return h2; // FAQ H3 не урезаем
+    if (CONCLUSION_RE.test(h2.text)) return { ...h2, h3s: [] }; // заключение без H3
+
+    let h3s = h2.h3s.slice(0, limits.h3PerH2[1]);
+    const allowed = Math.max(0, limits.maxH3Total - totalH3);
+    h3s = h3s.slice(0, allowed);
+
+    // Правило ноль-или-два: если получился 1 H3 — убираем (одиночный H3 не имеет смысла)
+    if (h3s.length === 1 && limits.h3PerH2[0] === 0) {
+      h3s = [];
+    }
+
+    totalH3 += h3s.length;
+    return { ...h2, h3s };
+  });
+
   return {
     h1: parsed.h1 ?? '',
-    h2_list: Array.isArray(parsed.h2_list) ? parsed.h2_list.map((h2: Record<string, unknown>) => ({
-      text: (h2.text as string) ?? '',
-      h3s: Array.isArray(h2.h3s) ? h2.h3s as string[] : [],
-      thesis: (h2.thesis as string) ?? '',
-      facts: Array.isArray(h2.facts) ? h2.facts as string[] : [],
-      target_keywords: Array.isArray(h2.target_keywords) ? h2.target_keywords as string[] : [],
-    })) : [],
+    h2_list: h2List,
     subtopics: Array.isArray(parsed.subtopics) ? parsed.subtopics : [],
     lsi_keywords: Array.isArray(parsed.lsi_keywords) ? parsed.lsi_keywords : [],
     featured_snippet_spec: parsed.featured_snippet_spec,
     main_keyword: parsed.main_keyword ?? String(ctx.input.target_query),
     main_keyword_min: mainKeywordMin,
     main_keyword_max: mainKeywordMax,
-    keys_per_section: Math.ceil(maxKeywords / Math.max(1, (parsed.h2_list?.length ?? 3))),
+    keys_per_section: Math.ceil(maxKeywords / Math.max(1, h2List.length || 3)),
     cta_position: ctx.input.cta ? 'after_conclusion' : undefined,
     brand_mentions: ctx.input.brand
       ? (ctx.input.intent === 'commercial' ? 3 : 2)
@@ -181,9 +261,8 @@ function parseBriefResponse(
     geo_mentions: ctx.input.geo_location
       ? (String(ctx.input.geo_location).includes(',') ? 4 : 3)
       : 0,
-    // E-E-A-T блоки (вычисляются по формулам из документа)
     table_topic: parsed.table_topic ?? '',
-    table_after_h2: Math.min(1, (parsed.h2_list?.length ?? 2) - 1),
+    table_after_h2: Math.min(1, h2List.length - 1),
     case_topic: parsed.case_topic ?? '',
     callout_count: chars <= 6000 ? 2 : chars <= 10000 ? 3 : chars <= 14000 ? 4 : 5,
     citation_count: chars <= 10000 ? 1 : 2,
@@ -209,9 +288,10 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
 
   const chars = (ctx.input.target_char_count as number) ?? 8000;
   const imageCount = (ctx.input.image_count as number) ?? 0;
-  const limits = getSeoLimits(chars);
+  const intent = (ctx.input.intent as string) ?? 'informational';
+  const limits = getStructureLimits(chars, intent);
   const inputFaqCount = (ctx.input.faq_count as number) ?? 0;
-  const faqCount = inputFaqCount > 0 ? Math.min(inputFaqCount, 10) : 0;
+  const faqCount = inputFaqCount > 0 ? Math.min(inputFaqCount, limits.maxFaq) : 0;
   const maxKeywords = Math.floor(chars / 800);
 
   // Расчёт плотности основного ключа
@@ -219,7 +299,13 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   const mainKeywordMax = Math.floor(chars / 1000);
 
   const comparisonEnabled = (ctx.input.comparison_enabled as boolean) ?? false;
-  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount, comparisonEnabled);
+  const competitorMeta = (ctx.data.competitorMeta as Array<{
+    url: string;
+    metaTitle?: string;
+    headings?: string[];
+    contentSnippet?: string;
+  }> | undefined) ?? [];
+  const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount, comparisonEnabled, competitorMeta);
 
   const userMessage = `Тема: ${ctx.input.target_query}
 Ключевые слова: ${ctx.input.keywords}
@@ -234,7 +320,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 
   try {
     const raw = await generateText({ model, systemPrompt, userMessage });
-    const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax);
+    const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax, limits);
 
     // Рассчитать цену
     const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
@@ -252,7 +338,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
     // Retry 1 раз
     try {
       const raw = await generateText({ model, systemPrompt, userMessage });
-      const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax);
+      const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax, limits);
 
       const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
         | Partial<PricingConfig> | undefined;

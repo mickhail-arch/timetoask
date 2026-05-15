@@ -8,6 +8,8 @@ export interface CompetitorMeta {
   ogDescription: string;
   canonicalUrl: string;
   slug: string;
+  headings?: string[];
+  contentSnippet?: string;
 }
 
 export interface StepResult {
