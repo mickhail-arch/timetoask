@@ -76,7 +76,15 @@ export function useSessionHistory(toolSlug: string) {
     }
   }, []);
 
-  return { sessions, loading, refresh, loadSession, deleteSession };
+  const addSessionOptimistic = useCallback((session: SessionSummary) => {
+    setSessions(prev => {
+      // Не дублируем, если уже есть
+      if (prev.some(s => s.id === session.id)) return prev;
+      return [session, ...prev];
+    });
+  }, []);
+
+  return { sessions, loading, refresh, loadSession, deleteSession, addSessionOptimistic };
 }
 
 export type { SessionSummary, SessionFull };

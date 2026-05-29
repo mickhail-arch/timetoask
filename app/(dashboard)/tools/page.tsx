@@ -1,3 +1,5 @@
+//app/(dashboard)/tools/
+
 import { PageHeader } from '@/components/app/page-header';
 import { ToolsGrid } from '@/components/app/tools-grid';
 

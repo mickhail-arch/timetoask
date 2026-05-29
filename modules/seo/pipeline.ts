@@ -37,11 +37,51 @@ async function syncSessionStatus(
   extra?: { contentText?: string; outputMeta?: Record<string, unknown> },
 ) {
   try {
-    const sessions = await prisma.toolSession.findMany({
+    // Поиск 1: по outputMeta.jobId (нормальный путь после атомарного execute)
+    let sessions = await prisma.toolSession.findMany({
       where: { outputMeta: { path: ['jobId'], equals: jobId } },
-      select: { id: true, outputMeta: true },
+      select: { id: true, outputMeta: true, userId: true },
     });
-    if (sessions.length === 0) return;
+
+    // Поиск 2 (fallback): берём userId+createdAt из JobStep и ищем самую свежую generating-сессию того же пользователя
+    if (sessions.length === 0) {
+      const job = await prisma.jobStep.findUnique({
+        where: { id: jobId },
+        select: { userId: true, createdAt: true },
+      });
+      if (job) {
+        const cutoffMs = 60_000;
+        const startWindow = new Date(job.createdAt.getTime() - cutoffMs);
+        const endWindow = new Date(job.createdAt.getTime() + cutoffMs);
+        const candidate = await prisma.toolSession.findFirst({
+          where: {
+            userId: job.userId,
+            status: { in: ['generating', 'awaiting_confirmation'] },
+            createdAt: { gte: startWindow, lte: endWindow },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, outputMeta: true, userId: true },
+        });
+        if (candidate) {
+          sessions = [candidate];
+          // Backfill jobId в outputMeta, чтобы будущие sync-и нашли её прямым путём
+          const currentMeta = (candidate.outputMeta as Record<string, unknown> | null) ?? {};
+          await prisma.toolSession.update({
+            where: { id: candidate.id },
+            data: {
+              outputMeta: { ...currentMeta, jobId } as Prisma.InputJsonValue,
+            },
+          });
+          console.warn(`[pipeline] syncSessionStatus: backfilled jobId for orphan session ${candidate.id} (jobId=${jobId})`);
+        }
+      }
+    }
+
+    if (sessions.length === 0) {
+      console.warn(`[pipeline] syncSessionStatus: no session found for jobId=${jobId}`);
+      return;
+    }
+
     for (const s of sessions) {
       const currentMeta = (s.outputMeta as Record<string, unknown> | null) ?? {};
       await prisma.toolSession.update({

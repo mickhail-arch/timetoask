@@ -420,7 +420,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
             </button>
             <button type="button" onClick={() => setAiModel('opus47')}
               className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
-              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.7</div>
+              <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.8</div>
               <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Лучшее качество текста</div>
             </button>
           </div>
@@ -750,7 +750,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 </button>
                 <button type="button" onClick={() => setAnalysisModel('opus47')}
                   className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
-                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.7</div>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.8</div>
                   <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Глубокий анализ и правки</div>
                 </button>
               </div>
@@ -767,7 +767,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 </button>
                 <button type="button" onClick={() => setMetadataModel('opus47')}
                   className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
-                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.7</div>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.8</div>
                   <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Максимум качества</div>
                 </button>
                 <button type="button" onClick={() => setMetadataModel('gemini_flash')}

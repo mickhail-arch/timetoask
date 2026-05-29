@@ -1,3 +1,5 @@
+//app/(dashboard)/tools/seo-article-express/layout.tsx
+
 export default function SeoArticleExpressLayout({
   children,
 }: {

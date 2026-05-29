@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 
-const MODEL = 'anthropic/claude-opus-4-7';
+const MODEL = 'anthropic/claude-opus-4-8';
 const PRICE_PER_100_CHARS = 0.7;
 const MIN_PRICE = 3;
 

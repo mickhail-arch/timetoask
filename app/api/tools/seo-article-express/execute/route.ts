@@ -1,3 +1,5 @@
+//app/api/tools/seo-article-express/execute/route.ts
+
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -10,6 +12,7 @@ import { seoExpressSteps } from '@/modules/seo/steps';
 import { ToolRegistry } from '@/plugins/registry';
 import { reserveTokens } from '@/modules/billing/billing.service';
 import { InsufficientBalanceError } from '@/core/errors';
+import type { Prisma } from '@/generated/prisma';
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -26,6 +29,7 @@ export async function POST(req: Request) {
     }
 
     const input = parsed.data;
+    const sessionIdFromClient = (body.sessionId as string | undefined) ?? null;
 
     const tool = await ToolRegistry.resolve('seo-article-express');
     if (!tool) {
@@ -45,44 +49,95 @@ export async function POST(req: Request) {
       input.analysis_model ?? 'sonnet',
     );
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true },
-    });
-    if (!user) {
-      return NextResponse.json(
-        { error: { code: 'USER_NOT_FOUND', message: 'User not found', statusCode: 404 } },
-        { status: 404 },
-      );
-    }
-
     const balance = await prisma.balance.findUnique({
       where: { userId: session.user.id },
     });
 
-    const jobStep = await prisma.jobStep.create({
-      data: {
-        status: 'pending',
-        stepIndex: 0,
-        stepName: 'moderation',
-        toolId: tool.id,
-        userId: session.user.id,
-        input: {
-          ...input,
-          analysisCost: price.analysisCost,
-          fullCost: price.total,
-        } as any,
-      },
-    });
-
-    const idempotencyKey = `seo-analysis:${session.user.id}:${jobStep.id}`;
-
+    // Атомарно: создать JobStep + создать/обновить ToolSession + зарезервировать токены
+    type AtomicResult = { jobId: string; sessionId: string };
+    let atomicResult: AtomicResult;
     try {
-      await prisma.$transaction(async (tx) => {
+      atomicResult = await prisma.$transaction(async (tx) => {
+        const jobStep = await tx.jobStep.create({
+          data: {
+            status: 'pending',
+            stepIndex: 0,
+            stepName: 'moderation',
+            toolId: tool.id,
+            userId: session.user.id,
+            input: {
+              ...input,
+              analysisCost: price.analysisCost,
+              fullCost: price.total,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
+        const title = (input.target_query as string) ?? 'Без названия';
+        const outputMeta = { jobId: jobStep.id } as Prisma.InputJsonValue;
+
+        let toolSession;
+        if (sessionIdFromClient) {
+          // Подключаемся к существующей draft-сессии: проверяем, что она наша и пишем jobId
+          const existing = await tx.toolSession.findUnique({
+            where: { id: sessionIdFromClient },
+            select: { id: true, userId: true },
+          });
+          if (existing && existing.userId === session.user.id) {
+            toolSession = await tx.toolSession.update({
+              where: { id: sessionIdFromClient },
+              data: {
+                status: 'generating',
+                title,
+                inputParams: input as Prisma.InputJsonValue,
+                outputMeta,
+              },
+            });
+          } else {
+            // sessionId невалиден — создаём новую
+            toolSession = await tx.toolSession.create({
+              data: {
+                userId: session.user.id,
+                toolId: tool.id,
+                title,
+                status: 'generating',
+                inputParams: input as Prisma.InputJsonValue,
+                outputMeta,
+                contentText: null,
+                tokensUsed: 0,
+                durationSec: 0,
+                version: 1,
+              },
+            });
+          }
+        } else {
+          toolSession = await tx.toolSession.create({
+            data: {
+              userId: session.user.id,
+              toolId: tool.id,
+              title,
+              status: 'generating',
+              inputParams: input as Prisma.InputJsonValue,
+              outputMeta,
+              contentText: null,
+              tokensUsed: 0,
+              durationSec: 0,
+              version: 1,
+            },
+          });
+        }
+
+        const idempotencyKey = `seo-analysis:${session.user.id}:${jobStep.id}`;
         await reserveTokens(session.user.id, price.analysisCost, idempotencyKey, tx);
+
+        await tx.jobStep.update({
+          where: { id: jobStep.id },
+          data: { status: 'processing' },
+        });
+
+        return { jobId: jobStep.id, sessionId: toolSession.id };
       }, { isolationLevel: 'Serializable' });
     } catch (err) {
-      await prisma.jobStep.delete({ where: { id: jobStep.id } });
       if (err instanceof InsufficientBalanceError) {
         return NextResponse.json(
           { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов. Нужно: ${price.analysisCost}, доступно: ${Number(balance?.amount ?? 0)}`, statusCode: 402 } },
@@ -92,18 +147,14 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    await prisma.jobStep.update({
-      where: { id: jobStep.id },
-      data: { status: 'processing' },
-    });
-
     const config = tool.config as Record<string, unknown> | null;
-    runPipeline(jobStep.id, session.user.id, input as any, config, seoExpressSteps, price.analysisCost)
+    runPipeline(atomicResult.jobId, session.user.id, input as any, config, seoExpressSteps, price.analysisCost)
       .catch(err => console.error('[seo-express] Pipeline fatal error:', err));
 
     return NextResponse.json({
       data: {
-        jobId: jobStep.id,
+        jobId: atomicResult.jobId,
+        sessionId: atomicResult.sessionId,
         calculatedPrice: price.total,
         priceBreakdown: price,
       },

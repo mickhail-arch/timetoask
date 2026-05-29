@@ -229,7 +229,7 @@ export async function executeTargetedRewrite(
   const analysisModelChoice = (ctx.input.analysis_model as string) ?? 'sonnet';
   const ANALYSIS_MODEL_MAP: Record<string, string> = {
     sonnet: 'anthropic/claude-sonnet-4.6',
-    opus47: 'anthropic/claude-opus-4-7',
+    opus47: 'anthropic/claude-opus-4-8',
   };
   const model = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
 

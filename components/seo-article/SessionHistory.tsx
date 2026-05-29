@@ -1,3 +1,5 @@
+//components/seo-article/SessionHistory.tsx
+
 'use client';
 
 import { useState } from 'react';
@@ -10,6 +12,7 @@ interface SessionHistoryProps {
   activeSessionId: string | null;
   onSelect: (sessionId: string) => void;
   onDelete: (sessionId: string) => void;
+  onCopy: (sessionId: string) => void;
   onNewArticle: () => void;
   activeJobs?: Record<string, { status: string; progress: number; stepName: string }>;
   unseenIds?: string[];
@@ -21,6 +24,7 @@ export function SessionHistory({
   activeSessionId,
   onSelect,
   onDelete,
+  onCopy,
   onNewArticle,
   activeJobs,
   unseenIds,
@@ -120,18 +124,13 @@ export function SessionHistory({
               </div>
 
               {(() => {
-                const job = activeJobs?.[s.id];
-                if (s.status === 'generating' || job?.status === 'processing') {
-                  const progress = job?.progress ?? 0;
-                  const remainingSec = progress < 15 ? 30 : progress < 50 ? 150 : progress < 90 ? 180 : 30;
-                  const remainingMin = Math.ceil(remainingSec / 60);
+                if (s.status === 'generating') {
                   return (
-                    <div className="flex items-center gap-1.5" title={job?.stepName ?? 'Генерация'}>
+                    <div className="flex items-center" title="Генерация...">
                       <svg className="h-4 w-4 animate-spin text-[var(--color-accent)]" viewBox="0 0 24 24" fill="none">
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.2"/>
                         <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                       </svg>
-                      <span className="text-[10px] text-[var(--color-text-secondary)]">~{remainingMin} мин</span>
                     </div>
                   );
                 }
@@ -158,12 +157,24 @@ export function SessionHistory({
                 return null;
               })()}
 
-              <button
-                onClick={(e) => { e.stopPropagation(); setDeleteModalId(s.id); }}
-                className="shrink-0 text-[12px] text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100"
-              >
-                ×
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onCopy(s.id); }}
+                  title="Создать копию с теми же параметрами"
+                  className="text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--color-text-primary)]"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeleteModalId(s.id); }}
+                  className="text-[12px] text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           </div>
         ))}

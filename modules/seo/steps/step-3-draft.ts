@@ -14,7 +14,7 @@ export async function executeDraft(
   const DRAFT_MODEL_MAP: Record<string, string> = {
     gemini: 'google/gemini-3.1-pro-preview',
     sonnet: 'anthropic/claude-sonnet-4.6',
-    opus47: 'anthropic/claude-opus-4-7',
+    opus47: 'anthropic/claude-opus-4-8',
   };
   const model = DRAFT_MODEL_MAP[aiModelChoice] ?? DRAFT_MODEL_MAP.opus47;
   const isGemini = model.includes('gemini');

@@ -1,6 +1,6 @@
 {
   "id": "seo-article-express",
-  "name": "Express SEO",
+  "name": "Seo-статья",
   "model": "anthropic/claude-opus-4.6",
   "executionMode": "async",
   "token_cost": 200,

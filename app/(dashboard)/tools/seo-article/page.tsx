@@ -1,3 +1,5 @@
+'use client';
+
 import { SeoArticleExpressClient } from './client';
 
 export default function SeoArticleExpressPage() {

@@ -4,6 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Tool } from '@/hooks/useTools';
 
+const SLUG_TO_URL: Record<string, string> = {
+  'seo-article-express': 'seo-article',
+};
+
+function getToolUrl(slug: string): string {
+  return `/tools/${SLUG_TO_URL[slug] ?? slug}`;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   active: {
     label: 'Активен',
@@ -44,7 +52,7 @@ export function ToolCard({ tool }: { tool: Tool }) {
 
   return (
     <Link
-      href={`/tools/${tool.id}`}
+      href={getToolUrl(tool.slug ?? tool.id)}
       aria-disabled={isSoon}
       tabIndex={isSoon ? -1 : undefined}
       className={cn(

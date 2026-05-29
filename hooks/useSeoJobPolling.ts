@@ -34,6 +34,7 @@ export function useSeoJobPolling(jobId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
 
   const stop = useCallback(() => {
     if (intervalRef.current) {
@@ -43,6 +44,9 @@ export function useSeoJobPolling(jobId: string | null) {
   }, []);
 
   useEffect(() => {
+    // Активным считаем последний jobId, который пришёл в хук
+    activeJobIdRef.current = jobId;
+
     if (!jobId) {
       setState(null);
       setIsLoading(false);
@@ -51,14 +55,23 @@ export function useSeoJobPolling(jobId: string | null) {
       return;
     }
 
+    // Сбрасываем state при смене jobId, чтобы старые данные не «протекали» в новую сессию
+    setState(null);
     setIsLoading(true);
     setError(null);
 
+    const myJobId = jobId; // captured in closure для проверки актуальности
+    let cancelled = false;
+
     const poll = async () => {
       try {
-        const res = await fetch(`/api/jobs/${jobId}/status`);
+        const res = await fetch(`/api/jobs/${myJobId}/status`);
+        // Если за время fetch jobId сменился — игнорируем ответ
+        if (cancelled || activeJobIdRef.current !== myJobId) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
+        if (cancelled || activeJobIdRef.current !== myJobId) return;
+
         const data = json.data as PipelineState;
         setState(data);
 
@@ -67,6 +80,7 @@ export function useSeoJobPolling(jobId: string | null) {
           setIsLoading(false);
         }
       } catch (err) {
+        if (cancelled || activeJobIdRef.current !== myJobId) return;
         setError(err instanceof Error ? err.message : 'Ошибка получения статуса');
         stop();
         setIsLoading(false);
@@ -76,7 +90,10 @@ export function useSeoJobPolling(jobId: string | null) {
     poll();
     intervalRef.current = setInterval(poll, POLL_INTERVAL);
 
-    return stop;
+    return () => {
+      cancelled = true;
+      stop();
+    };
   }, [jobId, stop]);
 
   return { state, isLoading, error };

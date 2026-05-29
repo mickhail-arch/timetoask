@@ -70,7 +70,33 @@ export function SeoArticleExpressClient() {
   const [runningJobs, setRunningJobs] = useState<Record<string, string>>({}); // sessionId → jobId
   const [unseenIds, setUnseenIds] = useState<string[]>([]);
   const draftDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession } = useSessionHistory('seo-article-express');
+  const selectionTokenRef = useRef(0);
+  const currentJobIdRef = useRef<string | null>(null);
+  const autoRestoreDoneRef = useRef(false);
+  const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession, addSessionOptimistic } = useSessionHistory('seo-article-express');
+
+  // Cleanup: удаляем из runningJobs сессии, которые в БД уже completed/failed.
+  // Без этого спиннер «Генерация...» зависает в истории на завершённых сессиях.
+  useEffect(() => {
+    if (sessions.length === 0) return;
+    setRunningJobs(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const sid of Object.keys(prev)) {
+        const session = sessions.find(s => s.id === sid);
+        if (!session) {
+          delete next[sid];
+          changed = true;
+          continue;
+        }
+        if (session.status === 'completed' || session.status === 'failed') {
+          delete next[sid];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [sessions]);
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -84,40 +110,43 @@ export function SeoArticleExpressClient() {
     setUnseenIds(ls);
   }, [sessions]);
 
-  useEffect(() => {
-    if (jobId) return;
-    if (sessionsLoading) return;
-    // Если пользователь уже на каком-то экране с выбранной сессией — не лезть
-    if (activeSessionId) return;
-    if (screen !== 'input') return;
-
-    const active = sessions.find(s => s.status === 'generating' || s.status === 'awaiting_confirmation');
-    if (!active) return;
-    loadSession(active.id).then((data) => {
-      if (!data) return;
-      const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
-      const storedJobId = (meta.jobId as string | undefined) ?? null;
-      if (!storedJobId) return;
-      setActiveSessionId(active.id);
-      setInput(data.inputParams ?? {});
-      setJobId(storedJobId);
-      if (data.status === 'awaiting_confirmation') {
-        setScreen('brief');
-      } else {
-        setScreen('progress_analysis');
-      }
-    });
-  }, [sessionsLoading, sessions, jobId, activeSessionId, screen, loadSession]);
 
   const { state: jobState } = useSeoJobPolling(
     screen !== 'input' && screen !== 'result' ? jobId : null,
   );
 
+  // ВРЕМЕННЫЙ ЛОГ — найти кто поллит
+  useEffect(() => {
+    const pollJobId = screen !== 'input' && screen !== 'result' ? jobId : null;
+    if (pollJobId) {
+      console.log('[poll-source]', { pollJobId, screen, activeSessionId });
+    }
+  }, [jobId, screen, activeSessionId]);
+
   useEffect(() => {
     if (!jobState) return;
+    console.log('[jobState]', {
+      jobId,
+      status: jobState.status,
+      progress: jobState.progress,
+      stepName: jobState.stepName,
+      hasBrief: !!jobState.brief,
+      briefH2Count: (jobState.brief as { h2_list?: unknown[] } | undefined)?.h2_list?.length ?? 0,
+      uiScreen: screen,
+    });
 
-    // FAILED: всегда возвращаем на input, что бы ни было
+    // Запоминаем jobId, который сейчас релевантен
+    if (jobId !== currentJobIdRef.current) {
+      currentJobIdRef.current = jobId;
+    }
+
+    // FAILED: возвращаем на input только если jobState относится к текущему jobId
+    // (защита от устаревших ответов polling-а при быстром переключении сессий)
     if (jobState.status === 'failed') {
+      // Если jobState пришёл для устаревшего job — игнорируем
+      if (jobId && currentJobIdRef.current && jobId !== currentJobIdRef.current) {
+        return;
+      }
       if (screen !== 'input' && screen !== 'result') {
         setSubmitError(jobState.error ?? 'Ошибка генерации');
         setScreen('input');
@@ -193,52 +222,20 @@ export function SeoArticleExpressClient() {
 
           const sessionIdToUpdate = activeSessionId ?? draftSessionId;
           if (sessionIdToUpdate) {
-            fetch(`/api/sessions/${sessionIdToUpdate}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contentText: flatResult.article_html,
-                outputMeta: meta,
-                status: 'completed',
-              }),
-            }).then(() => {
-              const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
-              if (!ls.includes(sessionIdToUpdate)) {
-                localStorage.setItem('seo:unseen', JSON.stringify([...ls, sessionIdToUpdate]));
-              }
-              setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
-              setDraftSessionId(null);
-              setRunningJobs(prev => { const next = { ...prev }; delete next[sessionIdToUpdate]; return next; });
-              refreshSessions();
-            });
+            // Бэк сам обновит ToolSession через syncSessionStatus(jobId, 'completed').
+            // Фронт только помечает unseen и обновляет локальный список.
+            const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
+            if (!ls.includes(sessionIdToUpdate)) {
+              localStorage.setItem('seo:unseen', JSON.stringify([...ls, sessionIdToUpdate]));
+            }
+            setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
+            setDraftSessionId(null);
+            setRunningJobs(prev => { const next = { ...prev }; delete next[sessionIdToUpdate]; return next; });
+            refreshSessions();
           } else {
-            fetch('/api/sessions/save', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                toolSlug: 'seo-article-express',
-                title,
-                inputParams,
-                outputMeta: meta,
-                contentText: flatResult.article_html,
-                tokensUsed: calculatedPrice,
-                durationSec: Math.round((Date.now() - startTime) / 1000),
-              }),
-            }).then(async (res) => {
-              if (res.ok) {
-                const json = await res.json();
-                const newSessionId = json.data?.id ?? null;
-                if (newSessionId) {
-                  const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
-                  if (!ls.includes(newSessionId)) {
-                    localStorage.setItem('seo:unseen', JSON.stringify([...ls, newSessionId]));
-                  }
-                  setUnseenIds(JSON.parse(localStorage.getItem('seo:unseen') ?? '[]'));
-                }
-                setActiveSessionId(newSessionId);
-                refreshSessions();
-              }
-            });
+            // Эта ветка — fallback. После B1.server-atomic сессия всегда есть.
+            // Если оказались здесь — сервер сам создаст/обновит запись.
+            refreshSessions();
           }
         } catch (err) {
           console.error('Failed to save session:', err);
@@ -319,67 +316,37 @@ export function SeoArticleExpressClient() {
     setStartTime(Date.now());
     setScreen('progress_analysis');
 
-    const title = (formInput.target_query as string) ?? 'Без названия';
-    if (draftSessionId) {
-      fetch(`/api/sessions/${draftSessionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputParams: formInput, status: 'generating' }),
-      }).then(() => refreshSessions());
-    } else if (title.trim()) {
-      try {
-        const draftRes = await fetch('/api/sessions/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            toolSlug: 'seo-article-express',
-            title,
-            inputParams: formInput,
-            outputMeta: {},
-            contentText: null,
-            tokensUsed: 0,
-            durationSec: 0,
-            status: 'generating',
-          }),
-        });
-        if (draftRes.ok) {
-          const draftJson = await draftRes.json();
-          setActiveSessionId(draftJson.data?.id ?? null);
-          refreshSessions();
-        }
-      } catch {}
-    }
-
+    // Сервер атомарно создаст/обновит ToolSession + JobStep + reserve в одной транзакции.
+    // Передаём draftSessionId если есть — сервер подцепится к существующей draft-сессии.
     try {
       const res = await fetch('/api/tools/seo-article-express/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: formInput }),
+        body: JSON.stringify({
+          input: formInput,
+          sessionId: draftSessionId ?? activeSessionId ?? undefined,
+        }),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => null);
         throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
       }
       const json = await res.json();
-      const newJobId = json.data.jobId;
+      const newJobId = json.data.jobId as string;
+      const newSessionId = json.data.sessionId as string;
+
       setJobId(newJobId);
-      const sid = draftSessionId ?? activeSessionId;
-      if (sid && newJobId) {
-        setRunningJobs(prev => ({ ...prev, [sid]: newJobId }));
-        await fetch(`/api/sessions/${sid}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ outputMeta: { jobId: newJobId }, status: 'generating' }),
-        });
-        refreshSessions();
-      }
+      setActiveSessionId(newSessionId);
+      setDraftSessionId(null);
+      setRunningJobs(prev => ({ ...prev, [newSessionId]: newJobId }));
+      refreshSessions();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка отправки';
       console.error('Submit error:', message);
       setSubmitError(message);
       setScreen('input');
     }
-  }, [draftSessionId]);
+  }, [draftSessionId, activeSessionId, refreshSessions]);
 
   const handleConfirm = useCallback(async (updatedBrief: Record<string, unknown>, userEdited: boolean) => {
     if (confirming) return;
@@ -399,15 +366,123 @@ export function SeoArticleExpressClient() {
     }
   }, [jobId, confirming]);
 
-  const handleRegenerate = useCallback(() => {
+  const handleRegenerate = useCallback(async () => {
+    // Перегенерация = НОВАЯ статья с теми же параметрами.
+    // Старая сессия остаётся нетронутой в истории.
+    const currentInput = input;
+    const title = ((currentInput as Record<string, unknown>).target_query as string) ?? 'Без названия';
+
+    // Полностью отвязываемся от текущей открытой сессии
     setResult(null);
     setJobId(null);
+    setActiveSessionId(null);
+    setDraftSessionId(null);
+    setBrief(null);
+    setSubmitError(null);
     setInputKey(k => k + 1);
     setScreen('input');
-  }, []);
+
+    if (!title.trim()) return;
+
+    // Создаём НОВЫЙ черновик в истории с теми же параметрами
+    try {
+      const res = await fetch('/api/sessions/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolSlug: 'seo-article-express',
+          title,
+          inputParams: currentInput,
+          outputMeta: {},
+          contentText: null,
+          tokensUsed: 0,
+          durationSec: 0,
+          status: 'draft',
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const newDraft = json.data;
+        const newDraftId = newDraft?.id ?? null;
+        if (newDraftId) {
+          setDraftSessionId(newDraftId);
+          setActiveSessionId(newDraftId);
+          // Оптимистично показываем черновик в истории сразу
+          addSessionOptimistic({
+            id: newDraftId,
+            title: (newDraft.title as string) ?? title,
+            status: 'draft',
+            version: (newDraft.version as number) ?? 1,
+            parentId: (newDraft.parentId as string | null) ?? null,
+            tokensUsed: 0,
+            durationSec: 0,
+            outputMeta: {},
+            createdAt: (newDraft.createdAt as string) ?? new Date().toISOString(),
+          });
+          refreshSessions();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to create draft on regenerate:', err);
+    }
+  }, [input, refreshSessions, addSessionOptimistic]);
+
+  const handleCopySession = useCallback(async (sessionId: string) => {
+    // Загружаем полные данные сессии (нужны inputParams)
+    const data = await loadSession(sessionId);
+    if (!data) return;
+
+    const sourceInput = data.inputParams ?? {};
+    const title = ((sourceInput as Record<string, unknown>).target_query as string) ?? (data.title ?? 'Копия');
+
+    // Открываем форму с скопированными параметрами как новый черновик
+    setResult(null);
+    setJobId(null);
+    setActiveSessionId(null);
+    setDraftSessionId(null);
+    setBrief(null);
+    setSubmitError(null);
+    setInput(sourceInput);
+    setInputKey(k => k + 1);
+    setScreen('input');
+
+    try {
+      const res = await fetch('/api/sessions/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolSlug: 'seo-article-express',
+          title,
+          inputParams: sourceInput,
+          outputMeta: {},
+          contentText: null,
+          tokensUsed: 0,
+          durationSec: 0,
+          status: 'draft',
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const newDraft = json.data;
+        const newDraftId = newDraft?.id ?? null;
+        if (newDraftId) {
+          setDraftSessionId(newDraftId);
+          setActiveSessionId(newDraftId);
+          refreshSessions();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to copy session:', err);
+    }
+  }, [loadSession, refreshSessions]);
 
   const handleSelectSession = useCallback(async (sessionId: string) => {
+    // Инкрементируем токен — все предыдущие in-flight запросы становятся устаревшими
+    const myToken = ++selectionTokenRef.current;
+    const isStale = () => selectionTokenRef.current !== myToken;
+
     const data = await loadSession(sessionId);
+    if (isStale()) return;
     if (!data) return;
 
     setActiveSessionId(sessionId);
@@ -417,6 +492,7 @@ export function SeoArticleExpressClient() {
     const meta = (data.outputMeta ?? {}) as Record<string, unknown>;
     const storedJobId = runningJobs[sessionId] ?? (meta.jobId as string | undefined) ?? null;
 
+    // Снять "непрочитано"
     if (typeof window !== 'undefined') {
       const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
       if (ls.includes(sessionId)) {
@@ -426,86 +502,164 @@ export function SeoArticleExpressClient() {
       }
     }
 
-    if (storedJobId) {
+    // ПРИОРИТЕТ: есть готовый контент — сразу показываем result, не глядя на jobId/статус.
+    // Убирает мелькание экрана прогресса при клике на завершённую статью.
+    if (data.contentText && data.contentText.length > 0) {
+      if (runningJobs[sessionId]) {
+        setRunningJobs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
+      }
+      setResult({
+        article_html: data.contentText,
+        article_docx_base64: '',
+        metadata: meta.metadata ?? {},
+        quality_metrics: meta.quality_metrics ?? {},
+        warnings: (meta.warnings as string[]) ?? [],
+      });
+      setBrief(null);
+      setJobId(null);
+      setScreen('result');
+      return;
+    }
+
+    // 2. Failed
+    if (data.status === 'failed') {
+      if (isStale()) return;
+      setJobId(null);
+      setBrief(null);
+      setResult(null);
+      setSubmitError('Предыдущая генерация завершилась ошибкой');
+      setScreen('input');
+      setInputKey(k => k + 1);
+      return;
+    }
+
+    // 3. Активная сессия (generating / awaiting_confirmation)
+    if (data.status === 'generating' || data.status === 'awaiting_confirmation') {
+      if (!storedJobId) {
+        // Сиротская сессия: статус 'generating'/'awaiting_confirmation', но jobId не записан.
+        // Помечаем как failed и показываем форму с заполненными значениями + сообщение.
+        if (isStale()) return;
+        try {
+          await fetch(`/api/sessions/${sessionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'failed' }),
+          });
+          refreshSessions();
+        } catch {}
+        if (isStale()) return;
+        setSubmitError('Сессия была прервана. Можно перезапустить генерацию с теми же параметрами.');
+        setJobId(null);
+        setScreen('input');
+        setInputKey(k => k + 1);
+        return;
+      }
+
+      if (isStale()) return;
       setJobId(storedJobId);
       setBrief(null);
       setResult(null);
 
+      // Оптимистично сразу показываем прогресс, не дожидаясь /api/jobs/.../status
+      // Это убирает мерцание формы во время быстрых переключений
+      setScreen(data.status === 'awaiting_confirmation' ? 'brief' : 'progress_analysis');
+
+      // Запрашиваем реальный статус для уточнения экрана и подгрузки brief
       let realStatus: string | null = null;
-      let realBrief: any = null;
+      let realBrief: Record<string, unknown> | null = null;
       let realPrice: number | undefined;
+      let realProgress = 0;
       try {
         const jobRes = await fetch(`/api/jobs/${storedJobId}/status`);
+        if (isStale()) return;
         if (jobRes.ok) {
           const json = await jobRes.json();
+          if (isStale()) return;
           realStatus = json.data?.status ?? null;
           realBrief = json.data?.brief ?? null;
           realPrice = json.data?.calculatedPrice;
+          realProgress = json.data?.progress ?? 0;
         }
       } catch {}
 
-      if (realStatus === 'awaiting_confirmation' && realBrief?.h2_list) {
+      if (isStale()) return;
+
+      if (realStatus === 'completed') {
+        const fresh = await loadSession(sessionId);
+        if (isStale()) return;
+        const freshMeta = (fresh?.outputMeta ?? {}) as Record<string, unknown>;
+        if (fresh?.contentText) {
+          setResult({
+            article_html: fresh.contentText,
+            article_docx_base64: '',
+            metadata: (freshMeta.metadata as Record<string, unknown>) ?? {},
+            quality_metrics: (freshMeta.quality_metrics as Record<string, number>) ?? {},
+            warnings: (freshMeta.warnings as string[]) ?? [],
+          });
+          setJobId(null);
+          setScreen('result');
+        } else {
+          setScreen(realProgress > 15 ? 'progress_generation' : 'progress_analysis');
+        }
+        return;
+      }
+
+      if (realStatus === 'failed') {
+        setJobId(null);
+        setSubmitError('Предыдущая генерация завершилась ошибкой');
+        setScreen('input');
+        setInputKey(k => k + 1);
+        return;
+      }
+
+      if (realStatus === 'awaiting_confirmation' && realBrief && (realBrief as { h2_list?: unknown }).h2_list) {
         setBrief(realBrief);
         setCalculatedPrice(realPrice ?? 0);
         setScreen('brief');
         return;
       }
-      if (realStatus === 'completed') {
-        if (data.contentText) {
-          setResult({
-            article_html: data.contentText,
-            article_docx_base64: '',
-            metadata: meta.metadata ?? {},
-            quality_metrics: meta.quality_metrics ?? {},
-            warnings: (meta.warnings as string[]) ?? [],
-          });
-          setBrief(null);
-          setJobId(null);
-          setScreen('result');
-          return;
-        }
-        setScreen('progress_generation');
-        return;
-      }
-      if (realStatus === 'failed') {
-        setSubmitError('Предыдущая генерация завершилась ошибкой');
-        setScreen('input');
-        setJobId(null);
-        setInputKey(k => k + 1);
-        return;
-      }
-      // processing или null — ставим прогресс, useEffect разрулит
-      setScreen('progress_analysis');
+
+      // processing / null — уточняем экран по progress
+      setScreen(realProgress > 15 ? 'progress_generation' : 'progress_analysis');
       return;
     }
 
-    if (data.status === 'failed') {
-      setScreen('input');
-      setSubmitError('Предыдущая генерация завершилась ошибкой');
-      setInputKey(k => k + 1);
-      return;
-    }
-
-    if (!data.contentText) {
-      setScreen('input');
-      setInputKey(k => k + 1);
-      return;
-    }
-
-    if (runningJobs[sessionId]) {
-      setRunningJobs(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
-    }
-    setResult({
-      article_html: data.contentText,
-      article_docx_base64: '',
-      metadata: meta.metadata ?? {},
-      quality_metrics: meta.quality_metrics ?? {},
-      warnings: (meta.warnings as string[]) ?? [],
-    });
-    setBrief(null);
+    // 4. draft без контента — форма
+    if (isStale()) return;
     setJobId(null);
-    setScreen('result');
+    setBrief(null);
+    setResult(null);
+    setScreen('input');
+    setInputKey(k => k + 1);
   }, [loadSession, runningJobs, refreshSessions]);
+
+  useEffect(() => {
+    if (autoRestoreDoneRef.current) return;
+    if (sessionsLoading) return;
+    if (jobId) {
+      // Если jobId уже выставлен (HMR, навигация назад) — считаем, что восстанавливать нечего
+      autoRestoreDoneRef.current = true;
+      return;
+    }
+    if (activeSessionId) {
+      autoRestoreDoneRef.current = true;
+      return;
+    }
+    if (screen !== 'input') {
+      autoRestoreDoneRef.current = true;
+      return;
+    }
+
+    const active = sessions.find(
+      s => s.status === 'generating' || s.status === 'awaiting_confirmation',
+    );
+
+    // Помечаем done независимо от того, нашлась сессия или нет — больше не пытаемся
+    autoRestoreDoneRef.current = true;
+
+    if (!active) return;
+    handleSelectSession(active.id);
+  }, [sessionsLoading, sessions, jobId, activeSessionId, screen, handleSelectSession]);
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     await deleteSession(sessionId);
@@ -598,6 +752,7 @@ export function SeoArticleExpressClient() {
         activeSessionId={activeSessionId}
         onSelect={handleSelectSession}
         onDelete={handleDeleteSession}
+        onCopy={handleCopySession}
         onNewArticle={handleNewFromHistory}
         activeJobs={activeJobs}
         unseenIds={unseenIds}
@@ -621,7 +776,7 @@ export function SeoArticleExpressClient() {
               subtitle={`«${(input.target_query as string) ?? ''}»`}
               steps={mapSteps(ANALYSIS_STEPS)}
               progress={jobState?.progress ?? 0}
-              currentStepLabel={`осталось ~${Math.max(1, 15 - Math.round((Date.now() - startTime) / 1000))} сек`}
+              currentStepLabel={`осталось ~${Math.max(5, Math.round((15 - (jobState?.progress ?? 0)) * 2.5))} сек`}
               onCancel={handleCancel}
             />
           )}
@@ -648,7 +803,7 @@ export function SeoArticleExpressClient() {
               subtitle={`«${(input.target_query as string) ?? ''}»`}
               steps={mapSteps(GENERATION_STEPS, 2)}
               progress={jobState?.progress ?? 15}
-              currentStepLabel={`осталось ~${Math.max(1, 90 - Math.round((Date.now() - startTime) / 1000))} сек`}
+              currentStepLabel={`осталось ~${Math.max(5, Math.round((100 - (jobState?.progress ?? 15)) * 1.2))} сек`}
               onCancel={handleCancel}
             />
           )}
