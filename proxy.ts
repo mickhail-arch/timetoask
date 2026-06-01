@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export default function middleware(request: NextRequest) {
-  const ua = request.headers.get('user-agent') ?? '';
-  const isMobile = /mobile|android|iphone|ipad/i.test(ua);
   const { pathname } = request.nextUrl;
-
-  if (isMobile && pathname !== '/mobile') {
-    return NextResponse.redirect(new URL('/mobile', request.url));
-  }
 
   const token = request.cookies.get('next-auth.session-token');
 

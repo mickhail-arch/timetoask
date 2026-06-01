@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState } from 'react';
 import { CopyButton } from './ExportPanel';
 
@@ -32,7 +32,7 @@ export function MetaPanel({
       <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Мета-теги</div>
 
       {/* Title */}
-      <div className="flex items-start justify-between border-b border-[#F0F0F0] pb-2.5 mb-2.5">
+      <div className="flex items-start justify-between border-b border-[var(--seo-card-border)] pb-2.5 mb-2.5">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-[11px] text-[var(--color-text-secondary)]">Title ({titleLength} симв)</span>
@@ -53,7 +53,7 @@ export function MetaPanel({
             />
           ) : (
             <div
-              className={`text-[13px] break-words ${editable ? 'cursor-text rounded hover:bg-black/[0.03] px-0.5 -mx-0.5' : ''} ${titleOver ? 'text-red-500' : ''}`}
+              className={`text-[13px] break-words ${editable ? 'cursor-text rounded hover:bg-[var(--color-bg-page)] px-0.5 -mx-0.5' : ''} ${titleOver ? 'text-red-500' : ''}`}
               onClick={() => editable && setEditingTitle(true)}
             >
               {title || <span className="text-[var(--color-text-secondary)] italic">Нет данных</span>}
@@ -86,7 +86,7 @@ export function MetaPanel({
             />
           ) : (
             <div
-              className={`text-[13px] break-words ${editable ? 'cursor-text rounded hover:bg-black/[0.03] px-0.5 -mx-0.5' : ''} ${descOver ? 'text-red-500' : ''}`}
+              className={`text-[13px] break-words ${editable ? 'cursor-text rounded hover:bg-[var(--color-bg-page)] px-0.5 -mx-0.5' : ''} ${descOver ? 'text-red-500' : ''}`}
               onClick={() => editable && setEditingDescription(true)}
             >
               {description || <span className="text-[var(--color-text-secondary)] italic">Нет данных</span>}

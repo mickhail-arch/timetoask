@@ -1,3 +1,5 @@
+//components/seo-article/ExportPanel.tsx
+
 'use client';
 import { useState, useCallback } from 'react';
 
@@ -40,7 +42,7 @@ export function CopyButton({ text, label = 'Копировать' }: { text: str
   return (
     <button onClick={handleCopy}
       className={`ml-2 shrink-0 rounded-[var(--radius-sm)] border px-2.5 py-0.5 text-[11px] transition-all ${
-        copied ? 'border-[var(--color-step-done)] bg-[var(--color-step-done)] text-white' : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-secondary)] hover:bg-[#F5F5F5] hover:text-[var(--color-text-primary)]'
+        copied ? 'border-[var(--color-step-done)] bg-[var(--color-step-done)] text-white' : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]'
       }`}>{copied ? 'Готово' : label}</button>
   );
 }
@@ -107,24 +109,24 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
           {copied ? '✓ Скопировано' : 'Скопировать статью'}
         </button>
         <div className="flex gap-1.5">
-          <button onClick={onDownloadHtml} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Скачать .html</button>
-          <button onClick={onDownloadDocx} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Скачать .docx</button>
+          <button onClick={onDownloadHtml} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .html</button>
+          <button onClick={onDownloadDocx} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .docx</button>
         </div>
         {articleHtml && (
           <button onClick={handleCopyDzen} className={`w-full rounded-[var(--radius-md)] border py-2.5 text-[13px] transition-all ${
             copiedDzen
               ? 'border-[var(--color-step-done)] bg-[var(--color-step-done)] text-white'
-              : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] transition-colors hover:bg-[#F5F5F5]'
+              : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] transition-colors hover:bg-[var(--color-bg-page)]'
           }`}>
             {copiedDzen ? '✓ Скопировано для Дзен' : 'Копировать для Дзен'}
           </button>
         )}
-        <button onClick={onDownloadMetadata} className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[#F5F5F5]">↓ Метаданные .docx</button>
+        <button onClick={onDownloadMetadata} className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Метаданные .docx</button>
       </div>
-      <div className="mt-2 text-center text-[11px] text-[var(--color-step-pending)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>
+      <div className="mt-2 text-center text-[11px] text-[var(--color-text-secondary)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>
       {onRegenerate && (
         <button onClick={onRegenerate}
-          className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]">
+          className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-page)]">
           Перегенерировать текст
         </button>
       )}

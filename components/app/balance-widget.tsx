@@ -1,7 +1,6 @@
 'use client';
 
 import { useBalance } from '@/hooks/useBalance';
-import { cn } from '@/lib/utils';
 
 export function BalanceWidget() {
   const { balance, isLoading, error } = useBalance();
@@ -13,15 +12,18 @@ export function BalanceWidget() {
   }
 
   if (error || !balance) {
-    return <span className="text-sm text-text-secondary">&mdash;</span>;
+    return <span className="text-sm text-[var(--color-text-secondary)]">&mdash;</span>;
   }
 
   const available = balance.available;
 
   return (
     <span
-      className={cn(available <= 0 ? 'text-error' : '')}
-      style={available > 0 ? { color: '#171717', fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' } : { fontWeight: 400, fontSize: '14px', fontFamily: 'Inter, sans-serif' }}
+      className={
+        available <= 0
+          ? 'text-sm font-normal text-[var(--color-error)]'
+          : 'text-sm font-normal text-[var(--color-text-secondary)]'
+      }
     >
       {available.toLocaleString('ru-RU')} ₽
     </span>

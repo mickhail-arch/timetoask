@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback } from 'react';
 
@@ -57,13 +57,13 @@ export function RewritePanel({
 
   return (
     <div
-      className="absolute right-0 z-50 w-[300px] rounded-[12px] border border-[#E0E0E0] bg-white p-4 shadow-lg"
+      className="absolute right-0 z-50 w-[300px] rounded-[12px] border border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)] p-4 shadow-lg"
       style={{ top: position.top, transform: 'translateX(calc(100% + 16px))' }}
     >
       {/* Выделенный фрагмент */}
       <div className="mb-3">
         <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-[#999]">Выделенный текст</div>
-        <div className="max-h-[80px] overflow-y-auto rounded bg-[#F5F5F5] px-2.5 py-2 text-[12px] text-[#666] leading-relaxed">
+        <div className="max-h-[80px] overflow-y-auto rounded bg-[var(--color-bg-page)] px-2.5 py-2 text-[12px] text-[var(--color-text-secondary)] leading-relaxed">
           {plainFragment.length > 200 ? plainFragment.slice(0, 200) + '...' : plainFragment}
         </div>
       </div>
@@ -78,7 +78,7 @@ export function RewritePanel({
             rows={3}
             placeholder="Перефразируй проще..."
             disabled={loading}
-            className="mb-2 w-full resize-none rounded-[8px] border border-[#E0E0E0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
+            className="mb-2 w-full resize-none rounded-[8px] border border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-[13px] outline-none focus:border-[var(--color-accent)] disabled:opacity-50"
           />
           <div className="mb-3 flex items-center justify-between text-[11px] text-[#999]">
             <span>{prompt.length}/300</span>
@@ -97,7 +97,7 @@ export function RewritePanel({
             </button>
             <button
               onClick={onCancel}
-              className="rounded-[8px] border border-[#E0E0E0] px-3 py-2 text-[13px] text-[#666] hover:bg-[#F5F5F5]"
+              className="rounded-[8px] border border-[var(--seo-card-border)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)]"
             >
               Отмена
             </button>
@@ -127,13 +127,13 @@ export function RewritePanel({
             </button>
             <button
               onClick={() => { setResult(null); setPrompt(''); }}
-              className="rounded-[8px] border border-[#E0E0E0] px-3 py-2 text-[13px] text-[#666] hover:bg-[#F5F5F5]"
+              className="rounded-[8px] border border-[var(--seo-card-border)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)]"
             >
               Заново
             </button>
             <button
               onClick={onCancel}
-              className="rounded-[8px] border border-[#E0E0E0] px-3 py-2 text-[13px] text-[#666] hover:bg-[#F5F5F5]"
+              className="rounded-[8px] border border-[var(--seo-card-border)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)]"
             >
               Отмена
             </button>

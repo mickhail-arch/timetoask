@@ -22,8 +22,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = inputSchema.safeParse(body.input);
     if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      const message = first?.message ?? 'Проверьте правильность заполнения полей';
       return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: parsed.error.message, statusCode: 400 } },
+        { error: { code: 'VALIDATION_ERROR', message, statusCode: 400 } },
         { status: 400 },
       );
     }

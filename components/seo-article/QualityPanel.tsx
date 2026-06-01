@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 interface QualityMetrics {
   ai_score: number; water: number; spam: number;
@@ -17,7 +17,7 @@ function metricColor(value: number, green: [number, number], red: number, invert
 export function QualityPanel({ metrics }: { metrics: QualityMetrics }) {
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
-      <div className="mb-2.5 flex items-center justify-between border-b border-[#F0F0F0] pb-2.5">
+      <div className="mb-2.5 flex items-center justify-between border-b border-[var(--seo-card-border)] pb-2.5">
         <div className="text-[15px] font-medium">{metrics.char_count.toLocaleString('ru-RU')} символов · {metrics.word_count.toLocaleString('ru-RU')} слов</div>
         <div className="text-xs text-[var(--color-text-secondary)]">H2: {metrics.h2_count} · H3: {metrics.h3_count} · Фото: {metrics.image_count} · FAQ: {metrics.faq_count}</div>
       </div>
@@ -39,7 +39,7 @@ export function QualityPanel({ metrics }: { metrics: QualityMetrics }) {
 
 function Metric({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="rounded-[var(--radius-md)] bg-[#F5F5F5] px-2.5 py-2">
+    <div className="rounded-[var(--radius-md)] bg-[#F5F5F5] px-2.5 py-2 dark:bg-[#2A2A2D]">
       <div className="text-[10px] text-[var(--color-text-secondary)]">{label}</div>
       <div className="text-[16px] font-medium" style={{ color }}>{value}</div>
     </div>

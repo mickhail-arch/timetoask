@@ -6,6 +6,7 @@ import { unauthorized, apiError } from '@/lib/api-helpers';
 import { getRedisState, resumePipeline } from '@/modules/seo/pipeline';
 import { seoExpressSteps, RESUME_FROM_INDEX } from '@/modules/seo/steps';
 import { ToolRegistry } from '@/plugins/registry';
+import { Prisma } from '@/generated/prisma';
 import { prisma } from '@/lib/prisma';
 import { reserveTokens } from '@/modules/billing/billing.service';
 import { InsufficientBalanceError } from '@/core/errors';
@@ -40,6 +41,13 @@ export async function POST(
     const analysisCost = (jobInput.analysisCost as number) ?? 0;
     const fullCost = (jobInput.fullCost as number) ?? 0;
     const remainingCost = Math.max(0, fullCost - analysisCost);
+
+    await prisma.jobStep.update({
+      where: { id },
+      data: {
+        input: { ...jobInput, consentAt: new Date().toISOString() } as Prisma.InputJsonValue,
+      },
+    });
 
     const idempotencyKey = `seo-remaining:${session.user.id}:${id}`;
     try {

@@ -10,32 +10,51 @@ interface NavItemProps {
   label: string;
   href: string;
   badge?: string;
+  /** true — родительский сайдбар свёрнут, текст скрываем, но оставляем для tooltip */
+  collapsed?: boolean;
 }
 
-export function NavItem({ icon, label, href, badge }: NavItemProps) {
+export function NavItem({ icon, label, href, badge, collapsed }: NavItemProps) {
   const pathname = usePathname();
   const isActive = pathname === href || pathname.startsWith(href + '/');
 
   return (
     <Link
       href={href}
+      title={collapsed ? label : undefined}
       className={cn(
-        'flex items-center gap-2 rounded-[var(--radius-md)] px-2 py-2 text-sm font-normal transition-colors',
+        'group/navitem relative flex h-9 items-center gap-3 rounded-md px-2.5 text-sm font-medium transition-colors',
         isActive
-          ? 'bg-accent'
-          : 'hover:bg-[#E8E8E8]',
+          ? 'bg-accent/15 text-foreground'
+          : 'text-muted-foreground hover:bg-accent/10 hover:text-foreground',
       )}
     >
-      <span className="shrink-0 [&>svg]:size-[18px]">{icon}</span>
-      <span className="truncate" style={{ color: '#171717' }}>
+      <span
+        className={cn(
+          'flex h-5 w-5 shrink-0 items-center justify-center [&>svg]:size-[18px]',
+          isActive && 'text-[var(--color-accent)]',
+        )}
+      >
+        {icon}
+      </span>
+      <span
+        className={cn(
+          'truncate transition-opacity duration-150',
+          collapsed && 'pointer-events-none opacity-0',
+        )}
+      >
         {label.charAt(0).toUpperCase() + label.slice(1)}
       </span>
-      {badge && (
-        <Badge
-          className="ml-auto border-transparent bg-accent text-text-primary text-[10px] px-1.5 py-0"
-        >
+      {badge && !collapsed && (
+        <Badge variant="secondary" className="ml-auto px-1.5 py-0 text-[10px]">
           {badge}
         </Badge>
+      )}
+      {isActive && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r bg-[var(--color-accent)]"
+        />
       )}
     </Link>
   );

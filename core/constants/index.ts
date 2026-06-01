@@ -12,5 +12,13 @@ export const TOOL_CACHE_TTL_SEC = 30;
 export const MAX_CONCURRENT_GLOBAL = 50;
 export const MAX_CONCURRENT_PER_USER = 5;
 
+export const VERIFICATION_CODE_TTL_MS = 15 * 60 * 1000; // 15 min
+export const MAX_VERIFICATION_ATTEMPTS = 5;
+export const RESEND_CODE_COOLDOWN_SEC = 60;
+
+export const KEYWORDS_GENERATION_COST = 10; // токенов за AI-генерацию ключей (1 токен = 1₽)
+export const KEYWORDS_MAX_TOTAL = 15; // максимум ключей суммарно (анти-переспам)
+export const KEYWORDS_MODEL = 'google/gemini-3.1-pro-preview';
+
 export { RUSSIAN_CITIES, RUSSIAN_REGIONS, searchCities, searchRegions, searchGeo } from './russian-geo';
 

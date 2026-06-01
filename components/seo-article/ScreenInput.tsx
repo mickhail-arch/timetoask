@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { calculatePriceClient } from '@/lib/seo-article/price-calculator';
@@ -59,6 +59,43 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
 
   const [targetQuery, setTargetQuery] = useState((iv?.target_query as string) ?? '');
   const [keywords, setKeywords] = useState((iv?.keywords as string) ?? '');
+  const [keywordsLoading, setKeywordsLoading] = useState(false);
+  const [keywordsError, setKeywordsError] = useState('');
+
+  const handleGenerateKeywords = useCallback(async () => {
+    if (!targetQuery.trim()) {
+      setKeywordsError('Сначала введите целевой запрос');
+      return;
+    }
+    setKeywordsError('');
+    setKeywordsLoading(true);
+    try {
+      const existing = keywords.split('\n').map((k) => k.trim()).filter(Boolean);
+      const forbidden = forbiddenWords.split('\n').map((w) => w.trim()).filter(Boolean);
+      const res = await fetch('/api/ai/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: targetQuery.trim(), existing, intent, geo, forbidden }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setKeywordsError(json?.error?.message ?? 'Не удалось сгенерировать');
+        return;
+      }
+      const fresh: string[] = json.data.keywords ?? [];
+      if (fresh.length === 0) {
+        setKeywordsError('Новых ключей не нашлось (уже максимум)');
+        return;
+      }
+      const merged = [...existing, ...fresh].join('\n');
+      setKeywords(merged);
+    } catch {
+      setKeywordsError('Ошибка сети');
+    } finally {
+      setKeywordsLoading(false);
+    }
+  }, [targetQuery, keywords, intent, geo, forbiddenWords]);
+
   const [intent, setIntent] = useState((iv?.intent as string) ?? 'informational');
   const [charCount, setCharCount] = useState(Math.max(6000, (iv?.target_char_count as number) ?? 8000));
   const [imageCount, setImageCount] = useState((iv?.image_count as number) ?? 0);
@@ -68,6 +105,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
   const [customTone, setCustomTone] = useState(ivIsCustomTone ? ivToneRaw : '');
   const [showCustomTone, setShowCustomTone] = useState(ivIsCustomTone);
   const [toneComment, setToneComment] = useState((iv?.tone_comment as string) ?? '');
+  const [contextNotes, setContextNotes] = useState((iv?.context_notes as string) ?? '');
   const [gender, setGender] = useState(genderRevMap[ta?.gender ?? ''] ?? 'Все');
   const [ages, setAges] = useState<string[]>(ta?.age?.map(a => ageRevMap[a] ?? a) ?? ['Все']);
   const [geo, setGeo] = useState((iv?.geo_location as string) ?? '');
@@ -254,6 +292,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
         image_count: imageCount,
         tone_of_voice: showCustomTone ? customTone : (toneMap[tone] ?? tone.toLowerCase()),
         tone_comment: toneComment || undefined,
+        context_notes: contextNotes || undefined,
         target_audience: {
           gender: gender === 'Мужчины' ? 'male' : gender === 'Женщины' ? 'female' : 'all',
           age: ages.includes('Все') ? ['all'] : ages.map(a => {
@@ -296,7 +335,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       });
     }, 500);
     return () => { if (inputChangeRef.current) clearTimeout(inputChangeRef.current); };
-  }, [targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, gender, ages, geo, imageStyles, imageComment, imageTextOverlay, imageAspect, imagePalette, imagePaletteHex, imageMood, imageExclude, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, brand, brandUrl, brandDescription, cta, ctaUrl, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onInputChange]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, contextNotes, gender, ages, geo, imageStyles, imageComment, imageTextOverlay, imageAspect, imagePalette, imagePaletteHex, imageMood, imageExclude, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, brand, brandUrl, brandDescription, cta, ctaUrl, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onInputChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
@@ -312,6 +351,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
         return map[tone] ?? tone.toLowerCase();
       })(),
       tone_comment: toneComment || undefined,
+      context_notes: contextNotes || undefined,
       target_audience: {
         gender: gender === 'Мужчины' ? 'male' : gender === 'Женщины' ? 'female' : 'all',
         age: ages.includes('Все') ? ['all'] : ages.map(a => {
@@ -356,7 +396,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       author_url: authorUrl || undefined,
       publication_date: useTodayDate ? new Date().toLocaleDateString('ru-RU') : (publicationDate || undefined),
     });
-  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, gender, ages, geo, imageStyles, imageComment, imageTextOverlay, imageAspect, imagePalette, imagePaletteHex, imageMood, imageExclude, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, metadataModel, brand, brandUrl, brandDescription, cta, ctaUrl, ctaType, ctaStyle, ctaPosition, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
+  }, [canSubmit, targetQuery, keywords, intent, aiModel, charCount, imageCount, tone, customTone, showCustomTone, toneComment, contextNotes, gender, ages, geo, imageStyles, imageComment, imageTextOverlay, imageAspect, imagePalette, imagePaletteHex, imageMood, imageExclude, faqEnabled, faqCount, comparisonEnabled, comparisonObjects, comparisonCriteria, analysisModel, metadataModel, brand, brandUrl, brandDescription, cta, ctaUrl, ctaType, ctaStyle, ctaPosition, internalLinks, sourceLinks, forbiddenWords, legalRestrictions, authorName, authorPosition, authorCompany, authorUrl, publicationDate, useTodayDate, onSubmit]);
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
@@ -374,24 +414,35 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
             value={targetQuery}
             onChange={e => { setTargetQuery(e.target.value); checkForbidden(e.target.value); onQueryChange?.(e.target.value); }}
             placeholder="как выбрать кофемашину для дома"
-            className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
+            className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
           />
           <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Именно тот запрос, по которому статья должна ранжироваться</div>
         </div>
 
         <div className="mb-4">
-          <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">
+          <label className="mb-1.5 flex w-full items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
             Ключевые слова
             <span className="rounded bg-[#FFEAEA] px-1.5 py-0.5 text-[10px] font-medium text-[#DC2626]">обязательно</span>
+            <button
+              type="button"
+              onClick={handleGenerateKeywords}
+              disabled={keywordsLoading}
+              className="ml-auto shrink-0 text-[12px] font-medium text-[var(--color-accent)] transition-opacity hover:opacity-80 disabled:opacity-50"
+            >
+              {keywordsLoading ? 'Генерация…' : '✨ Сгенерировать AI (10₽)'}
+            </button>
           </label>
           <textarea
             value={keywords}
             onChange={e => { setKeywords(e.target.value); checkForbidden(e.target.value); }}
             placeholder={'кофемашина для дома\nрожковая кофемашина\nкакую кофемашину купить'}
             rows={3}
-            className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
+            className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
           />
           <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">По одному ключу на строку. Основной + LSI-ключи</div>
+          {keywordsError && (
+            <div className="mt-1 text-[11px] text-[var(--color-step-error)]">{keywordsError}</div>
+          )}
         </div>
 
         <div className="mb-4">
@@ -399,27 +450,49 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
           <select
             value={intent}
             onChange={e => setIntent(e.target.value)}
-            className="w-full appearance-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2.5 pr-8 text-sm text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
+            className="w-full appearance-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2.5 pr-8 text-sm text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--seo-input-focus)]"
           >
             {INTENTS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
           </select>
+        </div>
+
+        <div className="mb-4">
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <label htmlFor="context_notes" className="text-[13px] font-medium text-[var(--color-text-primary)]">
+              Что важно учесть
+            </label>
+            <span className="text-[11px] text-[var(--color-text-secondary)]">
+              {contextNotes.length}/300
+            </span>
+          </div>
+          <textarea
+            id="context_notes"
+            value={contextNotes}
+            onChange={e => setContextNotes(e.target.value.slice(0, 300))}
+            placeholder={`Смысловые ограничения и контекст статьи. Пример:\n— только B2C-сегмент, не упоминать опт\n— аудитория: начинающие селлеры\n— не сравнивать с конкретными брендами`}
+            rows={4}
+            className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--seo-input-placeholder)] focus:border-[var(--seo-input-focus)]"
+          />
+          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+            Эти указания учитываются при создании структуры и при написании текста. Отличаются от тона: задают <strong className="font-medium">смысл</strong>, а не стиль.
+          </p>
         </div>
 
         <div className="mt-4">
           <label className="mb-1.5 block text-[13px] font-medium text-[var(--color-text-primary)]">Модель AI</label>
           <div className="grid grid-cols-3 gap-2">
             <button type="button" onClick={() => setAiModel('gemini')}
-              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'gemini' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'gemini' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
               <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Gemini 3.1 Pro</div>
               <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Самая быстрая и дешёвая</div>
             </button>
             <button type="button" onClick={() => setAiModel('sonnet')}
-              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'sonnet' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
               <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Sonnet 4.6</div>
               <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Баланс цены и качества</div>
             </button>
             <button type="button" onClick={() => setAiModel('opus47')}
-              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+              className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${aiModel === 'opus47' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
               <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.8</div>
               <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Лучшее качество текста</div>
             </button>
@@ -453,7 +526,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                   className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs transition-all ${
                     imageStyles.includes(s)
                       ? 'border-[var(--seo-accent-selected-bg)] bg-[var(--seo-accent-selected-bg)] font-medium text-[var(--seo-accent-selected-text)]'
-                      : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[#F5F5F5]'
+                      : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
                   }`}>{s}</button>
               ))}
             </div>
@@ -466,7 +539,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 maxLength={300}
                 rows={2}
                 placeholder="Генерируй в мягких медицинских тонах, пастельные цвета..."
-                className="mt-2 w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+                className="mt-2 w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
               />
               <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
                 Необязательно. Дополнит выбранный стиль вашими пожеланиями
@@ -484,7 +557,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 <div className="flex gap-2">
                   {(['16:9', '1:1', '9:16'] as const).map(a => (
                     <button key={a} type="button" onClick={() => setImageAspect(a)}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imageAspect === a ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imageAspect === a ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       {a === '16:9' ? 'Горизонтальная' : a === '1:1' ? 'Квадрат' : 'Вертикальная'}
                     </button>
                   ))}
@@ -504,7 +577,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                     { key: 'custom', label: 'Свои цвета' },
                   ].map(p => (
                     <button key={p.key} type="button" onClick={() => setImagePalette(p.key)}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imagePalette === p.key ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imagePalette === p.key ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       {p.label}
                     </button>
                   ))}
@@ -515,7 +588,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                     onChange={e => setImagePaletteHex(e.target.value)}
                     placeholder="#A6E800, #1F1F1F, #FFFFFF"
                     maxLength={50}
-                    className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+                    className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
                   />
                 )}
               </div>
@@ -532,7 +605,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                     { key: 'medical', label: 'Медицинское' },
                   ].map(m => (
                     <button key={m.key} type="button" onClick={() => setImageMood(m.key)}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imageMood === m.key ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${imageMood === m.key ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       {m.label}
                     </button>
                   ))}
@@ -545,7 +618,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 onChange={e => setImageExclude(e.target.value)}
                 placeholder="без людей, без логотипов..."
                 maxLength={200}
-                className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+                className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
               />
               <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Что исключить из изображений</div>
             </div>
@@ -565,19 +638,19 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 className={`rounded-[var(--radius-md)] border px-4 py-1.5 text-[13px] transition-all ${
                   tone === t
                     ? 'border-[var(--seo-selected-bg)] bg-[var(--seo-selected-bg)] font-medium text-[var(--seo-selected-text)]'
-                    : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[#F5F5F5]'
+                    : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
                 }`}>{t}</button>
             ))}
             <button onClick={() => handleToneClick('Свой...')}
               className={`rounded-[var(--radius-md)] border px-4 py-1.5 text-[13px] transition-all ${
                 showCustomTone
                   ? 'border-[var(--seo-selected-bg)] bg-[var(--seo-selected-bg)] font-medium text-[var(--seo-selected-text)]'
-                  : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[#F5F5F5]'
+                  : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
               }`}>Свой...</button>
           </div>
           {showCustomTone && (
             <textarea value={customTone} onChange={e => setCustomTone(e.target.value)} maxLength={300} rows={2} placeholder="Опишите желаемый стиль..."
-              className="mt-2 w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+              className="mt-2 w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
           )}
           <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">По умолчанию: Экспертный</div>
           <div className="mt-2">
@@ -587,7 +660,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
               maxLength={300}
               rows={2}
               placeholder="Пиши с юмором, как будто объясняешь другу..."
-              className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
+              className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]"
             />
             <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
               Необязательно. Дополнит выбранный стиль вашими пожеланиями
@@ -604,7 +677,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs transition-all ${
                   gender === g
                     ? 'border-[var(--seo-selected-bg)] bg-[var(--seo-selected-bg)] font-medium text-[var(--seo-selected-text)]'
-                    : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[#F5F5F5]'
+                    : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
                 }`}>{g}</button>
             ))}
           </div>
@@ -615,7 +688,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                 className={`rounded-[var(--radius-sm)] border px-3 py-1 text-xs transition-all ${
                   ages.includes(a)
                     ? 'border-[var(--seo-selected-bg)] bg-[var(--seo-selected-bg)] font-medium text-[var(--seo-selected-text)]'
-                    : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[#F5F5F5]'
+                    : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
                 }`}>{a}</button>
             ))}
           </div>
@@ -626,9 +699,9 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
           <input type="text" value={geo} onChange={e => setGeo(e.target.value)} placeholder="Москва, Санкт-Петербург, Новосибирск..."
             onFocus={() => setGeoFocused(true)}
             onBlur={() => setTimeout(() => setGeoFocused(false), 200)}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]" />
+            className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder-[var(--seo-input-placeholder)] outline-none transition-colors focus:border-[var(--seo-input-focus)]" />
           {geoSuggestions.length > 0 && geoFocused && (
-            <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-[220px] overflow-hidden overflow-y-auto rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white shadow-md">
+            <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-[220px] overflow-hidden overflow-y-auto rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)] shadow-md">
               {geoSuggestions.map(city => {
                 const q = geo.trim().toLowerCase();
                 let content: React.ReactNode = city;
@@ -649,7 +722,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                     key={city}
                     type="button"
                     onMouseDown={() => { setGeo(city); setGeoFocused(false); }}
-                    className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[#F5F5F5]"
+                    className="w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--color-bg-page)]"
                   >{content}</button>
                 );
               })}
@@ -693,12 +766,12 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5">
         <button onClick={() => setAccordionOpen(v => !v)} className="flex w-full items-center justify-between">
           <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Дополнительные настройки</span>
-          <span className="rounded bg-[#F5F5F5] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">14 полей {accordionOpen ? '▴' : '▾'}</span>
+          <span className="rounded bg-[var(--color-bg-page)] px-2 py-0.5 text-xs text-[var(--color-text-secondary)]">14 полей {accordionOpen ? '▴' : '▾'}</span>
         </button>
         {accordionOpen && (
           <div className="mt-4 space-y-4">
             {/* Блок сравнения */}
-            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Блок сравнения</div>
               <label className="mb-1 flex items-center gap-2 text-[13px] text-[var(--color-text-primary)] cursor-pointer">
                 <input type="checkbox" checked={comparisonEnabled} onChange={e => setComparisonEnabled(e.target.checked)} disabled={!comparisonAllowed} className="accent-[var(--color-accent)]" />
@@ -740,16 +813,16 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
               )}
             </div>
             {/* Модель анализа текста */}
-            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Модель анализа текста</div>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setAnalysisModel('sonnet')}
-                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'sonnet' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
                   <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Sonnet 4.6</div>
                   <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">По умолчанию. Быстрый анализ</div>
                 </button>
                 <button type="button" onClick={() => setAnalysisModel('opus47')}
-                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${analysisModel === 'opus47' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
                   <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.8</div>
                   <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Глубокий анализ и правки</div>
                 </button>
@@ -757,53 +830,53 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
               <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Используется для SEO-аудита, AI-детекта и финальных правок</div>
             </div>
             {/* Модель метаданных */}
-            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Модель метаданных</div>
               <div className="grid grid-cols-3 gap-2">
+                <button type="button" onClick={() => setMetadataModel('gemini_flash')}
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'gemini_flash' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
+                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Gemini Flash</div>
+                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Быстро и дёшево</div>
+                </button>
                 <button type="button" onClick={() => setMetadataModel('sonnet')}
-                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'sonnet' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'sonnet' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
                   <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Sonnet 4.6</div>
                   <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">По умолчанию</div>
                 </button>
                 <button type="button" onClick={() => setMetadataModel('opus47')}
-                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'opus47' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
+                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'opus47' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)]' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] hover:border-[var(--color-text-secondary)]'}`}>
                   <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Opus 4.8</div>
                   <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Максимум качества</div>
-                </button>
-                <button type="button" onClick={() => setMetadataModel('gemini_flash')}
-                  className={`rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all ${metadataModel === 'gemini_flash' ? 'border-[var(--color-accent)] bg-white' : 'border-[var(--seo-input-border)] bg-white hover:border-[var(--color-text-secondary)]'}`}>
-                  <div className="text-[13px] font-medium text-[var(--color-text-primary)]">Gemini Flash</div>
-                  <div className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">Быстро и дёшево</div>
                 </button>
               </div>
               <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Title, Description, Slug — генерируются на финальном шаге с учётом анализа конкурентов</div>
             </div>
             {/* Автор статьи */}
-            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-4">
               <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Автор статьи (E-E-A-T)</div>
               <div className="flex gap-3 mb-3">
                 <div className="flex-1">
                   <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">ФИО автора</label>
                   <input type="text" value={authorName} onChange={e => setAuthorName(e.target.value)} maxLength={100} placeholder="Иванов Алексей Петрович"
-                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Должность</label>
                   <input type="text" value={authorPosition} onChange={e => setAuthorPosition(e.target.value)} maxLength={100} placeholder="SEO-специалист"
-                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 </div>
               </div>
               <div className="flex gap-3 mb-3">
                 <div className="flex-1">
                   <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Компания</label>
                   <input type="text" value={authorCompany} onChange={e => setAuthorCompany(e.target.value)} maxLength={100} placeholder="Digital Agency"
-                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                    className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 text-[12px] text-[var(--color-text-secondary)]">Ссылка на профиль</label>
                   <input type="url" value={authorUrl} onChange={e => setAuthorUrl(e.target.value)} onBlur={() => setAuthorUrl(v => formatUrlInput(v))} placeholder="https://linkedin.com/in/..."
                     disabled={!authorName}
-                    className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!authorName ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                    className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!authorName ? 'opacity-50 cursor-not-allowed' : ''}`} />
                   {getUrlError(authorUrl) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(authorUrl)}</div>}
                 </div>
               </div>
@@ -813,7 +886,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                   <input type="text" value={useTodayDate ? new Date().toLocaleDateString('ru-RU') : publicationDate}
                     onChange={e => setPublicationDate(e.target.value)} maxLength={20} placeholder="28.03.2026"
                     disabled={useTodayDate}
-                    className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${useTodayDate ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                    className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${useTodayDate ? 'opacity-50 cursor-not-allowed' : ''}`} />
                 </div>
                 <label className="flex items-center gap-1.5 pb-[9px] cursor-pointer">
                   <input type="checkbox" checked={useTodayDate} onChange={e => { setUseTodayDate(e.target.checked); if (e.target.checked) setPublicationDate(''); }}
@@ -827,13 +900,13 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Бренд</label>
                 <input type="text" value={brand} onChange={e => setBrand(e.target.value)} maxLength={100} placeholder="Старбакс"
-                  className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Пусто → без упоминания</div>
               </div>
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Ссылка на бренд</label>
                 <input type="url" value={brandUrl} onChange={e => setBrandUrl(e.target.value)} onBlur={() => setBrandUrl(v => formatUrlInput(v))} placeholder="https://brand.ru" disabled={!brand}
-                  className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!brand ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                  className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!brand ? 'opacity-50 cursor-not-allowed' : ''}`} />
                 {getUrlError(brandUrl) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(brandUrl)}</div>}
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Станет анкором бренда в тексте</div>
               </div>
@@ -841,20 +914,20 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
             <div>
               <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">О компании</label>
               <textarea value={brandDescription} onChange={e => setBrandDescription(e.target.value)} maxLength={300} rows={2} placeholder="Интернет-магазин кофемашин с доставкой по России" disabled={!brand}
-                className={`w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!brand ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                className={`w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!brand ? 'opacity-50 cursor-not-allowed' : ''}`} />
               <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Помогает органично встроить бренд в текст</div>
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">CTA в конце статьи</label>
                 <textarea value={cta} onChange={e => setCta(e.target.value)} maxLength={500} rows={2} placeholder="Подберите кофемашину в нашем каталоге →"
-                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Пусто → без CTA-блока</div>
               </div>
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Ссылка в CTA</label>
                 <input type="url" value={ctaUrl} onChange={e => setCtaUrl(e.target.value)} onBlur={() => setCtaUrl(v => formatUrlInput(v))} placeholder="https://site.ru/catalog" disabled={!cta}
-                  className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!cta ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                  className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!cta ? 'opacity-50 cursor-not-allowed' : ''}`} />
                 {getUrlError(ctaUrl) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(ctaUrl)}</div>}
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Станет ссылкой в CTA-блоке</div>
               </div>
@@ -866,11 +939,11 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                   <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Тип</div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setCtaType('service')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaType === 'service' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaType === 'service' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       Услуга
                     </button>
                     <button type="button" onClick={() => setCtaType('product')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaType === 'product' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaType === 'product' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       Товар
                     </button>
                   </div>
@@ -881,11 +954,11 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                   <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Встройка</div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setCtaStyle('standard')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaStyle === 'standard' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaStyle === 'standard' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       Стандартная
                     </button>
                     <button type="button" onClick={() => setCtaStyle('native')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaStyle === 'native' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaStyle === 'native' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       Нативная
                     </button>
                   </div>
@@ -899,19 +972,19 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                   <div className="mb-1.5 text-[11px] text-[var(--color-text-secondary)]">Позиция в статье</div>
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => setCtaPosition('start')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'start' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'start' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       В начале
                     </button>
                     <button type="button" onClick={() => setCtaPosition('middle')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'middle' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'middle' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       В середине
                     </button>
                     <button type="button" onClick={() => setCtaPosition('end')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'end' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'end' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       В конце
                     </button>
                     <button type="button" onClick={() => setCtaPosition('all')}
-                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'all' ? 'border-[var(--color-accent)] bg-white font-medium' : 'border-[var(--seo-input-border)] bg-white'}`}>
+                      className={`rounded-[var(--radius-md)] border px-3 py-1.5 text-[12px] transition-all ${ctaPosition === 'all' ? 'border-[var(--color-accent)] bg-[var(--seo-btn-default-bg)] font-medium' : 'border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)]'}`}>
                       Везде
                     </button>
                   </div>
@@ -924,7 +997,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
             <div>
               <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
                 Перелинковка
-                <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxInternalLinks})</span>
+                <span className="rounded bg-[var(--color-bg-page)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxInternalLinks})</span>
               </label>
               <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Ссылки на свои статьи и страницы</div>
               <div className="space-y-2">
@@ -933,11 +1006,11 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                     <div className="grid flex-1 grid-cols-2 gap-3">
                       <div>
                         <input type="url" value={link.url} onChange={e => updateInternalLink(i, 'url', e.target.value)} onBlur={() => updateInternalLink(i, 'url', formatUrlInput(link.url))} placeholder="https://site.ru/article"
-                          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                         {getUrlError(link.url) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(link.url)}</div>}
                       </div>
                       <input type="text" value={link.anchor} onChange={e => updateInternalLink(i, 'anchor', e.target.value)} placeholder="анкор страницы" disabled={!link.url}
-                        className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                        className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
                     </div>
                     {internalLinks.length > 1 && (
                       <button type="button" onClick={() => removeInternalLink(i)}
@@ -960,7 +1033,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
             <div>
               <label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[var(--color-text-primary)]">
                 Ссылки на источники
-                <span className="rounded bg-[#F5F5F5] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxSourceLinks})</span>
+                <span className="rounded bg-[var(--color-bg-page)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)]">(макс {maxSourceLinks})</span>
               </label>
               <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Авторитетные внешние ресурсы для подтверждения фактов</div>
               <div className="space-y-2">
@@ -969,11 +1042,11 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
                     <div className="grid flex-1 grid-cols-2 gap-3">
                       <div>
                         <input type="url" value={link.url} onChange={e => updateSourceLink(i, 'url', e.target.value)} onBlur={() => updateSourceLink(i, 'url', formatUrlInput(link.url))} placeholder="https://source.ru/research"
-                          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                         {getUrlError(link.url) && <div className="mt-0.5 text-[11px] text-[#DC2626]">{getUrlError(link.url)}</div>}
                       </div>
                       <input type="text" value={link.anchor} onChange={e => updateSourceLink(i, 'anchor', e.target.value)} placeholder="название источника" disabled={!link.url}
-                        className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                        className={`w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)] ${!link.url ? 'opacity-50 cursor-not-allowed' : ''}`} />
                     </div>
                     {sourceLinks.length > 1 && (
                       <button type="button" onClick={() => removeSourceLink(i)}
@@ -1007,13 +1080,13 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Запрещённые слова</label>
                 <textarea value={forbiddenWords} onChange={e => setForbiddenWords(e.target.value)} maxLength={500} rows={2} placeholder={'дешёвый\nкитайский'}
-                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">По одному на строку</div>
               </div>
               <div className="flex-1">
                 <label className="mb-1.5 text-[13px] font-medium text-[var(--color-text-primary)]">Юридические ограничения</label>
                 <textarea value={legalRestrictions} onChange={e => setLegalRestrictions(e.target.value)} maxLength={500} rows={2} placeholder="Не использовать слово «гарантирует»"
-                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
+                  className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--seo-input-focus)]" />
                 <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Для медицины, финансов, права</div>
               </div>
             </div>
@@ -1022,7 +1095,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
       </div>
 
       {/* ЦЕНА */}
-      <div className="flex items-center justify-between rounded-[var(--radius-md)] bg-[#F5F5F5] px-4 py-2.5 text-[13px]">
+      <div className="flex items-center justify-between rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-4 py-2.5 text-[13px]">
         <div>
           <span>Стоимость генерации:</span>
           <div className="text-[11px] text-[var(--color-text-secondary)]">

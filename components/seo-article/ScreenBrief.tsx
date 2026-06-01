@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback } from 'react';
 import { BriefHeadings } from './BriefHeadings';
@@ -127,6 +127,7 @@ export function ScreenBrief({
   });
 
   const [edited, setEdited] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   const [faqEditingId, setFaqEditingId] = useState<string | null>(null);
   const [faqDragIdx, setFaqDragIdx] = useState<number | null>(null);
@@ -276,16 +277,16 @@ export function ScreenBrief({
 
       {/* Инфо-чипы */}
       <div className="mb-5 flex flex-wrap gap-2">
-        <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
+        <span className="rounded-[var(--radius-sm)] bg-[var(--color-bg-page)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{h2Count}</strong>/{structureLimits.maxH2} H2
         </span>
-        <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
+        <span className="rounded-[var(--radius-sm)] bg-[var(--color-bg-page)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{h3Count}</strong>/{structureLimits.maxH3Total} H3
         </span>
-        <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
+        <span className="rounded-[var(--radius-sm)] bg-[var(--color-bg-page)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{faqQuestions.length}</strong>/{faqLimit} FAQ
         </span>
-        <span className="rounded-[var(--radius-sm)] bg-[#F5F5F5] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
+        <span className="rounded-[var(--radius-sm)] bg-[var(--color-bg-page)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{calculatedPrice.toLocaleString('ru-RU')}</strong> ₽
         </span>
       </div>
@@ -307,7 +308,7 @@ export function ScreenBrief({
           onChange={e => { setMainKeyword(e.target.value); setEdited(true); }}
           maxLength={200}
           placeholder="Основной поисковый запрос"
-          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
+          className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
         />
         <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">LLM выбрал этот ключ как главный. Можете изменить</div>
       </div>
@@ -317,7 +318,7 @@ export function ScreenBrief({
         <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">LSI-ключи ({lsiKeywords.length})</div>
         <div className="mb-2 flex flex-wrap gap-1.5">
           {lsiKeywords.map((kw, i) => (
-            <span key={i} className="flex items-center gap-1 rounded-full bg-[#F5F5F5] px-2.5 py-1 text-[12px] text-[var(--color-text-primary)]">
+            <span key={i} className="flex items-center gap-1 rounded-full bg-[var(--color-bg-page)] px-2.5 py-1 text-[12px] text-[var(--color-text-primary)]">
               {kw}
               <button onClick={() => { setLsiKeywords(prev => prev.filter((_, j) => j !== i)); setEdited(true); }}
                 className="text-[var(--color-text-secondary)] hover:text-[var(--color-step-error)]">×</button>
@@ -336,12 +337,12 @@ export function ScreenBrief({
               }
             }}
             placeholder="Добавить LSI-ключ..."
-            className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-1.5 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
+            className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-1.5 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
           />
           <button
             onClick={() => { if (newLsi.trim()) { setLsiKeywords(prev => [...prev, newLsi.trim()]); setNewLsi(''); setEdited(true); }}}
             disabled={!newLsi.trim()}
-            className="rounded-[var(--radius-md)] bg-[#F5F5F5] px-3 py-1.5 text-[12px] text-[var(--color-text-secondary)] hover:bg-[#E8E8E8] disabled:opacity-40"
+            className="rounded-[var(--radius-md)] bg-[var(--color-bg-page)] px-3 py-1.5 text-[12px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)] disabled:opacity-40"
           >+</button>
         </div>
         <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">Семантически связанные слова. Enter для добавления</div>
@@ -355,7 +356,7 @@ export function ScreenBrief({
           </div>
           <div className="max-h-[300px] overflow-y-auto space-y-2">
             {competitorMeta.map((c, i) => (
-              <div key={i} className="rounded-[var(--radius-md)] border border-[#F0F0F0] bg-[#FAFAFA] p-2.5">
+              <div key={i} className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-2.5">
                 <div className="mb-1 text-[12px] font-medium text-[var(--color-text-primary)] truncate">{c.metaTitle || 'Без title'}</div>
                 <div className="mb-1 text-[11px] text-[var(--color-text-secondary)] line-clamp-2">{c.metaDescription || 'Без description'}</div>
                 <div className="flex items-center gap-2 text-[10px] text-[#999]">
@@ -376,7 +377,7 @@ export function ScreenBrief({
         <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">Тезисы и факты к разделам</div>
         <div className="space-y-3">
           {h2List.map(h2 => (
-            <div key={h2.id} className="rounded-[var(--radius-md)] border border-[#F0F0F0] bg-[#FAFAFA] p-3">
+            <div key={h2.id} className="rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-3">
               <div className="mb-1.5 text-[12px] font-medium text-[var(--color-text-primary)]">{h2.text}</div>
               <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Тезис — о чём этот раздел:</div>
               <input
@@ -384,7 +385,7 @@ export function ScreenBrief({
                 onChange={e => { setH2Theses(prev => ({ ...prev, [h2.id]: e.target.value })); setEdited(true); }}
                 maxLength={300}
                 placeholder="Краткое описание фокуса раздела..."
-                className="mb-2 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
+                className="mb-2 w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-2.5 py-1.5 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
               />
               <div className="mb-1 text-[11px] text-[var(--color-text-secondary)]">Факты и цифры для раздела:</div>
               {(h2Facts[h2.id] ?? []).map((fact, fi) => (
@@ -399,7 +400,7 @@ export function ScreenBrief({
                       });
                       setEdited(true);
                     }}
-                    className="flex-1 rounded border border-[var(--seo-input-border)] bg-white px-2 py-1 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
+                    className="flex-1 rounded border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-2 py-1 text-[12px] outline-none focus:border-[var(--seo-input-focus)]"
                   />
                   <button onClick={() => {
                     setH2Facts(prev => ({ ...prev, [h2.id]: (prev[h2.id] ?? []).filter((_, j) => j !== fi) }));
@@ -429,7 +430,7 @@ export function ScreenBrief({
                 onChange={e => { setTableTopic(e.target.value); setEdited(true); }}
                 maxLength={200}
                 placeholder="Что именно сравнивать..."
-                className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
+                className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
               />
             </div>
           )}
@@ -440,7 +441,7 @@ export function ScreenBrief({
               onChange={e => { setCaseTopic(e.target.value); setEdited(true); }}
               maxLength={300}
               placeholder="Опишите свой реальный кейс или опыт по теме..."
-              className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-white px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
+              className="w-full rounded-[var(--radius-md)] border border-[var(--seo-input-border)] bg-[var(--seo-btn-default-bg)] px-3 py-2 text-[13px] outline-none focus:border-[var(--seo-input-focus)]"
             />
             <div className="mt-1 text-[11px] text-[var(--color-text-secondary)]">LLM встроит ваш опыт в текст. Чем конкретнее — тем лучше</div>
           </div>
@@ -456,7 +457,7 @@ export function ScreenBrief({
           </div>
 
           {/* FAQ H2-заголовок */}
-          <div className="mb-1 flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] px-2.5 py-2">
+          <div className="mb-1 flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] px-2.5 py-2">
             <span className="invisible text-sm">⠿</span>
             <span className="invisible flex h-[24px] w-[24px] shrink-0" />
             <span className="shrink-0 rounded bg-[var(--seo-badge-h2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-primary)]">H2</span>
@@ -501,7 +502,7 @@ export function ScreenBrief({
               } ${
                 faqDragOverIdx === idx
                   ? 'border-[var(--color-step-running)] bg-[var(--color-brief-bg)]'
-                  : 'border-[var(--seo-card-border)] bg-white'
+                  : 'border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)]'
               }`}
             >
               <span className="cursor-grab text-sm text-[var(--color-step-pending)] active:cursor-grabbing">⠿</span>
@@ -527,14 +528,28 @@ export function ScreenBrief({
         </div>
       )}
 
+      {/* Согласие */}
+      <label className="mt-4 flex items-start gap-2 text-[12px] leading-[1.4] text-[var(--color-text-secondary)]">
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(e) => setConsent(e.target.checked)}
+          className="mt-0.5 shrink-0"
+        />
+        <span>
+          Подтверждая, я соглашаюсь, что токены будут списаны за генерацию статьи.
+          Результат зависит от качества введённых данных и возврату не подлежит.
+        </span>
+      </label>
+
       {/* Футер */}
-      <div className="flex items-center justify-between border-t border-[var(--seo-card-border)] pt-4">
+      <div className="flex items-center justify-between border-t border-[var(--seo-card-border)] pt-4 mt-3">
         <button onClick={onBack}
-          className="rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] px-5 py-2 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]">
+          className="rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] px-5 py-2 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-page)]">
           ← Назад к параметрам
         </button>
-        <button onClick={handleConfirm}
-          className="rounded-[var(--radius-md)] bg-[var(--seo-btn-primary-bg)] px-6 py-2.5 text-sm font-medium text-[var(--seo-btn-primary-text)] transition-colors hover:brightness-95">
+        <button onClick={handleConfirm} disabled={!consent}
+          className="rounded-[var(--radius-md)] bg-[var(--seo-btn-primary-bg)] px-6 py-2.5 text-sm font-medium text-[var(--seo-btn-primary-text)] transition-colors hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed">
           Продолжить →
         </button>
       </div>

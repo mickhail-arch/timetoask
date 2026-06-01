@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useSessions, MAX_ACTIVE_GENERATIONS } from '@/contexts/SessionsContext';
 
@@ -13,12 +13,12 @@ export function CapacityModal() {
       onClick={closeCapacityModal}
     >
       <div
-        className="relative w-[420px] max-w-[90vw] rounded-[var(--radius-lg)] bg-white p-6 shadow-xl"
+        className="relative w-[420px] max-w-[90vw] rounded-[var(--radius-lg)] bg-[var(--seo-btn-default-bg)] p-6 shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <button
           onClick={closeCapacityModal}
-          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-secondary)] hover:bg-[#F5F5F5] hover:text-[var(--color-text-primary)]"
+          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-page)] hover:text-[var(--color-text-primary)]"
           aria-label="Закрыть"
         >
           ×

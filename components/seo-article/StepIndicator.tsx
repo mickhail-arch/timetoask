@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 interface StepIndicatorProps {
   name: string;
@@ -25,7 +25,7 @@ export function StepIndicator({ name, description, status, timeLabel, partialTex
           status === 'done' ? 'bg-[var(--color-step-done)]' :
           status === 'running' ? 'bg-[var(--color-step-running)]' :
           status === 'error' ? 'bg-[var(--color-step-error)]' :
-          'border border-[var(--seo-card-border)] bg-[#F5F5F5]'
+          'border border-[var(--seo-card-border)] bg-[var(--color-bg-page)]'
         }`}
       >
         {status === 'done' && (
@@ -34,7 +34,7 @@ export function StepIndicator({ name, description, status, timeLabel, partialTex
           </svg>
         )}
         {status === 'running' && (
-          <span className="block h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+          <span className="block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--seo-btn-default-bg)]" />
         )}
         {status === 'pending' && (
           <span className="block h-1.5 w-1.5 rounded-full bg-[var(--color-step-pending)]" />
@@ -51,7 +51,7 @@ export function StepIndicator({ name, description, status, timeLabel, partialTex
           {description}
         </div>
         {status === 'running' && partialText && (
-          <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--seo-card-border)] bg-white p-2.5 text-[13px] leading-relaxed text-[var(--color-text-primary)]">
+          <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)] p-2.5 text-[13px] leading-relaxed text-[var(--color-text-primary)]">
             <span dangerouslySetInnerHTML={{ __html: partialText }} />
             <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-[var(--color-step-running)]" />
           </div>
@@ -59,7 +59,7 @@ export function StepIndicator({ name, description, status, timeLabel, partialTex
         {status === 'error' && onRetry && (
           <button
             onClick={onRetry}
-            className="mt-1.5 rounded-[var(--radius-sm)] border border-[var(--color-step-error)] bg-white px-3 py-1 text-[11px] text-[var(--color-step-error)] transition-colors hover:bg-[#FFF5F5]"
+            className="mt-1.5 rounded-[var(--radius-sm)] border border-[var(--color-step-error)] bg-[var(--seo-btn-default-bg)] px-3 py-1 text-[11px] text-[var(--color-step-error)] transition-colors hover:bg-[#FFF5F5]"
           >
             Повторить шаг
           </button>

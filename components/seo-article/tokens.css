@@ -29,43 +29,73 @@
   /* Акцентные стили (image_style) */
   --seo-accent-selected-bg: var(--color-accent);
   --seo-accent-selected-text: #1A1A1A;
+
+  /* Цвета внутри превью статьи — светлая тема */
+  --seo-preview-bg: #ffffff;
+  --seo-preview-text: #1A1A1A;
+  --seo-preview-text-muted: #6B6B6B;
+  --seo-preview-link: #2563eb;
+  --seo-preview-link-hover: #1d4ed8;
+  --seo-preview-blockquote-bg: #FAFFF0;
+  --seo-preview-blockquote-border: var(--color-accent);
+  --seo-preview-tooltip-bg: #fff;
+  --seo-preview-tooltip-border: #E0E0E0;
+  --seo-preview-tooltip-text: #666;
 }
 
-/* Превью статьи — tooltip с URL при наведении на ссылку */
-.seo-preview a[href] {
-  position: relative;
-  cursor: pointer;
-  color: #2563eb;
-  text-decoration: underline;
-}
-.seo-preview a[href]:hover {
-  color: #1d4ed8;
-}
-.seo-preview a[href]:hover::before {
-  content: attr(href);
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  background: #fff;
-  border: 1px solid #E0E0E0;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 11px;
-  color: #666;
-  white-space: nowrap;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  pointer-events: none;
+/* Переопределения для тёмной темы */
+.dark {
+  --seo-btn-primary-bg: var(--color-accent);
+  --seo-btn-primary-text: #0F0F10;
+  --seo-btn-default-bg: #2A2A2D;
+  --seo-btn-default-border: #3A3A3E;
+
+  --seo-card-bg: var(--color-bg-surface);
+  --seo-card-border: var(--color-border);
+
+  --seo-input-border: #3A3A3E;
+  --seo-input-focus: var(--color-accent);
+  --seo-input-placeholder: #6A6A6F;
+
+  --seo-badge-h1: #D4D4D4;
+  --seo-badge-h2: var(--color-accent);
+  --seo-badge-h3: #2A2A2D;
+
+  --seo-selected-bg: var(--color-accent);
+  --seo-selected-text: #0F0F10;
+
+  --seo-accent-selected-bg: var(--color-accent);
+  --seo-accent-selected-text: #0F0F10;
+
+  /* Превью статьи — тёмная тема */
+  --seo-preview-bg: var(--color-bg-surface);
+  --seo-preview-text: #E8E8E8;
+  --seo-preview-text-muted: #9A9A9A;
+  --seo-preview-link: #6FA8FF;
+  --seo-preview-link-hover: #8FBAFF;
+  --seo-preview-blockquote-bg: #1F2614;
+  --seo-preview-blockquote-border: var(--color-accent);
+  --seo-preview-tooltip-bg: #2A2A2D;
+  --seo-preview-tooltip-border: var(--color-border);
+  --seo-preview-tooltip-text: #BBBBBB;
 }
 
-/* Стили контента статьи (редактор + превью) */
+/* ─── Контент статьи (превью + редактор) ─── */
+/* Все цвета через токены — автоматически переключаются с темой */
+
+.seo-preview,
+[contenteditable].seo-preview {
+  color: var(--seo-preview-text) !important;
+  background-color: var(--seo-preview-bg) !important;
+}
+
 .seo-preview h1,
 [contenteditable] h1 {
   font-size: 24px;
   font-weight: 700;
   line-height: 1.3;
   margin: 0 0 16px;
-  color: var(--color-text-primary);
+  color: var(--seo-preview-text) !important;
 }
 
 .seo-preview h2,
@@ -74,7 +104,7 @@
   font-weight: 700;
   line-height: 1.35;
   margin: 24px 0 12px;
-  color: var(--color-text-primary);
+  color: var(--seo-preview-text) !important;
 }
 
 .seo-preview h3,
@@ -83,50 +113,79 @@
   font-weight: 600;
   line-height: 1.4;
   margin: 20px 0 8px;
-  color: var(--color-text-primary);
+  color: var(--seo-preview-text) !important;
 }
 
 .seo-preview p,
 [contenteditable] p {
-  font-size: 14px;
+  font-size: 14px !important;
   font-weight: 400;
-  line-height: 1.7;
+  line-height: 1.7 !important;
   margin: 0 0 8px;
-  color: var(--color-text-primary);
+  color: var(--seo-preview-text) !important;
 }
 
 /* Blockquote — цитаты и callout-блоки */
 .seo-preview blockquote,
 [contenteditable] blockquote {
-  border-left: 3px solid var(--color-accent);
-  background: #FAFFF0;
+  border-left: 3px solid var(--seo-preview-blockquote-border) !important;
+  background: var(--seo-preview-blockquote-bg) !important;
   border-radius: 0 8px 8px 0;
   padding: 12px 16px;
   margin: 16px 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--color-text-primary);
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  color: var(--seo-preview-text) !important;
 }
 
-/* Цитата эксперта (blockquote с cite) */
+.seo-preview blockquote strong,
+[contenteditable] blockquote strong {
+  color: var(--seo-preview-text) !important;
+}
+
+.seo-preview blockquote em,
+[contenteditable] blockquote em {
+  color: var(--seo-preview-text) !important;
+}
+
 .seo-preview blockquote cite,
 [contenteditable] blockquote cite {
   display: block;
   margin-top: 8px;
   font-size: 12px;
   font-style: normal;
-  color: var(--color-text-secondary);
+  color: var(--seo-preview-text-muted) !important;
 }
 
 /* Ссылки в превью */
 .seo-preview a[href],
 [contenteditable] a[href] {
-  color: #2563eb;
+  position: relative;
+  cursor: pointer;
+  color: var(--seo-preview-link);
   text-decoration: underline;
 }
+
 .seo-preview a[href]:hover,
 [contenteditable] a[href]:hover {
-  color: #1d4ed8;
+  color: var(--seo-preview-link-hover);
+}
+
+.seo-preview a[href]:hover::before {
+  content: attr(href);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: var(--seo-preview-tooltip-bg);
+  border: 1px solid var(--seo-preview-tooltip-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--seo-preview-tooltip-text);
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 
 /* Списки */
@@ -136,16 +195,30 @@
   padding-left: 24px;
   margin: 8px 0;
 }
+
 .seo-preview ol,
 [contenteditable] ol {
   list-style: decimal;
   padding-left: 24px;
   margin: 8px 0;
 }
+
 .seo-preview li,
 [contenteditable] li {
   margin: 4px 0;
-  line-height: 1.6;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  color: var(--seo-preview-text) !important;
+}
+
+.seo-preview strong,
+[contenteditable] strong {
+  color: var(--seo-preview-text) !important;
+}
+
+.seo-preview em,
+[contenteditable] em {
+  color: var(--seo-preview-text) !important;
 }
 
 /* Зачёркнутый текст */
@@ -161,3 +234,9 @@
   border-radius: 8px;
   margin: 16px 0;
 }
+
+/* ─── Стили специально для копирования в буфер обмена ─── */
+/* Когда статья копируется в буфер обмена в формате text/html, */
+/* CSS-классы НЕ переносятся в Word/WordPress/Tilda — там используется */
+/* только inline-стили или дефолтные браузерные стили. */
+/* То есть текст автоматически окажется чёрным на белом фоне у получателя. */

@@ -1,4 +1,4 @@
-//components/seo-article/SessionHistory.tsx
+﻿//components/seo-article/SessionHistory.tsx
 
 'use client';
 
@@ -55,7 +55,7 @@ export function SessionHistory({
   };
 
   return (
-    <div className="flex h-full w-[260px] shrink-0 flex-col border-r border-[var(--seo-card-border)] bg-[#FAFAFA]">
+    <div className="flex h-full w-[260px] shrink-0 flex-col border-r border-[var(--seo-card-border)] bg-[var(--color-bg-sidebar)]">
       {/* Заголовок + кнопка */}
       <div className="flex items-center justify-between border-b border-[var(--seo-card-border)] px-3 py-3">
         <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
@@ -87,10 +87,10 @@ export function SessionHistory({
           <div
             key={s.id}
             onClick={() => onSelect(s.id)}
-            className={`group cursor-pointer border-b border-[#F0F0F0] px-3 py-2.5 transition-colors ${
+            className={`group cursor-pointer border-b border-[var(--seo-card-border)] px-3 py-2.5 transition-colors ${
               activeSessionId === s.id
-                ? 'bg-white border-l-2 border-l-[var(--color-accent)]'
-                : 'hover:bg-white'
+                ? 'bg-[var(--color-bg-sidebar)] border-l-2 border-l-[var(--color-accent)]'
+                : 'bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-sidebar)]'
             }`}
           >
             <div className="flex items-start justify-between gap-1">
@@ -112,13 +112,13 @@ export function SessionHistory({
                     <span className="text-[11px] text-[var(--color-accent)]">Генерация...</span>
                   )}
                   {s.status === 'awaiting_confirmation' && (
-                    <span className="text-[11px] text-[#E8A000]">Ожидает проверки</span>
+                    <span className="text-[11px] text-[var(--color-warn-text)]">Ожидает проверки</span>
                   )}
                   {s.status === 'failed' && (
                     <span className="text-[11px] text-[var(--color-step-error)]">Ошибка</span>
                   )}
                   {s.status === 'completed' && unseenIds?.includes(s.id) && (
-                    <span className="text-[11px] text-[#34C759]">Готово ✓</span>
+                    <span className="text-[11px] text-[var(--color-success)]">Готово ✓</span>
                   )}
                 </div>
               </div>
@@ -137,7 +137,7 @@ export function SessionHistory({
                 if (s.status === 'awaiting_confirmation') {
                   return (
                     <div className="flex items-center" title="Проверьте структуру статьи">
-                      <svg className="h-4 w-4 text-[#E8A000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="h-4 w-4 text-[var(--color-warn-text)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10"/>
                         <line x1="12" y1="8" x2="12" y2="12"/>
                         <line x1="12" y1="16" x2="12.01" y2="16"/>
@@ -148,7 +148,7 @@ export function SessionHistory({
                 if (s.status === 'completed' && unseenIds?.includes(s.id)) {
                   return (
                     <div className="flex items-center" title="Статья готова">
-                      <svg className="h-4 w-4 text-[#34C759]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="h-4 w-4 text-[var(--color-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12"/>
                       </svg>
                     </div>
@@ -161,7 +161,7 @@ export function SessionHistory({
                 <button
                   onClick={(e) => { e.stopPropagation(); onCopy(s.id); }}
                   title="Создать копию с теми же параметрами"
-                  className="text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--color-text-primary)]"
+                  className="text-[var(--color-step-pending)] transition-colors hover:text-[var(--color-text-primary)]"
                 >
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
@@ -170,7 +170,7 @@ export function SessionHistory({
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setDeleteModalId(s.id); }}
-                  className="text-[12px] text-[var(--color-step-pending)] opacity-0 transition-opacity group-hover:opacity-100"
+                  className="text-[12px] text-[var(--color-step-pending)] transition-colors hover:text-[var(--color-text-primary)]"
                 >
                   ×
                 </button>
@@ -182,7 +182,7 @@ export function SessionHistory({
 
       {deleteModalId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteModalId(null)}>
-          <div className="w-[320px] rounded-[var(--radius-lg)] bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="w-[320px] rounded-[var(--radius-lg)] bg-[var(--color-bg-surface)] p-5 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="mb-4 text-[14px] font-medium text-[var(--color-text-primary)]">
               Вы точно хотите удалить статью?
             </div>
@@ -198,7 +198,7 @@ export function SessionHistory({
               </button>
               <button
                 onClick={() => setDeleteModalId(null)}
-                className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white py-2 text-[13px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]"
+                className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)] py-2 text-[13px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-page)]"
               >
                 Оставить
               </button>

@@ -1,8 +1,27 @@
 import { z } from 'zod';
 
+const isMeaningful = (s: string): boolean => {
+  const trimmed = s.trim();
+  if (trimmed.length < 3) return false;
+  // запрет строки из одного повторяющегося символа: "ыыы", "аааа"
+  if (/^(.)\1*$/.test(trimmed.replace(/\s/g, ''))) return false;
+  // минимум 3 разных буквенно-цифровых символа
+  const unique = new Set(trimmed.toLowerCase().replace(/[^a-zа-я0-9]/gi, '').split(''));
+  return unique.size >= 3;
+};
+
 export const inputSchema = z.object({
-  target_query: z.string().min(3).max(200).describe('Целевой поисковый запрос'),
-  keywords: z.string().min(1).describe('Ключевые слова (по одному на строку)'),
+  target_query: z
+    .string()
+    .min(3)
+    .max(200)
+    .refine(isMeaningful, 'Введите осмысленный запрос')
+    .describe('Целевой поисковый запрос'),
+  keywords: z
+    .string()
+    .min(1)
+    .refine(isMeaningful, 'Введите осмысленные ключевые слова')
+    .describe('Ключевые слова (по одному на строку)'),
   intent: z.enum([
     'informational', 'educational', 'commercial', 'comparative',
     'review', 'news', 'problem_solution',
@@ -12,6 +31,7 @@ export const inputSchema = z.object({
 
   tone_of_voice: z.string().max(300).default('expert').describe('Tone of voice'),
   tone_comment: z.string().max(300).optional().describe('Комментарий к стилю текста'),
+  context_notes: z.string().max(300).optional().describe('Что важно учесть — смысловые ограничения и контекст статьи'),
   target_audience: z.object({
     gender: z.enum(['all', 'male', 'female']).default('all'),
     age: z.array(z.string()).default(['all']),

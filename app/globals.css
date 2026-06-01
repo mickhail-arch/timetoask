@@ -38,6 +38,7 @@
   --color-bg-page: #FFFFFF;
   --color-bg-sidebar: #F5F5F5;
   --color-bg-surface: #FFFFFF;
+  --color-bg-input: #FFFFFF;
   --color-border: #E0E0E0;
   --color-border-focus: #1A1A1A;
   --color-border-error: #FF3B30;
@@ -64,7 +65,7 @@
 
   /* Z-index */
   --z-base: 0;
-  --z-sidebar: 10;
+  --z-sidebar: 30;
   --z-header: 20;
   --z-dropdown: 30;
   --z-modal: 50;
@@ -88,8 +89,120 @@
   --color-warn-text: #B8860B;
 }
 
+.dark {
+  /* shadcn/ui base variables — Merlin-style тёмная гамма (тёплый угольный) */
+  --background: 220 6% 11%;
+  --foreground: 0 0% 88%;
+  --card: 220 5% 14%;
+  --card-foreground: 0 0% 88%;
+  --popover: 220 5% 16%;
+  --popover-foreground: 0 0% 88%;
+  --primary: 0 0% 88%;
+  --primary-foreground: 220 6% 11%;
+  --secondary: 220 5% 18%;
+  --secondary-foreground: 0 0% 88%;
+  --muted: 220 5% 18%;
+  --muted-foreground: 0 0% 60%;
+  --accent: 220 5% 18%;
+  --accent-foreground: 0 0% 88%;
+  --destructive: 0 62% 50%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 220 5% 22%;
+  --input: 220 5% 22%;
+  --ring: 75 92% 46%;
+
+  /* ───── Timetoask токены — тёмная тема ───── */
+
+  /* Акцент остаётся */
+  --color-accent: #A6E800;
+  --color-accent-hover: color-mix(in srgb, #A6E800 88%, white);
+  --color-accent-disabled: color-mix(in srgb, #A6E800 40%, black);
+
+  /* Фоны — плавная иерархия от тёмного к чуть светлее */
+  --color-bg-page: #1A1A1B;
+  --color-bg-sidebar: #202022;
+  --color-bg-surface: #262628;
+  --color-bg-input: #34343A;
+
+  /* Границы — мягкие */
+  --color-border: #2E2E32;
+  --color-border-focus: #4A4A4F;
+  --color-border-error: #FF6B6B;
+
+  /* Текст — приглушённый, читаемый */
+  --color-text-primary: #E0E0E0;
+  --color-text-secondary: #8A8A8E;
+  --color-text-link: #6FA8FF;
+
+  /* Статусы */
+  --color-error: #FF6B6B;
+  --color-success: #34C759;
+
+  /* Тени — глубокие, мягкие */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* SEO-инструмент: шаги */
+  --color-step-done: #34C759;
+  --color-step-running: #A6E800;
+  --color-step-pending: #3A3A3D;
+  --color-step-error: #FF6B6B;
+
+  /* SEO-инструмент: метрики */
+  --color-metric-green: #34C759;
+  --color-metric-yellow: #C87D00;
+  --color-metric-red: #FF6B6B;
+
+  /* SEO-инструмент: UI */
+  --color-brief-bg: #1F2614;
+  --color-warn-bg: #221F12;
+  --color-warn-border: #3D3410;
+  --color-warn-text: #D4A017;
+}
+
+/* Универсальные правила для placeholder и input — работают в обеих темах */
+::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+/* В тёмной теме делаем placeholder ещё контрастнее */
+.dark ::placeholder {
+  color: #6A6A6F;
+  opacity: 1;
+}
+
+/* Стандартные input/textarea в тёмной теме — мягкий фон и заметная рамка */
+.dark input,
+.dark textarea {
+  background-color: #2A2A2D;
+  border-color: #3A3A3E;
+  color: var(--color-text-primary);
+}
+
+.dark input:focus,
+.dark textarea:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.dark input:hover:not(:focus),
+.dark textarea:hover:not(:focus) {
+  border-color: #4A4A4F;
+}
+
 body {
   font-family: var(--font-inter, "Inter", sans-serif);
   background: var(--color-bg-page);
   color: var(--color-text-primary);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text-primary);
+  -webkit-box-shadow: 0 0 0px 1000px var(--color-bg-input) inset;
+  box-shadow: 0 0 0px 1000px var(--color-bg-input) inset;
+  caret-color: var(--color-text-primary);
+  transition: background-color 9999s ease-in-out 0s;
 }

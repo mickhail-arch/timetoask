@@ -1,3 +1,5 @@
+//components/seo-article/ScreenResult.tsx
+
 'use client';
 import { useState, useMemo, useCallback } from 'react';
 import { QualityPanel } from './QualityPanel';
@@ -27,6 +29,13 @@ interface ScreenResultProps {
   onRegenerate?: () => void;
   sessionId?: string | null;
   onSave?: (data: { articleHtml: string; metadata: ArticleResult['metadata'] }) => Promise<void>;
+}
+
+function fmtDuration(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return m > 0 ? `${m} мин ${rem} сек` : `${rem} сек`;
 }
 
 export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, sessionId, onSave }: ScreenResultProps) {
@@ -80,7 +89,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
   return (
     <div className="mx-auto max-w-[680px] space-y-3">
       <div className="text-[13px] text-[var(--color-text-secondary)]">
-        <strong className="font-medium text-[var(--color-text-primary)]">{query}</strong> · {stepCount} шагов · ~{duration} сек
+        <strong className="font-medium text-[var(--color-text-primary)]">{query}</strong> · {stepCount} шагов · {fmtDuration(duration)}
       </div>
 
       {result.warnings && result.warnings.length > 0 && (
@@ -117,18 +126,18 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
       {/* Статья */}
       <div className="overflow-visible">
         <div className="flex overflow-hidden rounded-t-[var(--radius-md)] border border-b-0 border-[var(--seo-card-border)]">
-          <button onClick={() => setTab('preview')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'preview' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>Превью</button>
-          <button onClick={() => setTab('code')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'code' ? 'bg-white font-medium text-[var(--color-text-primary)]' : 'bg-[#F5F5F5] text-[var(--color-text-secondary)]'}`}>HTML-код</button>
+          <button onClick={() => setTab('preview')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'preview' ? 'bg-[var(--seo-card-bg)] font-medium text-[var(--color-text-primary)]' : 'bg-[var(--color-bg-page)] text-[var(--color-text-secondary)] hover:bg-[var(--seo-card-bg)]'}`}>Превью</button>
+          <button onClick={() => setTab('code')} className={`flex-1 py-2 text-[13px] transition-all ${tab === 'code' ? 'bg-[var(--seo-card-bg)] font-medium text-[var(--color-text-primary)]' : 'bg-[var(--color-bg-page)] text-[var(--color-text-secondary)] hover:bg-[var(--seo-card-bg)]'}`}>HTML-код</button>
         </div>
         {tab === 'preview' ? (
           <RichEditor
             html={renderedHtml}
             onChange={(html) => { setEditedHtml(html); setIsDirty(true); }}
-            className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-white p-5 text-sm leading-relaxed"
+            className="seo-preview min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-5 text-sm leading-relaxed text-[var(--color-text-primary)]"
             articleTitle={result.metadata?.title ?? query}
           />
         ) : (
-          <pre className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] p-4 font-mono text-xs leading-relaxed text-[#444] whitespace-pre-wrap break-all" style={{ resize: 'vertical' }}>
+          <pre className="min-h-[360px] overflow-y-auto rounded-b-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] p-4 font-mono text-xs leading-relaxed text-[var(--color-text-secondary)] whitespace-pre-wrap break-all" style={{ resize: 'vertical' }}>
             {editedHtml ?? codeHtml}
           </pre>
         )}
@@ -154,7 +163,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
 
       <ExportPanel articleHtml={result.article_html} onCopyArticle={handleCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
 
-      <div className="text-center text-[11px] text-[var(--color-step-pending)]">Сгенерировано за {duration} сек · {stepCount} шагов</div>
+      <div className="text-center text-[11px] text-[var(--color-text-secondary)]">Сгенерировано за {fmtDuration(duration)} · {stepCount} шагов</div>
     </div>
   );
 }

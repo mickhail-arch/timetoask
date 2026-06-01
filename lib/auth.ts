@@ -12,12 +12,8 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
-        try {
-          const user = await login(credentials.email, credentials.password);
-          return { id: user.id, email: user.email, name: user.name, role: user.role };
-        } catch {
-          return null;
-        }
+        const user = await login(credentials.email, credentials.password);
+        return { id: user.id, email: user.email, name: user.name, role: user.role };
       },
     }),
   ],

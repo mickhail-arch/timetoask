@@ -12,6 +12,9 @@ export function buildUserMessage(input: SeoArticleInput): string {
   if (input.tone_of_voice && input.tone_of_voice !== 'expert') {
     lines.push(`Tone of voice: ${input.tone_of_voice}`);
   }
+  if (input.context_notes) {
+    lines.push(`Что важно учесть (смысловые ограничения): ${input.context_notes}`);
+  }
   if (input.target_audience) {
     const { gender, age } = input.target_audience;
     if (gender !== 'all') lines.push(`Пол аудитории: ${gender}`);

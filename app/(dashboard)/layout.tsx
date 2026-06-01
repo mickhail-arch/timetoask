@@ -13,11 +13,13 @@ export default async function DashboardLayout({
   if (!session) redirect('/login');
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-[var(--color-bg-page)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col bg-[var(--color-bg-page)]">
         <Header />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-[var(--color-bg-page)]">
+          <div className="min-h-full p-6">{children}</div>
+        </main>
       </div>
     </div>
   );

@@ -37,13 +37,12 @@ async function send(to: string, subject: string, html: string): Promise<void> {
 
 export async function sendVerificationEmail(
   to: string,
-  token: string,
+  code: string,
 ): Promise<void> {
-  const link = `${env.APP_URL}/verify?token=${token}`;
   await send(
     to,
-    'Подтверждение email',
-    `<p>Для подтверждения email перейдите по ссылке:</p><p><a href="${link}">${link}</a></p>`,
+    'Код подтверждения регистрации',
+    `<p>Ваш код подтверждения регистрации:</p><p style="font-size:28px;font-weight:bold;letter-spacing:4px;">${code}</p><p>Код действует 15 минут. Если вы не регистрировались, проигнорируйте это письмо.</p>`,
   );
 }
 

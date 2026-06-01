@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { RewritePanel } from './rewrite-panel';
@@ -193,7 +193,7 @@ export function RichEditor({ html, onChange, className, placeholder, readOnly, a
   }, [emitChange]);
 
   const BTN = 'flex items-center justify-center w-8 h-8 rounded hover:bg-[#333] transition-colors cursor-pointer select-none text-white/90';
-  const SEP = 'w-px h-5 bg-white/20 mx-0.5 self-center';
+  const SEP = 'w-px h-5 bg-[var(--seo-btn-default-bg)]/20 mx-0.5 self-center';
 
   return (
     <div style={{ position: 'relative' }}>

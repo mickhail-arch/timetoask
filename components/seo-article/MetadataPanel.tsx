@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState } from 'react';
 import { CopyButton } from './ExportPanel';
 
@@ -52,7 +52,7 @@ export function MetadataPanel({
       <Row label="Хлебные крошки" value={breadcrumb} editable={editable} onChange={onChangeBreadcrumb} />
 
       {altTexts.length > 0 && (
-        <div className="border-t border-[#F0F0F0] py-2">
+        <div className="border-t border-[var(--seo-card-border)] py-2">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-[11px] text-[var(--color-text-secondary)]">Изображения ({altTexts.length} шт)</span>
             <CopyButton text={allAlts} label="Все alt-тексты" />
@@ -70,13 +70,13 @@ export function MetadataPanel({
       )}
 
       {/* JSON-LD Schema — временно отключено
-      <div className="border-t border-[#F0F0F0] pt-2">
+      <div className="border-t border-[var(--seo-card-border)] pt-2">
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[11px] text-[var(--color-text-secondary)]">JSON-LD Schema</span>
           <CopyButton text={jsonLd} />
         </div>
         <div
-          className="min-h-[80px] max-h-[300px] overflow-y-auto rounded-[var(--radius-sm)] border border-[#F0F0F0] bg-[#FAFAFA] px-2.5 py-2 font-mono text-[11px] text-[#444] break-words whitespace-pre-wrap"
+          className="min-h-[80px] max-h-[300px] overflow-y-auto rounded-[var(--radius-sm)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] px-2.5 py-2 font-mono text-[11px] text-[var(--color-text-secondary)] break-words whitespace-pre-wrap"
           style={{ resize: 'vertical' }}
         >
           {jsonLd}
@@ -115,7 +115,7 @@ function Row({ label, value, editable, onChange, maxLength, validate }: RowProps
   };
 
   return (
-    <div className="flex items-start justify-between border-b border-[#F0F0F0] py-2">
+    <div className="flex items-start justify-between border-b border-[var(--seo-card-border)] py-2">
       <div className="flex-1 min-w-0">
         <div className="text-[11px] text-[var(--color-text-secondary)]">{label}</div>
         {editable && editing ? (
@@ -134,7 +134,7 @@ function Row({ label, value, editable, onChange, maxLength, validate }: RowProps
           </div>
         ) : (
           <div
-            className={`text-[13px] break-words ${editable ? 'cursor-text rounded hover:bg-black/[0.03] px-0.5 -mx-0.5' : ''}`}
+            className={`text-[13px] break-words ${editable ? 'cursor-text rounded hover:bg-[var(--color-bg-page)] px-0.5 -mx-0.5' : ''}`}
             onClick={() => editable && setEditing(true)}
           >
             {value || <span className="text-[var(--color-text-secondary)] italic">Нет данных</span>}
@@ -157,7 +157,7 @@ function AltRow({ index, value, editable, onChange }: AltRowProps) {
   const [editing, setEditing] = useState(false);
 
   return (
-    <div className="flex items-center justify-between border-b border-[#F5F5F5] py-1.5 last:border-0">
+    <div className="flex items-center justify-between border-b border-[var(--seo-card-border)] py-1.5 last:border-0">
       <span className="mr-1.5 text-xs text-[var(--color-text-secondary)] shrink-0">{index + 1}</span>
       <div className="flex-1 min-w-0">
         {editable && editing ? (
@@ -170,7 +170,7 @@ function AltRow({ index, value, editable, onChange }: AltRowProps) {
           />
         ) : (
           <span
-            className={`text-xs break-words block ${editable ? 'cursor-text rounded hover:bg-black/[0.03] px-0.5 -mx-0.5' : ''}`}
+            className={`text-xs break-words block ${editable ? 'cursor-text rounded hover:bg-[var(--color-bg-page)] px-0.5 -mx-0.5' : ''}`}
             onClick={() => editable && setEditing(true)}
           >
             {value}

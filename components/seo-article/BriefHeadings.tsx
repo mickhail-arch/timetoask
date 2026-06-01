@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback } from 'react';
 
@@ -140,7 +140,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
   return (
     <div>
       {/* H1 */}
-      <div className="mb-1.5 flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[#FAFAFA] px-2.5 py-2">
+      <div className="mb-1.5 flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] px-2.5 py-2">
         <span className="invisible text-sm">⠿</span>
         <button onClick={addH2} disabled={!!limits && h2List.length >= limits.maxH2} className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-running)] disabled:opacity-30">+</button>
         <span className="shrink-0 rounded bg-[var(--seo-badge-h1)] px-1.5 py-0.5 text-[10px] font-medium text-white">H1</span>
@@ -160,7 +160,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
           className={`mb-1 transition-opacity ${dragGroupIdx === gi ? 'opacity-40' : ''}`}
         >
           <div className={`flex items-center gap-1 rounded-[var(--radius-md)] border px-2.5 py-2 transition-all ${
-            dragOverIdx === gi ? 'border-[var(--color-step-running)] bg-[var(--color-brief-bg)]' : 'border-[var(--seo-card-border)] bg-white'
+            dragOverIdx === gi ? 'border-[var(--color-step-running)] bg-[var(--color-brief-bg)]' : 'border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)]'
           }`}>
             <span className="cursor-grab text-sm text-[var(--color-step-pending)] active:cursor-grabbing">⠿</span>
             <button onClick={e => { e.stopPropagation(); addH2After(gi); }} disabled={!!limits && h2List.length >= limits.maxH2} className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-running)] disabled:opacity-30">+</button>
@@ -184,7 +184,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
                   className={`mt-1 flex items-center gap-1 rounded-[var(--radius-md)] border px-2.5 py-2 transition-all ${
                     dragH3?.gi === gi && dragH3?.ci === ci ? 'opacity-40' : ''
                   } ${
-                    dragOverH3?.gi === gi && dragOverH3?.ci === ci ? 'border-[var(--color-step-running)] bg-[var(--color-brief-bg)]' : 'border-[#F0F0F0] bg-white'
+                    dragOverH3?.gi === gi && dragOverH3?.ci === ci ? 'border-[var(--color-step-running)] bg-[var(--color-brief-bg)]' : 'border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)]'
                   }`}
                 >
                   <span className="cursor-grab text-sm text-[var(--color-step-pending)] active:cursor-grabbing">⠿</span>
@@ -202,7 +202,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
             <button
               onClick={() => addH3ToH2(gi)}
               disabled={!!limits && (h2.h3s.length >= limits.maxH3PerH2 || totalH3 >= limits.maxH3Total)}
-              className="w-full rounded-[var(--radius-md)] border border-dashed border-[#F0F0F0] py-1 text-[11px] text-[var(--color-step-pending)] hover:border-[var(--color-step-running)] hover:text-[var(--color-step-running)] disabled:opacity-30"
+              className="w-full rounded-[var(--radius-md)] border border-dashed border-[var(--seo-card-border)] py-1 text-[11px] text-[var(--color-step-pending)] hover:border-[var(--color-step-running)] hover:text-[var(--color-step-running)] disabled:opacity-30"
             >
               + H3
             </button>

@@ -31,7 +31,18 @@ function buildBriefPrompt(
   const intentStructure = INTENT_STRUCTURES[intent] ?? INTENT_STRUCTURES.informational;
   const currentYear = new Date().getFullYear();
 
+  const contextNotes = (input.context_notes as string) ?? '';
+
   let prompt = `Ты — SEO-архитектор. Создай структуру статьи на русском языке.
+${contextNotes ? `\n!!! КРИТИЧЕСКИЕ ОГРАНИЧЕНИЯ ОТ АВТОРА (читай в первую очередь, имеют высший приоритет) !!!
+"${contextNotes}"
+
+Эти указания определяют смысловую рамку статьи. Соблюдай их во всех H2/H3/тезисах/фактах:
+- Сегмент аудитории, указанный автором — это единственный сегмент, для которого пишется статья. Не упоминай другие сегменты, даже если они логически связаны.
+- Темы, исключённые автором — не включай ни в H2, ни в подтемы, ни в LSI-ключи, ни в FAQ.
+- Контекст или ракурс автора — отражай в каждом тезисе и факте.
+Если стандартный интент-шаблон противоречит этим указаниям — приоритет у указаний автора.
+` : ''}
 
 Верни ТОЛЬКО валидный JSON (без markdown, без \`\`\`):
 {
@@ -307,6 +318,8 @@ export async function executeBrief(ctx: PipelineContext): Promise<StepResult> {
   }> | undefined) ?? [];
   const systemPrompt = buildBriefPrompt(ctx.input, chars, limits, maxKeywords, faqCount, comparisonEnabled, competitorMeta);
 
+  const contextNotes = (ctx.input.context_notes as string) ?? '';
+
   const userMessage = `Тема: ${ctx.input.target_query}
 Ключевые слова: ${ctx.input.keywords}
 Intent: ${ctx.input.intent}
@@ -316,7 +329,7 @@ FAQ: ${faqCount}
 Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 Гео: ${ctx.input.geo_location ?? 'вся Россия'}
 Автор: ${ctx.input.author_name ?? 'не указан'}
-Компания: ${ctx.input.author_company ?? 'не указана'}`;
+Компания: ${ctx.input.author_company ?? 'не указана'}${contextNotes ? `\n\nКРИТИЧЕСКИ ВАЖНЫЕ ОГРАНИЧЕНИЯ ОТ АВТОРА (приоритет выше всех остальных правил): ${contextNotes}\n\nЭто смысловые указания о том, что важно учесть в брифе:\n- Если автор указал сегмент (B2C / B2B / новички / профи) — формируй H2 только под этот сегмент, не уходи в другие.\n- Если автор просит не затрагивать какие-то темы — не включай их ни в H2, ни в подтемы, ни в FAQ-вопросы.\n- Если задан контекст (регион / возрастная группа / конкретный случай) — учитывай его в тезисах и фактах каждого H2.\nЭти указания важнее общих рекомендаций по интенту и структуре. При конфликте — следуй им.` : ''}`;
 
   try {
     const raw = await generateText({ model, systemPrompt, userMessage });

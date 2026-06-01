@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { StepIndicator } from './StepIndicator';
 import '@/components/seo-article/tokens.css';
@@ -87,7 +87,7 @@ export function ScreenProgress({
         </div>
         <button
           onClick={onCancel}
-          className="rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] px-5 py-2 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[#F5F5F5]"
+          className="rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] px-5 py-2 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-page)]"
         >
           Отменить
         </button>

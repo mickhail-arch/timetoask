@@ -1,25 +1,18 @@
 import Link from 'next/link';
 import { Wrench } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { Tool } from '@/hooks/useTools';
 
-const SLUG_TO_URL: Record<string, string> = {
-  'seo-article-express': 'seo-article',
-};
-
-function getToolUrl(slug: string): string {
-  return `/tools/${SLUG_TO_URL[slug] ?? slug}`;
-}
-
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   active: {
     label: 'Активен',
-    className: 'border-transparent bg-success/15 text-success',
+    className: 'border-transparent bg-[var(--color-accent)]/15 text-[var(--color-accent)]',
   },
   beta: {
     label: 'Бета',
-    className: 'border-transparent bg-amber-100 text-amber-700',
+    className: 'border-transparent bg-amber-500/15 text-amber-500',
   },
   soon: {
     label: 'Скоро',
@@ -27,19 +20,31 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   },
 };
 
+const SLUG_TO_URL: Record<string, string> = {
+  'seo-article-express': 'seo-article',
+};
+
+const SLUG_TO_NAME: Record<string, string> = {
+  'seo-article-express': 'SEO-статья',
+};
+
+function getToolUrl(slug: string): string {
+  return `/tools/${SLUG_TO_URL[slug] ?? slug}`;
+}
+
+function getToolName(slug: string, name: string): string {
+  return SLUG_TO_NAME[slug] ?? name;
+}
+
 function CostBadge({ tokenCost, freeUsesLimit }: Pick<Tool, 'tokenCost' | 'freeUsesLimit'>) {
   if (freeUsesLimit > 0) {
     return (
-      <Badge className="border-transparent bg-accent/15 text-accent-foreground">
+      <Badge className="border-transparent bg-[var(--color-accent)]/15 text-foreground">
         Бесплатно (осталось {freeUsesLimit})
       </Badge>
     );
   }
-  return (
-    <Badge variant="secondary">
-      {tokenCost} тк
-    </Badge>
-  );
+  return <Badge variant="secondary">{tokenCost} тк</Badge>;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -49,6 +54,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export function ToolCard({ tool }: { tool: Tool }) {
   const isSoon = tool.status === 'soon';
+  const displayName = getToolName(tool.slug ?? tool.id, tool.name);
 
   return (
     <Link
@@ -56,25 +62,33 @@ export function ToolCard({ tool }: { tool: Tool }) {
       aria-disabled={isSoon}
       tabIndex={isSoon ? -1 : undefined}
       className={cn(
-        'flex flex-col gap-3 rounded-lg border border-border bg-bg-surface p-5 transition-shadow',
-        isSoon
-          ? 'pointer-events-none opacity-50'
-          : 'cursor-pointer hover:shadow-sm',
+        'block transition-all',
+        isSoon ? 'pointer-events-none opacity-50' : 'cursor-pointer',
       )}
     >
-      <div className="flex items-start justify-between">
-        <Wrench size={32} className="shrink-0 text-accent" />
-        <StatusBadge status={tool.status} />
-      </div>
+      <Card className="flex flex-col gap-4 border-transparent p-5 transition-all hover:shadow-md">
+        <div className="flex items-start justify-between">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-[var(--color-accent)]/15">
+            <Wrench className="size-5 text-[var(--color-accent)]" />
+          </div>
+          <StatusBadge status={tool.status} />
+        </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="text-lg font-bold text-text-primary">{tool.name}</span>
-        <span className="line-clamp-2 text-sm text-text-secondary">
-          {tool.description}
-        </span>
-      </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-base font-semibold text-foreground">
+            {displayName}
+          </span>
+          {tool.description && (
+            <span className="line-clamp-2 text-sm text-muted-foreground">
+              {tool.description}
+            </span>
+          )}
+        </div>
 
-      <CostBadge tokenCost={tool.tokenCost} freeUsesLimit={tool.freeUsesLimit} />
+        <div className="mt-auto">
+          <CostBadge tokenCost={tool.tokenCost} freeUsesLimit={tool.freeUsesLimit} />
+        </div>
+      </Card>
     </Link>
   );
 }

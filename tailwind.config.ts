@@ -1,7 +1,10 @@
+//tailwind.config.ts
+
 import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -43,6 +46,7 @@ const config: Config = {
         "bg-page": "var(--color-bg-page)",
         "bg-sidebar": "var(--color-bg-sidebar)",
         "bg-surface": "var(--color-bg-surface)",
+        "bg-input": "var(--color-bg-input)",
         border: "var(--color-border)",
         "border-focus": "var(--color-border-focus)",
         "border-error": "var(--color-border-error)",
@@ -57,6 +61,15 @@ const config: Config = {
         md: "var(--radius-md)",
         lg: "var(--radius-lg)",
         full: "var(--radius-full)",
+      },
+      keyframes: {
+        fadeIn: {
+          from: { opacity: "0", transform: "translateY(-4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        fadeIn: "fadeIn 0.3s ease",
       },
       boxShadow: {
         sm: "var(--shadow-sm)",

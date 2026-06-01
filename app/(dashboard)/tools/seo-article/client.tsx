@@ -37,6 +37,13 @@ function notifyArticleReady(query: string) {
   }
 }
 
+function formatDuration(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return m > 0 ? `${m} мин ${rem} сек` : `${rem} сек`;
+}
+
 type Screen = 'input' | 'progress_analysis' | 'brief' | 'progress_generation' | 'result';
 
 const ANALYSIS_STEPS: ProgressStep[] = [
@@ -61,6 +68,9 @@ export function SeoArticleExpressClient() {
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [calculatedPrice, setCalculatedPrice] = useState(0);
   const [startTime, setStartTime] = useState(0);
+  const [genStart, setGenStart] = useState(0);
+  const [finalDuration, setFinalDuration] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedImages, setSavedImages] = useState<Record<string, unknown> | null>(null);
   const [inputKey, setInputKey] = useState(0);
@@ -103,6 +113,14 @@ export function SeoArticleExpressClient() {
       Notification.requestPermission();
     }
   }, []);
+
+  // Живой счётчик времени генерации (тикает раз в секунду на экране генерации)
+  useEffect(() => {
+    if (screen !== 'progress_generation') return;
+    setNowTick(Date.now());
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [screen]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -208,6 +226,7 @@ export function SeoArticleExpressClient() {
         };
 
         setResult(flatResult);
+        setFinalDuration(genStart ? Math.floor((Date.now() - genStart) / 1000) : Math.round((Date.now() - startTime) / 1000));
         setScreen('result');
         notifyArticleReady((input.target_query as string) ?? '');
 
@@ -261,7 +280,7 @@ export function SeoArticleExpressClient() {
         setScreen(jobState.progress > 15 ? 'progress_generation' : 'progress_analysis');
       }
     }
-  }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, startTime, refreshSessions]);
+  }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, startTime, genStart, refreshSessions]);
 
   const handleQueryChange = useCallback((query: string) => {
     const trimmed = query.trim();
@@ -341,8 +360,11 @@ export function SeoArticleExpressClient() {
       setRunningJobs(prev => ({ ...prev, [newSessionId]: newJobId }));
       refreshSessions();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Ошибка отправки';
-      console.error('Submit error:', message);
+      const raw = err instanceof Error ? err.message : '';
+      const message =
+        raw && !raw.startsWith('[') && !raw.startsWith('HTTP')
+          ? raw
+          : 'Кажется, тема или ключевые слова заполнены некорректно. Опишите понятную тему статьи и ключи.';
       setSubmitError(message);
       setScreen('input');
     }
@@ -351,6 +373,8 @@ export function SeoArticleExpressClient() {
   const handleConfirm = useCallback(async (updatedBrief: Record<string, unknown>, userEdited: boolean) => {
     if (confirming) return;
     setConfirming(true);
+    setGenStart(Date.now());
+    setFinalDuration(null);
     setScreen('progress_generation');
 
     try {
@@ -727,6 +751,7 @@ export function SeoArticleExpressClient() {
   }, [activeSessionId, jobState, runningJobs]);
 
   const duration = Math.round((Date.now() - startTime) / 1000);
+  const genElapsed = genStart ? Math.floor((nowTick - genStart) / 1000) : 0;
 
   const mapSteps = (baseSteps: ProgressStep[], offset = 0): ProgressStep[] => {
     if (!jobState) return baseSteps;
@@ -762,7 +787,7 @@ export function SeoArticleExpressClient() {
           {screen === 'input' && (
             <>
               {submitError && (
-                <div className="mx-auto max-w-[640px] rounded-[var(--radius-md)] border border-[var(--color-step-error)] bg-[#FFF5F5] px-4 py-3 text-sm text-[var(--color-step-error)]">
+                <div className="mb-4 animate-fadeIn rounded-[var(--radius-md)] border border-[var(--color-step-error)] bg-[var(--color-step-error)]/10 px-4 py-3 text-sm text-[var(--color-step-error)]">
                   {submitError}
                 </div>
               )}
@@ -803,7 +828,7 @@ export function SeoArticleExpressClient() {
               subtitle={`«${(input.target_query as string) ?? ''}»`}
               steps={mapSteps(GENERATION_STEPS, 2)}
               progress={jobState?.progress ?? 15}
-              currentStepLabel={`осталось ~${Math.max(5, Math.round((100 - (jobState?.progress ?? 15)) * 1.2))} сек`}
+              currentStepLabel={formatDuration(genElapsed)}
               onCancel={handleCancel}
             />
           )}
@@ -814,7 +839,7 @@ export function SeoArticleExpressClient() {
               result={result as any}
               query={(input.target_query as string) ?? ''}
               stepCount={9}
-              duration={duration}
+              duration={finalDuration ?? duration}
               onCopyArticle={() => copyArticle((result as any).article_html ?? '')}
               onDownloadHtml={() => downloadHTML((result as any).article_html ?? '', (result as any).metadata?.slug ?? 'article')}
               onDownloadDocx={() => downloadDOCX((result as any).article_docx_base64 ?? '', (result as any).metadata?.file_name ?? 'article.docx')}
