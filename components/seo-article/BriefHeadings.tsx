@@ -143,7 +143,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
       <div className="mb-1.5 flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--seo-card-border)] bg-[var(--color-bg-page)] px-2.5 py-2">
         <span className="invisible text-sm">⠿</span>
         <button onClick={addH2} disabled={!!limits && h2List.length >= limits.maxH2} className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-running)] disabled:opacity-30">+</button>
-        <span className="shrink-0 rounded bg-[var(--seo-badge-h1)] px-1.5 py-0.5 text-[10px] font-medium text-white">H1</span>
+        <span className="shrink-0 rounded bg-[var(--seo-badge-h1)] px-1.5 py-0.5 text-[10px] font-medium text-[#1A1A1A]">H1</span>
         {renderEditable('h1', h1)}
         <button onClick={() => startEdit('h1')} className="shrink-0 text-sm text-[var(--color-step-pending)] hover:text-[var(--color-text-primary)]">✏</button>
       </div>
@@ -164,7 +164,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
           }`}>
             <span className="cursor-grab text-sm text-[var(--color-step-pending)] active:cursor-grabbing">⠿</span>
             <button onClick={e => { e.stopPropagation(); addH2After(gi); }} disabled={!!limits && h2List.length >= limits.maxH2} className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-running)] disabled:opacity-30">+</button>
-            <span className="shrink-0 rounded bg-[var(--seo-badge-h2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-primary)]">H2</span>
+            <span className="shrink-0 rounded bg-[var(--seo-badge-h2)] px-1.5 py-0.5 text-[10px] font-medium text-[#1A1A1A]">H2</span>
             {renderEditable(h2.id, h2.text)}
             <button onClick={() => startEdit(h2.id)} className="shrink-0 text-sm text-[var(--color-step-pending)] hover:text-[var(--color-text-primary)]">✏</button>
             <button onClick={() => deleteH2(gi)} className="shrink-0 text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-error)]">×</button>
@@ -189,7 +189,7 @@ export function BriefHeadings({ h1, h2List, onH1Change, onChange, limits }: Brie
                 >
                   <span className="cursor-grab text-sm text-[var(--color-step-pending)] active:cursor-grabbing">⠿</span>
                   <button onClick={e => { e.stopPropagation(); addH3AfterH3(gi, ci); }} disabled={!!limits && (h2List[gi].h3s.length >= limits.maxH3PerH2 || totalH3 >= limits.maxH3Total)} className="flex h-[24px] w-[24px] shrink-0 items-center justify-center text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-running)] disabled:opacity-30">+</button>
-                  <span className="shrink-0 rounded bg-[var(--seo-badge-h3)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]">H3</span>
+                  <span className="shrink-0 rounded bg-[var(--seo-badge-h3)] px-1.5 py-0.5 text-[10px] font-medium text-[#1A1A1A]">H3</span>
                   {renderEditable(h3.id, h3.text)}
                   <button onClick={() => startEdit(h3.id)} className="shrink-0 text-sm text-[var(--color-step-pending)] hover:text-[var(--color-text-primary)]">✏</button>
                   <button onClick={() => deleteH3(gi, ci)} className="shrink-0 text-sm text-[var(--color-step-pending)] hover:text-[var(--color-step-error)]">×</button>

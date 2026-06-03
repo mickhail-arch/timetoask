@@ -62,40 +62,6 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
   const [keywordsLoading, setKeywordsLoading] = useState(false);
   const [keywordsError, setKeywordsError] = useState('');
 
-  const handleGenerateKeywords = useCallback(async () => {
-    if (!targetQuery.trim()) {
-      setKeywordsError('Сначала введите целевой запрос');
-      return;
-    }
-    setKeywordsError('');
-    setKeywordsLoading(true);
-    try {
-      const existing = keywords.split('\n').map((k) => k.trim()).filter(Boolean);
-      const forbidden = forbiddenWords.split('\n').map((w) => w.trim()).filter(Boolean);
-      const res = await fetch('/api/ai/keywords', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: targetQuery.trim(), existing, intent, geo, forbidden }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setKeywordsError(json?.error?.message ?? 'Не удалось сгенерировать');
-        return;
-      }
-      const fresh: string[] = json.data.keywords ?? [];
-      if (fresh.length === 0) {
-        setKeywordsError('Новых ключей не нашлось (уже максимум)');
-        return;
-      }
-      const merged = [...existing, ...fresh].join('\n');
-      setKeywords(merged);
-    } catch {
-      setKeywordsError('Ошибка сети');
-    } finally {
-      setKeywordsLoading(false);
-    }
-  }, [targetQuery, keywords, intent, geo, forbiddenWords]);
-
   const [intent, setIntent] = useState((iv?.intent as string) ?? 'informational');
   const [charCount, setCharCount] = useState(Math.max(6000, (iv?.target_char_count as number) ?? 8000));
   const [imageCount, setImageCount] = useState((iv?.image_count as number) ?? 0);
@@ -173,6 +139,41 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
     (iv?.source_links as Array<{url: string; anchor: string}>) ?? [{ url: '', anchor: '' }]
   );
   const [forbiddenWords, setForbiddenWords] = useState((iv?.forbidden_words as string) ?? '');
+
+  const handleGenerateKeywords = useCallback(async () => {
+    if (!targetQuery.trim()) {
+      setKeywordsError('Сначала введите целевой запрос');
+      return;
+    }
+    setKeywordsError('');
+    setKeywordsLoading(true);
+    try {
+      const existing = keywords.split('\n').map((k) => k.trim()).filter(Boolean);
+      const forbidden = forbiddenWords.split('\n').map((w) => w.trim()).filter(Boolean);
+      const res = await fetch('/api/ai/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: targetQuery.trim(), existing, intent, geo, forbidden }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setKeywordsError(json?.error?.message ?? 'Не удалось сгенерировать');
+        return;
+      }
+      const fresh: string[] = json.data.keywords ?? [];
+      if (fresh.length === 0) {
+        setKeywordsError('Новых ключей не нашлось (уже максимум)');
+        return;
+      }
+      const merged = [...existing, ...fresh].join('\n');
+      setKeywords(merged);
+    } catch {
+      setKeywordsError('Ошибка сети');
+    } finally {
+      setKeywordsLoading(false);
+    }
+  }, [targetQuery, keywords, intent, geo, forbiddenWords]);
+
   const [legalRestrictions, setLegalRestrictions] = useState((iv?.legal_restrictions as string) ?? '');
   const [authorName, setAuthorName] = useState((iv?.author_name as string) ?? '');
   const [authorPosition, setAuthorPosition] = useState((iv?.author_position as string) ?? '');

@@ -294,6 +294,7 @@ export async function resumePipeline(
   resumeFromIndex: number,
   remainingCost: number,
 ): Promise<void> {
+  await syncSessionStatus(jobId, 'generating');
   const state = await getRedisState(jobId);
   if (!state) throw new Error('Job state not found in Redis');
 

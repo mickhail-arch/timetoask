@@ -31,14 +31,13 @@ interface ScreenResultProps {
   onSave?: (data: { articleHtml: string; metadata: ArticleResult['metadata'] }) => Promise<void>;
 }
 
-function fmtDuration(totalSec: number): string {
-  const s = Math.max(0, Math.floor(totalSec));
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return m > 0 ? `${m} мин ${rem} сек` : `${rem} сек`;
-}
-
 export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, sessionId, onSave }: ScreenResultProps) {
+  const fmtDuration = (sec: number): string => {
+    const s = Math.max(0, Math.round(sec));
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return m > 0 ? `${m} мин ${rem} сек` : `${rem} сек`;
+  };
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [editedHtml, setEditedHtml] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState(result.metadata.title);
@@ -89,7 +88,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
   return (
     <div className="mx-auto max-w-[680px] space-y-3">
       <div className="text-[13px] text-[var(--color-text-secondary)]">
-        <strong className="font-medium text-[var(--color-text-primary)]">{query}</strong> · {stepCount} шагов · {fmtDuration(duration)}
+        <strong className="font-medium text-[var(--color-text-primary)]">{query}</strong> · {stepCount} шагов · ~{fmtDuration(duration)}
       </div>
 
       {result.warnings && result.warnings.length > 0 && (

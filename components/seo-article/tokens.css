@@ -36,7 +36,7 @@
   --seo-preview-text-muted: #6B6B6B;
   --seo-preview-link: #2563eb;
   --seo-preview-link-hover: #1d4ed8;
-  --seo-preview-blockquote-bg: #FAFFF0;
+  --seo-preview-blockquote-bg: #F1F1F2;
   --seo-preview-blockquote-border: var(--color-accent);
   --seo-preview-tooltip-bg: #fff;
   --seo-preview-tooltip-border: #E0E0E0;
@@ -73,7 +73,7 @@
   --seo-preview-text-muted: #9A9A9A;
   --seo-preview-link: #6FA8FF;
   --seo-preview-link-hover: #8FBAFF;
-  --seo-preview-blockquote-bg: #1F2614;
+  --seo-preview-blockquote-bg: #34343A;
   --seo-preview-blockquote-border: var(--color-accent);
   --seo-preview-tooltip-bg: #2A2A2D;
   --seo-preview-tooltip-border: var(--color-border);

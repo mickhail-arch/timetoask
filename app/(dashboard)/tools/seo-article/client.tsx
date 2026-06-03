@@ -67,7 +67,8 @@ export function SeoArticleExpressClient() {
   const [brief, setBrief] = useState<Record<string, unknown> | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [calculatedPrice, setCalculatedPrice] = useState(0);
-  const [startTime, setStartTime] = useState(0);
+  const [accumulatedMs, setAccumulatedMs] = useState(0);
+  const [phaseStartMs, setPhaseStartMs] = useState<number | null>(null);
   const [genStart, setGenStart] = useState(0);
   const [finalDuration, setFinalDuration] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(0);
@@ -182,6 +183,10 @@ export function SeoArticleExpressClient() {
 
     // AWAITING_CONFIRMATION: показываем brief, если он есть
     if (jobState.status === 'awaiting_confirmation') {
+      setPhaseStartMs((prev) => {
+        if (prev !== null) setAccumulatedMs((acc) => acc + (Date.now() - prev));
+        return null;
+      });
       if (jobState.brief && (jobState.brief as any).h2_list) {
         if (screen === 'progress_analysis' || screen === 'progress_generation' || (screen === 'brief' && !brief)) {
           setBrief(jobState.brief);
@@ -204,6 +209,10 @@ export function SeoArticleExpressClient() {
 
     // COMPLETED: всегда переключаем на result, независимо от screen
     if (jobState.status === 'completed' || jobState.progress >= 100) {
+      setPhaseStartMs((prev) => {
+        if (prev !== null) setAccumulatedMs((acc) => acc + (Date.now() - prev));
+        return null;
+      });
       if (screen === 'progress_analysis' || screen === 'progress_generation' || screen === 'brief') {
         const raw = jobState.result as Record<string, unknown> ?? {};
         const assembly = raw.assembly as Record<string, unknown> ?? {};
@@ -226,7 +235,7 @@ export function SeoArticleExpressClient() {
         };
 
         setResult(flatResult);
-        setFinalDuration(genStart ? Math.floor((Date.now() - genStart) / 1000) : Math.round((Date.now() - startTime) / 1000));
+        setFinalDuration(genStart ? Math.floor((Date.now() - genStart) / 1000) : Math.round(accumulatedMs / 1000));
         setScreen('result');
         notifyArticleReady((input.target_query as string) ?? '');
 
@@ -265,6 +274,7 @@ export function SeoArticleExpressClient() {
 
     // PROCESSING: переключаем экраны по progress
     if (jobState.status === 'processing') {
+      setPhaseStartMs((prev) => (prev === null ? Date.now() : prev));
       // После confirm pipeline идёт дальше — на любом progress > 15 переключаемся
       if (jobState.progress > 15 && screen === 'progress_analysis') {
         setScreen('progress_generation');
@@ -280,7 +290,7 @@ export function SeoArticleExpressClient() {
         setScreen(jobState.progress > 15 ? 'progress_generation' : 'progress_analysis');
       }
     }
-  }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, startTime, genStart, refreshSessions]);
+  }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, accumulatedMs, phaseStartMs, refreshSessions]);
 
   const handleQueryChange = useCallback((query: string) => {
     const trimmed = query.trim();
@@ -332,7 +342,8 @@ export function SeoArticleExpressClient() {
   const handleSubmit = useCallback(async (formInput: Record<string, unknown>) => {
     setInput(formInput);
     setSubmitError(null);
-    setStartTime(Date.now());
+    setAccumulatedMs(0);
+    setPhaseStartMs(Date.now());
     setScreen('progress_analysis');
 
     // Сервер атомарно создаст/обновит ToolSession + JobStep + reserve в одной транзакции.
@@ -750,7 +761,8 @@ export function SeoArticleExpressClient() {
     return jobs;
   }, [activeSessionId, jobState, runningJobs]);
 
-  const duration = Math.round((Date.now() - startTime) / 1000);
+  const totalActiveMs = accumulatedMs + (phaseStartMs !== null ? Date.now() - phaseStartMs : 0);
+  const duration = Math.max(0, Math.round(totalActiveMs / 1000));
   const genElapsed = genStart ? Math.floor((nowTick - genStart) / 1000) : 0;
 
   const mapSteps = (baseSteps: ProgressStep[], offset = 0): ProgressStep[] => {

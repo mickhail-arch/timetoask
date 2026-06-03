@@ -592,7 +592,7 @@ function wrapWithInlineStyles(
     .replace(/<img([^>]*)>/gi, '<img$1 style="max-width:100%;height:auto;border-radius:8px">')
     .replace(/<a([^>]*)>/gi, '<a$1 style="color:#2563EB;text-decoration:underline">')
     // Цитаты экспертов
-    .replace(/<blockquote([^>]*)>/gi, '<blockquote$1 style="margin:20px 0;padding:16px 20px;border-left:4px solid #A6E800;background:#f9fdf2">')
+    .replace(/<blockquote([^>]*)>/gi, '<blockquote$1 style="margin:20px 0;padding:16px 20px;border-left:4px solid #A6E800;background:#F1F1F2">')
     .replace(/<cite([^>]*)>/gi, '<cite$1>')
     // Навигация (оглавление)
     .replace(/<nav class="toc"([^>]*)>/gi, '<nav class="toc"$1 style="margin:16px 0;padding:16px 20px;background:#f9f9f9;border-radius:8px;border:1px solid #e0e0e0">');
