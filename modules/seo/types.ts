@@ -139,6 +139,7 @@ export interface PipelineData {
 export interface PipelineContext {
   jobId: string;
   userId: string;
+  sessionId?: string;
   input: Record<string, unknown>;
   config: Record<string, unknown> | null;
   data: PipelineData;

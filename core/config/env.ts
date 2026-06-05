@@ -21,6 +21,7 @@ const envSchema = z.object({
   // LLM
   LLM_PROVIDER: z.string().default('openrouter'),
   OPENROUTER_API_KEY: z.string().optional().default(''),
+  USD_RUB_RATE: z.coerce.number().positive().default(90),
   OPENROUTER_FALLBACK_MODEL: z.string().default('openrouter/auto'),
 
   // Auth

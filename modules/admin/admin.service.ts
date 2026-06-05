@@ -28,6 +28,7 @@ type SafeUser = {
   name: string | null;
   emailVerified: Date | null;
   role: string;
+  supportLevel: string | null;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -39,6 +40,7 @@ const safeUserSelect = {
   name: true,
   emailVerified: true,
   role: true,
+  supportLevel: true,
   deletedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -247,4 +249,24 @@ export async function getLogs(
   ]);
 
   return { logs, total };
+}
+
+// ---------------------------------------------------------------------------
+// setUserAccess
+// ---------------------------------------------------------------------------
+
+export async function setUserAccess(
+  userId: string,
+  access: 'none' | 'view' | 'full',
+): Promise<SafeUser> {
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  if (!target) throw new ValidationError('User not found');
+  if (target.role === 'admin') throw new ValidationError('Cannot change admin access');
+
+  const data =
+    access === 'none'
+      ? { role: 'user', supportLevel: null }
+      : { role: 'support', supportLevel: access };
+
+  return prisma.user.update({ where: { id: userId }, data, select: safeUserSelect });
 }

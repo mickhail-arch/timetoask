@@ -48,7 +48,9 @@ function CostBadge({ tokenCost, freeUsesLimit }: Pick<Tool, 'tokenCost' | 'freeU
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.active;
+  if (status === 'active') return null;
+  const config = STATUS_CONFIG[status];
+  if (!config) return null;
   return <Badge className={config.className}>{config.label}</Badge>;
 }
 

@@ -8,12 +8,19 @@ declare module 'next-auth' {
       email?: string | null;
       name?: string | null;
       role: string;
+      supportLevel?: string | null;
     };
+    impersonatedBy?: string | null;
+    impersonationLevel?: 'view' | 'full' | null;
   }
 }
 
 declare module 'next-auth/jwt' {
   interface JWT {
     role?: string;
+    supportLevel?: string | null;
+    impersonatedBy?: string | null;
+    impersonationLevel?: 'view' | 'full' | null;
+    impExp?: number | null;
   }
 }

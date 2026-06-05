@@ -40,12 +40,12 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
   };
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [editedHtml, setEditedHtml] = useState<string | null>(null);
-  const [editedTitle, setEditedTitle] = useState(result.metadata.title);
-  const [editedDescription, setEditedDescription] = useState(result.metadata.description);
-  const [editedSlug, setEditedSlug] = useState(result.metadata.slug);
-  const [editedBreadcrumb, setEditedBreadcrumb] = useState(result.metadata.breadcrumb);
+  const [editedTitle, setEditedTitle] = useState(result.metadata?.title ?? '');
+  const [editedDescription, setEditedDescription] = useState(result.metadata?.description ?? '');
+  const [editedSlug, setEditedSlug] = useState(result.metadata?.slug ?? '');
+  const [editedBreadcrumb, setEditedBreadcrumb] = useState(result.metadata?.breadcrumb ?? '');
   const [editedPageName, setEditedPageName] = useState(query);
-  const [editedAltTexts, setEditedAltTexts] = useState(result.metadata.alt_texts);
+  const [editedAltTexts, setEditedAltTexts] = useState(result.metadata?.alt_texts ?? []);
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const m = result.quality_metrics;
@@ -154,7 +154,7 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
             setSaving(false);
           }}
           disabled={saving}
-          className="w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-sm font-medium text-[var(--color-text-primary)] transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-sm font-medium text-[#1A1A1A] transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {saving ? 'Сохранение...' : 'Сохранить изменения'}
         </button>

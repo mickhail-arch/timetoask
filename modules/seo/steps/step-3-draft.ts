@@ -1,7 +1,7 @@
 //modules/seo/steps/step-3-draft.ts
 
 import type { StepResult, PipelineContext, BriefData } from '../types';
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 import { buildSystemPrompt } from '@/plugins/seo-article-express/prompt';
 import { sanitizeArticleHtml } from './sanitize-html';
 
@@ -69,14 +69,14 @@ export async function executeDraft(
     }
 
     try {
-      articleHtml = await generateText({
+      articleHtml = await generateAndMeter({
         model,
         systemPrompt: currentPrompt,
         userMessage: attempts > 1
           ? `Напиши статью по заданным параметрам. Все правила — в системном промпте.\n\nТема: ${targetQuery}\nКлючевые слова: ${keywords}\n\nВНИМАНИЕ: объём статьи СТРОГО ${charCount} символов. Предыдущая попытка была слишком короткой (${lastTextLength} символов). Пиши развёрнуто.`
           : userMessage,
         maxOutputTokens,
-      });
+      }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
       articleHtml = articleHtml.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
       // Gemini часто выдаёт текст без <p> тегов — оборачиваем голые строки

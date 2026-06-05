@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { RewritePanel } from './rewrite-panel';
+import { SectionPanel } from './section-panel';
 
 export interface RichEditorProps {
   html: string;
@@ -24,6 +25,8 @@ export function RichEditor({ html, onChange, className, placeholder, readOnly, a
     sectionTitle: string;
     position: { top: number };
   } | null>(null);
+  const [addBtn, setAddBtn] = useState<{ top: number; range: Range } | null>(null);
+  const [sectionData, setSectionData] = useState<{ range: Range; contextBefore: string; position: { top: number; left: number } } | null>(null);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -68,6 +71,44 @@ export function RichEditor({ html, onChange, className, placeholder, readOnly, a
       )),
     });
   }, [readOnly]);
+
+  const updateAddButton = useCallback(() => {
+    if (readOnly || !editorRef.current) { setAddBtn(null); return; }
+    const sel = window.getSelection();
+    if (!sel || !sel.isCollapsed || !sel.rangeCount) { setAddBtn(null); return; }
+    const range = sel.getRangeAt(0);
+    if (!editorRef.current.contains(range.commonAncestorContainer)) { setAddBtn(null); return; }
+    // ближайший блочный элемент
+    let node: Node | null = range.startContainer;
+    while (node && node !== editorRef.current && node.nodeType !== Node.ELEMENT_NODE) node = node.parentNode;
+    const block = node as HTMLElement | null;
+    const isEmpty = !block || (block.textContent ?? '').trim() === '';
+    if (!isEmpty) { setAddBtn(null); return; }
+    const rect = range.getBoundingClientRect();
+    const editorRect = editorRef.current.getBoundingClientRect();
+    const top = (rect.top || editorRect.top) - editorRect.top;
+    setAddBtn({ top, range: range.cloneRange() });
+  }, [readOnly]);
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', updateAddButton);
+    return () => document.removeEventListener('selectionchange', updateAddButton);
+  }, [updateAddButton]);
+
+  const handleOpenSection = useCallback(() => {
+    if (!addBtn || !editorRef.current) return;
+    const editorRect = editorRef.current.getBoundingClientRect();
+    const tempRange = addBtn.range.cloneRange();
+    tempRange.setStart(editorRef.current, 0);
+    const beforeDiv = document.createElement('div');
+    beforeDiv.appendChild(tempRange.cloneContents());
+    setSectionData({
+      range: addBtn.range,
+      contextBefore: beforeDiv.textContent?.slice(-500) ?? '',
+      position: { top: addBtn.top, left: 24 },
+    });
+    setAddBtn(null);
+  }, [addBtn]);
 
   useEffect(() => {
     document.addEventListener('selectionchange', updateToolbar);
@@ -279,6 +320,37 @@ export function RichEditor({ html, onChange, className, placeholder, readOnly, a
         [contenteditable] s { text-decoration: line-through; }
         [contenteditable]:empty:before { content: attr(data-placeholder); color: #999; }
       `}</style>
+
+      {addBtn && !sectionData && (
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); handleOpenSection(); }}
+          title="Добавить раздел с AI"
+          className="absolute left-0 z-40 flex size-6 items-center justify-center rounded-full border border-[var(--seo-card-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+          style={{ top: addBtn.top }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      )}
+
+      {sectionData && (
+        <SectionPanel
+          articleTitle={articleTitle ?? ''}
+          contextBefore={sectionData.contextBefore}
+          position={sectionData.position}
+          onApply={(sectionHtml) => {
+            const sel = window.getSelection();
+            if (sel && editorRef.current) {
+              sel.removeAllRanges();
+              sel.addRange(sectionData.range);
+              document.execCommand('insertHTML', false, sectionHtml);
+              emitChange();
+            }
+            setSectionData(null);
+          }}
+          onCancel={() => setSectionData(null)}
+        />
+      )}
 
       {rewriteData && (
         <RewritePanel

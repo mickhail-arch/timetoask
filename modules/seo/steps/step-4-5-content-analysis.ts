@@ -1,6 +1,6 @@
 // modules/seo/steps/step-4-5-content-analysis.ts — Анализ стиля + фактчек (1 вызов)
 import type { StepResult, PipelineContext } from '../types';
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 
 interface WritingIssue {
   sentence: string;
@@ -69,11 +69,11 @@ export async function executeContentAnalysis(
   const articleHtml = (draftData.article_html as string) ?? '';
   const plainText = articleHtml.replace(/<[^>]*>/g, '');
 
-  const raw = await generateText({
+  const raw = await generateAndMeter({
     model,
     systemPrompt: CONTENT_ANALYSIS_PROMPT,
     userMessage: plainText,
-  });
+  }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
 
   const { writing_issues: writingIssues, fact_issues: factIssues } = parseAnalysisResult(raw);
 

@@ -1,7 +1,10 @@
 // modules/seo/steps/step-6-images.ts — генерация изображений по финальному тексту
 import type { StepResult, PipelineContext } from '../types';
 import { getStepModel } from '../config';
-import { generateText, generateImage } from '@/adapters/llm/openrouter.adapter';
+import { generateImage } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
+import { calculateImageCostRub } from '@/modules/billing/model-pricing';
+import { prisma } from '@/lib/prisma';
 import type { ToolConfig } from '@/core/types';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -164,12 +167,12 @@ export async function executeImages(
           ? h2Matches[h2Index][1].replace(/<[^>]*>/g, '').trim()
           : '';
 
-        const desc = await generateText({
+        const desc = await generateAndMeter({
           model: promptModel,
           systemPrompt:
             'Describe a suitable visual scene for an article illustration in 1-2 sentences in English. The scene must match the article section topic. Output ONLY the scene description, nothing else.',
           userMessage: `Article topic: ${targetQuery}\nSection: ${nearestH2 || targetQuery}\nImage ${num} of ${imageCount}. Style: ${styleEN}. Describe a unique, relevant scene that visually represents the section topic.${commentSuffix}`,
-        });
+        }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
         descriptions[num] = desc.trim();
       } catch {
         descriptions[num] = `Image for article about ${targetQuery}`;
@@ -196,7 +199,7 @@ export async function executeImages(
         ? ''
         : extractMarkerContext(articleHtml, markerNum);
 
-      const detailedPrompt = await generateText({
+      const detailedPrompt = await generateAndMeter({
         model: promptModel,
         systemPrompt: `Generate a detailed image generation prompt in English for an AI image generator. Output ONLY the prompt text, nothing else. Max 150 words.
 
@@ -218,7 +221,7 @@ Palette: ${paletteEN}
 Mood: ${moodEN}
 Topic: ${targetQuery}
 ${sectionContext ? `\nFull article context around this image:\n${sectionContext}` : ''}${commentSuffix}`,
-      });
+      }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
 
       // 6.2: Seedream генерирует картинку
       const imageResult = await generateImage({
@@ -227,10 +230,30 @@ ${sectionContext ? `\nFull article context around this image:\n${sectionContext}
         size: imageSize,
       });
 
+      // Учёт себестоимости изображения (фиксированная цена за картинку)
+      if (ctx.userId) {
+        try {
+          await prisma.usageLog.create({
+            data: {
+              userId: ctx.userId,
+              toolId: null,
+              sessionId: ctx.sessionId ?? null,
+              idempotencyKey: `seo-image:${ctx.jobId}:${markerNum}:${Date.now()}`,
+              tokensUsed: 0,
+              cost: 0,
+              costRub: calculateImageCostRub(genModel),
+              model: genModel,
+            },
+          });
+        } catch (e) {
+          console.error('[step-6] failed to log image cost', e);
+        }
+      }
+
       // 6.3: Alt-тег — отдельный запрос к LLM на русском, 50-80 символов
       let alt = '';
       try {
-        alt = await generateText({
+        alt = await generateAndMeter({
           model: promptModel,
           systemPrompt: `Generate an alt-text in Russian for an article image. Output ONLY the alt-text, nothing else.
 
@@ -247,7 +270,7 @@ Examples:
 - BAD: "Объёмная 3D-сцена с парящим в воздухе щитом-эмблемой, от которого расходятся лучи разных цветов —" (too long, trailing dash)
 - BAD: "кроссовки" (too short, no context)`,
           userMessage: `Image scene: ${desc}\nArticle topic: ${targetQuery}\nMain keyword for image ${index + 1}: ${index === 0 ? targetQuery : (keywords[index % keywords.length] ?? targetQuery)}`,
-        });
+        }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
         alt = alt.trim().replace(/^["']|["']$/g, '').replace(/[—–\-:,;.\s]+$/, '').trim();
         if (alt.length < 50 || alt.length > 125) {
           alt = alt.length > 80 ? alt.slice(0, 80).replace(/\s\S*$/, '').trim() : alt;

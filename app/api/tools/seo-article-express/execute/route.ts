@@ -76,7 +76,7 @@ export async function POST(req: Request) {
         });
 
         const title = (input.target_query as string) ?? 'Без названия';
-        const outputMeta = { jobId: jobStep.id } as Prisma.InputJsonValue;
+        const outputMeta = { jobId: jobStep.id, price: price.total } as Prisma.InputJsonValue;
 
         let toolSession;
         if (sessionIdFromClient) {
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
     }
 
     const config = tool.config as Record<string, unknown> | null;
-    runPipeline(atomicResult.jobId, session.user.id, input as any, config, seoExpressSteps, price.analysisCost)
+    runPipeline(atomicResult.jobId, session.user.id, input as any, config, seoExpressSteps, price.analysisCost, atomicResult.sessionId)
       .catch(err => console.error('[seo-express] Pipeline fatal error:', err));
 
     return NextResponse.json({

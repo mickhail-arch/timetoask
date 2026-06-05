@@ -1,5 +1,5 @@
 // modules/seo/steps/step-1-2-brief.ts — формирование ТЗ (структура H1/H2/H3, LSI)
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 import { getStepModel } from '@/modules/seo/config';
 import { calculatePrice } from '../pricing';
 import type { PricingConfig } from '../pricing';
@@ -332,9 +332,9 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
 Компания: ${ctx.input.author_company ?? 'не указана'}${contextNotes ? `\n\nКРИТИЧЕСКИ ВАЖНЫЕ ОГРАНИЧЕНИЯ ОТ АВТОРА (приоритет выше всех остальных правил): ${contextNotes}\n\nЭто смысловые указания о том, что важно учесть в брифе:\n- Если автор указал сегмент (B2C / B2B / новички / профи) — формируй H2 только под этот сегмент, не уходи в другие.\n- Если автор просит не затрагивать какие-то темы — не включай их ни в H2, ни в подтемы, ни в FAQ-вопросы.\n- Если задан контекст (регион / возрастная группа / конкретный случай) — учитывай его в тезисах и фактах каждого H2.\nЭти указания важнее общих рекомендаций по интенту и структуре. При конфликте — следуй им.` : ''}`;
 
   try {
-    const raw = await generateText({ model, systemPrompt, userMessage });
+    const raw = await generateAndMeter({ model, systemPrompt, userMessage }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
     const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax, limits);
-
+    
     // Рассчитать цену
     const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as
       | Partial<PricingConfig>
@@ -350,7 +350,7 @@ Tone: ${ctx.input.tone_of_voice ?? 'expert'}
   } catch (err) {
     // Retry 1 раз
     try {
-      const raw = await generateText({ model, systemPrompt, userMessage });
+      const raw = await generateAndMeter({ model, systemPrompt, userMessage }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
       const brief = parseBriefResponse(raw, ctx, chars, maxKeywords, mainKeywordMin, mainKeywordMax, limits);
 
       const pricingConfig = (ctx.config as Record<string, unknown>)?.pricing as

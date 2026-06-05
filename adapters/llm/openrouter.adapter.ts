@@ -107,6 +107,67 @@ export async function generateText(params: LlmParams): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+
+export type LlmUsage = { promptTokens: number; completionTokens: number; costUsd?: number };
+
+export async function generateTextWithUsage(
+  params: LlmParams,
+): Promise<{ text: string; usage: LlmUsage; model: string }> {
+  logPromptDebug('generateTextWithUsage', params);
+  const messages = buildMessages(params);
+
+  const fallback = params.fallbackModel ?? env.OPENROUTER_FALLBACK_MODEL;
+
+  const run = async (model: string) => {
+    const timeoutMs = model.includes('opus') ? 420_000 : model.includes('claude') ? 180_000 : 60_000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const result = await aiGenerateText({
+        model: provider(model),
+        messages,
+        temperature: params.temperature,
+        maxOutputTokens: params.maxOutputTokens,
+        abortSignal: controller.signal,
+      });
+      if (!result.text || result.text.trim().length === 0) {
+        throw new Error('Empty response from model');
+      }
+      const u = result.usage as unknown as Record<string, number | undefined> | undefined;
+      const orMeta = (result.providerMetadata as Record<string, unknown> | undefined)?.openrouter as
+        | { usage?: { cost?: number } }
+        | undefined;
+      const usage: LlmUsage = {
+        promptTokens: u?.promptTokens ?? u?.inputTokens ?? 0,
+        completionTokens: u?.completionTokens ?? u?.outputTokens ?? 0,
+        costUsd: orMeta?.usage?.cost,
+      };
+      return { text: result.text, usage, model };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    const r = await run(params.model);
+    console.info(`[llm] model=${params.model} status=ok`);
+    return r;
+  } catch (primaryErr) {
+    const code = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+    console.warn(`[llm] model=${params.model} status=fail error="${code}", trying fallback=${fallback}`);
+    if (!fallback) throw new LlmUnavailableError(`No fallback model configured, original error: ${code}`);
+  }
+
+  try {
+    const r = await run(fallback);
+    console.info(`[llm] model=${fallback} status=ok (fallback)`);
+    return r;
+  } catch {
+    throw new LlmUnavailableError();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Image generation (OpenRouter /images/generations)
 // ---------------------------------------------------------------------------
 

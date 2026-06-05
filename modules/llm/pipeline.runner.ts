@@ -1,3 +1,5 @@
+//modules/llm/pipeline.runner.ts
+
 import { prisma } from '@/lib/prisma';
 import { generateText } from '@/adapters/llm/openrouter.adapter';
 import { wrapSystemPrompt } from './prompt-guard';

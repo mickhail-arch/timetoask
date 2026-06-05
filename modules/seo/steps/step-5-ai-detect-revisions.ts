@@ -1,7 +1,7 @@
 // modules/seo/steps/step-5-ai-detect-revisions.ts — AI-детект + правки + повторный детект
 import type { StepResult, PipelineContext, SeoIssue, QualityMetrics } from '../types';
 import { detectAIByCode } from '@/adapters/ai-detection';
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 import { sanitizeArticleHtml } from './sanitize-html';
 
 /**
@@ -181,11 +181,11 @@ ${rulesBlock}
   ): Promise<string> {
     const prompt = buildRevisionsPrompt(issues, ctx.input, briefData);
     try {
-      const revised = await generateText({
+      const revised = await generateAndMeter({
         model: revisionsModel,
         systemPrompt: prompt,
         userMessage: currentHtml,
-      });
+      }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
       const cleanRevised = revised.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 
       const revisedH1 = (cleanRevised.match(/<h1[\s>]/gi) ?? []).length;

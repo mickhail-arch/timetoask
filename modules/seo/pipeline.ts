@@ -33,7 +33,7 @@ const STEP_PROGRESS: Record<string, [number, number]> = {
 
 async function syncSessionStatus(
   jobId: string,
-  status: 'awaiting_confirmation' | 'completed' | 'failed',
+  status: 'generating' | 'awaiting_confirmation' | 'completed' | 'failed',
   extra?: { contentText?: string; outputMeta?: Record<string, unknown> },
 ) {
   try {
@@ -102,10 +102,30 @@ export async function saveRedisState(jobId: string, state: Partial<PipelineState
   await redis.setex(redisKey(jobId), REDIS_TTL, JSON.stringify(state));
 }
 
+export async function deleteRedisState(jobId: string): Promise<void> {
+  await redis.del(redisKey(jobId));
+}
+
+export async function cancelJob(jobId: string, userId: string): Promise<void> {
+  const job = await prisma.jobStep.findUnique({ where: { id: jobId }, select: { userId: true } });
+  if (!job || job.userId !== userId) return;
+  await redis.del(redisKey(jobId));
+  await prisma.jobStep.update({ where: { id: jobId }, data: { status: 'failed' } });
+  await syncSessionStatus(jobId, 'failed');
+}
+
 export async function getRedisState(jobId: string): Promise<PipelineState | null> {
   const raw = await redis.get(redisKey(jobId));
   if (!raw) return null;
   return JSON.parse(raw) as PipelineState;
+}
+
+async function resolveSessionId(jobId: string): Promise<string | undefined> {
+  const s = await prisma.toolSession.findFirst({
+    where: { outputMeta: { path: ['jobId'], equals: jobId } },
+    select: { id: true },
+  });
+  return s?.id;
 }
 
 async function updateJobStep(
@@ -137,10 +157,12 @@ export async function runPipeline(
   config: Record<string, unknown> | null,
   steps: StepDefinition[],
   analysisCost: number,
+  sessionId?: string,
 ): Promise<void> {
   const ctx: PipelineContext = {
     jobId,
     userId,
+    sessionId: sessionId ?? (await resolveSessionId(jobId)),
     input,
     config,
     data: {},
@@ -301,6 +323,7 @@ export async function resumePipeline(
   const ctx: PipelineContext = {
     jobId,
     userId,
+    sessionId: await resolveSessionId(jobId),
     input: state.originalInput ?? state.result ?? {},
     config,
     data: { ...state.result, confirmation: { brief: updatedBrief, user_edited: true } },
@@ -428,6 +451,7 @@ export async function regeneratePipeline(
   const ctx: PipelineContext = {
     jobId,
     userId,
+    sessionId: await resolveSessionId(jobId),
     input: state.originalInput ?? {},
     config,
     data: {

@@ -38,6 +38,7 @@ type SafeUser = {
   name: string | null;
   emailVerified: Date | null;
   role: string;
+  supportLevel: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

@@ -14,6 +14,8 @@ model User {
   passwordHash   String
   emailVerified  DateTime?
   role           String    @default("user")
+  supportLevel   String?
+  permissions    Json?
   deletedAt      DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -82,15 +84,19 @@ model Transaction {
 model UsageLog {
   id              String   @id @default(cuid())
   userId          String
-  toolId          String
+  toolId          String?
   idempotencyKey  String   @unique
   tokensUsed      Int
   cost            Decimal  @db.Decimal(12, 2)
+  costRub         Decimal  @default(0) @db.Decimal(12, 4)
+  model           String?
+  sessionId       String?
   createdAt       DateTime @default(now())
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tool            Tool     @relation(fields: [toolId], references: [id])
+  tool            Tool?    @relation(fields: [toolId], references: [id])
 
+  @@index([sessionId])
   @@map("usage_log")
 }
 
@@ -214,4 +220,19 @@ model ToolSession {
 
   @@index([userId, toolId, createdAt(sort: Desc)])
   @@map("tool_sessions")
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  action       String   // impersonate_start | impersonate_stop | grant_access | revoke_access
+  targetUserId String?
+  level        String?  // view | full
+  ip           String?
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@map("admin_audit_log")
 }

@@ -1,5 +1,5 @@
 // modules/keywords/keywords.service.ts — генерация SEO-ключей через LLM
-import { generateText } from '@/adapters/llm';
+import { generateAndMeter } from '@/modules/llm/meter';
 import { KEYWORDS_MODEL, KEYWORDS_MAX_TOTAL } from '@/core/constants';
 import { KEYWORDS_SYSTEM_PROMPT } from './prompt';
 
@@ -40,6 +40,7 @@ async function askModel(
   exclude: string[],
   count: number,
   ctx: KeywordsContext,
+  userId?: string,
 ): Promise<string[]> {
   const excludeBlock = exclude.length
     ? `\n\nУже есть эти ключи — НЕ повторяй их и не дублируй по смыслу:\n${exclude.join('\n')}`
@@ -47,13 +48,13 @@ async function askModel(
 
   const userMessage = `Тема статьи: ${topic}${buildContextBlock(ctx)}\n\nСгенерируй РОВНО ${count} новых ключевых слов (не меньше).${excludeBlock}`;
 
-  const raw = await generateText({
+  const raw = await generateAndMeter({
     model: KEYWORDS_MODEL,
     systemPrompt: KEYWORDS_SYSTEM_PROMPT,
     userMessage,
     temperature: 0.6,
     maxOutputTokens: 1000,
-  });
+  }, { userId, feature: 'keywords' });
 
   return parseKeywords(raw);
 }
@@ -62,6 +63,7 @@ export async function generateKeywords(
   topic: string,
   existing: string[] = [],
   ctx: KeywordsContext = {},
+  userId?: string,
 ): Promise<string[]> {
   const target = Math.max(0, KEYWORDS_MAX_TOTAL - existing.length);
   if (target === 0) return [];
@@ -81,11 +83,11 @@ export async function generateKeywords(
     }
   };
 
-  addUnique(await askModel(topic, existing, target, ctx));
+  addUnique(await askModel(topic, existing, target, ctx, userId));
 
   if (result.length < target) {
     const shortfall = target - result.length;
-    addUnique(await askModel(topic, [...existing, ...result], shortfall, ctx));
+    addUnique(await askModel(topic, [...existing, ...result], shortfall, ctx, userId));
   }
 
   return result.slice(0, target);

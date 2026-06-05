@@ -1,6 +1,6 @@
 // modules/seo/steps/step-5-5-targeted-rewrite.ts — Точечный рерайт проблемных абзацев
 import type { StepResult, PipelineContext } from '../types';
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { sanitizeArticleHtml } from './sanitize-html';
 
@@ -257,11 +257,11 @@ ${codeMarkers.map(m => '- ' + m).join('\n')}
 Верни ТОЛЬКО переписанный HTML статьи целиком, без пояснений.`;
 
   try {
-    const rewritten = await generateText({
+    const rewritten = await generateAndMeter({
       model,
       systemPrompt,
       userMessage: articleHtml,
-    });
+    }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
 
     const cleanRewritten = rewritten
       .replace(/^```html\s*/i, '')

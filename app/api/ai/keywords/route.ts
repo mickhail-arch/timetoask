@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     let keywords: string[];
     try {
-      keywords = await generateKeywords(topic, existing ?? [], { intent, geo, forbidden });
+      keywords = await generateKeywords(topic, existing ?? [], { intent, geo, forbidden }, userId);
     } catch (genErr) {
       await prisma.$transaction(async (tx) => {
         await rollbackTokens(userId, cost, tx);

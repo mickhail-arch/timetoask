@@ -1,6 +1,6 @@
 // modules/seo/steps/step-7-assembly.ts — сборка HTML + .docx + метаданные + панель качества
 import type { StepResult, PipelineContext, QualityMetrics } from '../types';
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 import { detectAIByCode } from '@/adapters/ai-detection';
 import { sanitizeArticleHtml } from './sanitize-html';
 import { generateDocxFromHtml } from './generate-docx';
@@ -203,7 +203,7 @@ export async function executeAssembly(
     };
     const metaModel = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
 
-    const raw = await generateText({
+    const raw = await generateAndMeter({
       model: metaModel,
       systemPrompt: [
         'Ты — SEO-специалист. Сгенерируй meta title, meta description и slug для статьи.',
@@ -247,7 +247,7 @@ export async function executeAssembly(
       ].join('\n'),
       temperature: 0.4,
       maxOutputTokens: 256,
-    });
+    }, { userId: ctx.userId, feature: 'seo-article', sessionId: ctx.sessionId });
 
     const cleaned = raw.replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(cleaned) as { title: string; description: string; slug: string };

@@ -729,10 +729,20 @@ export function SeoArticleExpressClient() {
     refreshSessions();
   }, [activeSessionId, result, refreshSessions]);
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = useCallback(async () => {
+    const cancelId = jobId;
     setJobId(null);
     setScreen('input');
-  }, []);
+    autoRestoreDoneRef.current = true; // не давать авто-восстановлению поднять отменённую сессию
+    if (cancelId) {
+      try {
+        await fetch(`/api/jobs/${cancelId}/cancel`, { method: 'POST' });
+      } catch {
+        // даже если запрос не прошёл — UI уже сброшен
+      }
+    }
+    refreshSessions();
+  }, [jobId, refreshSessions]);
 
   const handleInputChange = useCallback((formData: Record<string, unknown>) => {
     setInput(formData);

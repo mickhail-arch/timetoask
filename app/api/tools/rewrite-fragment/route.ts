@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { generateText } from '@/adapters/llm/openrouter.adapter';
+import { generateAndMeter } from '@/modules/llm/meter';
 
 const MODEL = 'anthropic/claude-opus-4-8';
 const PRICE_PER_100_CHARS = 0.7;
@@ -88,12 +88,12 @@ ${fragment}
 Задача: ${userPrompt}`;
 
   try {
-    const result = await generateText({
+    const result = await generateAndMeter({
       model: MODEL,
       systemPrompt,
       userMessage,
       maxOutputTokens: Math.max(500, Math.ceil(fragment.length * 0.5)),
-    });
+    }, { userId: session.user.id, feature: 'rewrite' });
 
     const rewritten = result.replace(/^```html\s*/i, '').replace(/\s*```\s*$/i, '').trim();
 

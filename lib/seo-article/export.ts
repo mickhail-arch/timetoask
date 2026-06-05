@@ -71,6 +71,27 @@ export function downloadMetadata(base64: string, filename: string): void {
 }
 
 /**
+ * Сформировать и скачать .docx из HTML по запросу к серверу.
+ */
+export async function downloadDocxFromHtml(html: string, filename: string): Promise<void> {
+  try {
+    const res = await fetch('/api/export/docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html, title: filename.replace(/\.docx$/i, '') }),
+    });
+    if (!res.ok) {
+      console.error('[export] docx failed', res.status);
+      return;
+    }
+    const blob = await res.blob();
+    downloadBlob(blob, filename);
+  } catch (e) {
+    console.error('[export] docx error', e);
+  }
+}
+
+/**
  * Универсальная функция скачивания Blob.
  */
 function downloadBlob(blob: Blob, filename: string): void {

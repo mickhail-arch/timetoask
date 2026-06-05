@@ -2,6 +2,7 @@
 
 'use client';
 import { useState, useCallback } from 'react';
+import { downloadDocxFromHtml } from '@/lib/seo-article/export';
 
 function transformForTilda(html: string): string {
   let s = html;
@@ -110,7 +111,7 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
         </button>
         <div className="flex gap-1.5">
           <button onClick={onDownloadHtml} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .html</button>
-          <button onClick={onDownloadDocx} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .docx</button>
+          <button onClick={() => articleHtml ? downloadDocxFromHtml(articleHtml, 'статья.docx') : onDownloadDocx()} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .docx</button>
         </div>
         {articleHtml && (
           <button onClick={handleCopyDzen} className={`w-full rounded-[var(--radius-md)] border py-2.5 text-[13px] transition-all ${
