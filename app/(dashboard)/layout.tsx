@@ -1,3 +1,5 @@
+//app/(dashboard)/layout.tsx
+
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
@@ -14,13 +16,13 @@ export default async function DashboardLayout({
   if (!session) redirect('/login');
 
   return (
-    <div className="flex h-screen bg-[var(--color-bg-page)]">
+    <div className="flex h-screen overflow-hidden bg-[var(--color-bg-page)]">
       <Sidebar />
-      <div className="flex flex-1 flex-col bg-[var(--color-bg-page)]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-bg-page)]">
         <ImpersonationBanner />
         <Header />
-        <main className="flex-1 overflow-y-auto bg-[var(--color-bg-page)]">
-          <div className="min-h-full p-6">{children}</div>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--color-bg-page)]">
+          {children}
         </main>
       </div>
     </div>

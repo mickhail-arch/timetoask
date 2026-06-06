@@ -1,16 +1,13 @@
+//app/api/tools/rewrite-fragment/route.ts
+
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateAndMeter } from '@/modules/llm/meter';
+import { calculateRewritePrice } from '@/modules/billing/model-pricing';
 
 const MODEL = 'anthropic/claude-opus-4-8';
-const PRICE_PER_100_CHARS = 0.7;
-const MIN_PRICE = 3;
-
-function calculateRewritePrice(charCount: number): number {
-  return Math.max(MIN_PRICE, Math.ceil(charCount / 100) * PRICE_PER_100_CHARS);
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);

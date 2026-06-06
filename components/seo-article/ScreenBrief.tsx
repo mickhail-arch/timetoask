@@ -286,9 +286,6 @@ export function ScreenBrief({
         <span className="rounded-[var(--radius-sm)] bg-[var(--color-bg-page)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
           <strong className="font-medium text-[var(--color-text-primary)]">{faqQuestions.length}</strong>/{faqLimit} FAQ
         </span>
-        <span className="rounded-[var(--radius-sm)] bg-[var(--color-bg-page)] px-2.5 py-1 text-xs text-[var(--color-text-secondary)]">
-          <strong className="font-medium text-[var(--color-text-primary)]">{calculatedPrice.toLocaleString('ru-RU')}</strong> ₽
-        </span>
       </div>
 
       {/* Заголовки */}
@@ -527,6 +524,16 @@ export function ScreenBrief({
           </button>
         </div>
       )}
+
+      {/* Стоимость генерации */}
+      <div className="mt-5 flex items-center justify-between border-t border-[var(--seo-card-border)] pt-4">
+        <span className="text-[13px] text-[var(--color-text-secondary)]">
+          Стоимость генерации статьи
+        </span>
+        <span className="text-2xl font-semibold text-[var(--color-text-primary)]">
+          {calculatedPrice.toLocaleString('ru-RU')} ₽
+        </span>
+      </div>
 
       {/* Согласие */}
       <label className="mt-4 flex items-start gap-2 text-[12px] leading-[1.4] text-[var(--color-text-secondary)]">

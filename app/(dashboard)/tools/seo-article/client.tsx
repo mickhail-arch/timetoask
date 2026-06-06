@@ -10,6 +10,7 @@ import { ScreenBrief } from '@/components/seo-article/ScreenBrief';
 import { ScreenResult } from '@/components/seo-article/ScreenResult';
 import { useSeoJobPolling } from '@/hooks/useSeoJobPolling';
 import { copyArticle, downloadHTML, downloadDOCX, downloadMetadata } from '@/lib/seo-article/export';
+import { estimateGenerationSeconds } from '@/lib/seo-article/time-estimator';
 import { SessionHistory } from '@/components/seo-article/SessionHistory';
 import { useSessionHistory } from '@/hooks/useSessionHistory';
 import type { SessionFull } from '@/hooks/useSessionHistory';
@@ -46,6 +47,14 @@ function formatDuration(totalSec: number): string {
 
 type Screen = 'input' | 'progress_analysis' | 'brief' | 'progress_generation' | 'result';
 
+const SCREEN_RANK: Record<Screen, number> = {
+  input: 0,
+  progress_analysis: 1,
+  brief: 2,
+  progress_generation: 3,
+  result: 4,
+};
+
 const ANALYSIS_STEPS: ProgressStep[] = [
   { name: 'Модерация', description: 'Проверка контента...', status: 'pending', timeLabel: '~5 сек' },
   { name: 'Анализ конкурентов', description: 'Serper + мета-теги...', status: 'pending', timeLabel: '~15 сек' },
@@ -55,10 +64,20 @@ const ANALYSIS_STEPS: ProgressStep[] = [
 const GENERATION_STEPS: ProgressStep[] = [
   { name: 'Модерация заголовков', description: 'Проверка структуры...', status: 'pending', timeLabel: '~5 сек' },
   { name: 'Написание статьи', description: 'Генерация текста...', status: 'pending', timeLabel: '~70 сек' },
-  { name: 'Проверка качества', description: 'SEO-аудит, AI-детект, правки...', status: 'pending', timeLabel: '~35 сек' },
+  { name: 'Проверка качества', description: 'SEO-аудит, AI-детект...', status: 'pending', timeLabel: '~20 сек' },
+  { name: 'Усиление слабых мест', description: 'Доработка по замечаниям, рерайт...', status: 'pending', timeLabel: '~30 сек' },
   { name: 'Генерация изображений', description: 'Создание картинок...', status: 'pending', timeLabel: '~70 сек' },
   { name: 'Сборка и метаданные', description: 'HTML, Schema, мета-теги...', status: 'pending', timeLabel: '~20 сек' },
 ];
+
+const GENERATION_STEPS_NO_IMAGES: ProgressStep[] =
+  GENERATION_STEPS.filter(s => s.name !== 'Генерация изображений');
+
+function toBarProgress(serverProgress: number): number {
+  const p = Math.min(100, Math.max(0, serverProgress));
+  if (p <= 15) return (p / 15) * 20;
+  return 20 + ((p - 15) / 85) * 80;
+}
 
 export function SeoArticleExpressClient() {
   const [screen, setScreen] = useState<Screen>('input');
@@ -84,6 +103,7 @@ export function SeoArticleExpressClient() {
   const selectionTokenRef = useRef(0);
   const currentJobIdRef = useRef<string | null>(null);
   const autoRestoreDoneRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { sessions, loading: sessionsLoading, refresh: refreshSessions, loadSession, deleteSession, addSessionOptimistic } = useSessionHistory('seo-article-express');
 
   // Cleanup: удаляем из runningJobs сессии, которые в БД уже completed/failed.
@@ -124,6 +144,10 @@ export function SeoArticleExpressClient() {
   }, [screen]);
 
   useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [screen]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
     setUnseenIds(ls);
@@ -134,38 +158,21 @@ export function SeoArticleExpressClient() {
     screen !== 'input' && screen !== 'result' ? jobId : null,
   );
 
-  // ВРЕМЕННЫЙ ЛОГ — найти кто поллит
-  useEffect(() => {
-    const pollJobId = screen !== 'input' && screen !== 'result' ? jobId : null;
-    if (pollJobId) {
-      console.log('[poll-source]', { pollJobId, screen, activeSessionId });
-    }
-  }, [jobId, screen, activeSessionId]);
-
   useEffect(() => {
     if (!jobState) return;
-    console.log('[jobState]', {
-      jobId,
-      status: jobState.status,
-      progress: jobState.progress,
-      stepName: jobState.stepName,
-      hasBrief: !!jobState.brief,
-      briefH2Count: (jobState.brief as { h2_list?: unknown[] } | undefined)?.h2_list?.length ?? 0,
-      uiScreen: screen,
-    });
 
-    // Запоминаем jobId, который сейчас релевантен
     if (jobId !== currentJobIdRef.current) {
       currentJobIdRef.current = jobId;
     }
 
-    // FAILED: возвращаем на input только если jobState относится к текущему jobId
-    // (защита от устаревших ответов polling-а при быстром переключении сессий)
+    // Экран двигаем строго вперёд (input→analysis→brief→generation→result):
+    // устаревшее/переходное состояние из polling не должно откатывать UI назад.
+    const advanceTo = (target: Screen) => {
+      setScreen((cur) => (SCREEN_RANK[target] > SCREEN_RANK[cur] ? target : cur));
+    };
+
+    // FAILED — сброс на форму
     if (jobState.status === 'failed') {
-      // Если jobState пришёл для устаревшего job — игнорируем
-      if (jobId && currentJobIdRef.current && jobId !== currentJobIdRef.current) {
-        return;
-      }
       if (screen !== 'input' && screen !== 'result') {
         setSubmitError(jobState.error ?? 'Ошибка генерации');
         setScreen('input');
@@ -181,18 +188,18 @@ export function SeoArticleExpressClient() {
       return;
     }
 
-    // AWAITING_CONFIRMATION: показываем brief, если он есть
+    // AWAITING_CONFIRMATION — показать brief (только вперёд)
     if (jobState.status === 'awaiting_confirmation') {
       setPhaseStartMs((prev) => {
         if (prev !== null) setAccumulatedMs((acc) => acc + (Date.now() - prev));
         return null;
       });
       if (jobState.brief && (jobState.brief as any).h2_list) {
-        if (screen === 'progress_analysis' || screen === 'progress_generation' || (screen === 'brief' && !brief)) {
+        if (SCREEN_RANK['brief'] > SCREEN_RANK[screen] || (screen === 'brief' && !brief)) {
           setBrief(jobState.brief);
           setCalculatedPrice(jobState.calculatedPrice ?? 0);
           if (screen !== 'brief') {
-            setScreen('brief');
+            advanceTo('brief');
             const sid = activeSessionId ?? draftSessionId;
             if (sid) {
               fetch(`/api/sessions/${sid}`, {
@@ -207,7 +214,7 @@ export function SeoArticleExpressClient() {
       return;
     }
 
-    // COMPLETED: всегда переключаем на result, независимо от screen
+    // COMPLETED — всегда на result
     if (jobState.status === 'completed' || jobState.progress >= 100) {
       setPhaseStartMs((prev) => {
         if (prev !== null) setAccumulatedMs((acc) => acc + (Date.now() - prev));
@@ -240,18 +247,8 @@ export function SeoArticleExpressClient() {
         notifyArticleReady((input.target_query as string) ?? '');
 
         try {
-          const inputParams = input;
-          const title = (inputParams.target_query as string) ?? 'Без названия';
-          const meta = {
-            metadata: flatResult.metadata,
-            quality_metrics: flatResult.quality_metrics,
-            warnings: flatResult.warnings,
-          };
-
           const sessionIdToUpdate = activeSessionId ?? draftSessionId;
           if (sessionIdToUpdate) {
-            // Бэк сам обновит ToolSession через syncSessionStatus(jobId, 'completed').
-            // Фронт только помечает unseen и обновляет локальный список.
             const ls = JSON.parse(localStorage.getItem('seo:unseen') ?? '[]') as string[];
             if (!ls.includes(sessionIdToUpdate)) {
               localStorage.setItem('seo:unseen', JSON.stringify([...ls, sessionIdToUpdate]));
@@ -261,8 +258,6 @@ export function SeoArticleExpressClient() {
             setRunningJobs(prev => { const next = { ...prev }; delete next[sessionIdToUpdate]; return next; });
             refreshSessions();
           } else {
-            // Эта ветка — fallback. После B1.server-atomic сессия всегда есть.
-            // Если оказались здесь — сервер сам создаст/обновит запись.
             refreshSessions();
           }
         } catch (err) {
@@ -272,23 +267,10 @@ export function SeoArticleExpressClient() {
       return;
     }
 
-    // PROCESSING: переключаем экраны по progress
+    // PROCESSING — вперёд по progress, без откатов
     if (jobState.status === 'processing') {
       setPhaseStartMs((prev) => (prev === null ? Date.now() : prev));
-      // После confirm pipeline идёт дальше — на любом progress > 15 переключаемся
-      if (jobState.progress > 15 && screen === 'progress_analysis') {
-        setScreen('progress_generation');
-      }
-      // Если мы на brief (только что нажали Подтвердить) — переключаемся на generation
-      if (screen === 'brief') {
-        setScreen('progress_generation');
-      }
-      if (jobState.progress < 15 && screen === 'progress_generation') {
-        setScreen('progress_analysis');
-      }
-      if (screen === 'input' || screen === 'result') {
-        setScreen(jobState.progress > 15 ? 'progress_generation' : 'progress_analysis');
-      }
+      advanceTo(jobState.progress > 15 ? 'progress_generation' : 'progress_analysis');
     }
   }, [jobState, screen, brief, activeSessionId, draftSessionId, input, calculatedPrice, accumulatedMs, phaseStartMs, refreshSessions]);
 
@@ -755,7 +737,7 @@ export function SeoArticleExpressClient() {
   const activeJobs = useMemo(() => {
     const jobs: Record<string, { status: string; progress: number; stepName: string }> = {};
     // Текущая активная генерация (с реальным прогрессом из polling)
-    if (activeSessionId && jobState && jobState.status === 'processing') {
+    if (activeSessionId && jobState) {
       jobs[activeSessionId] = {
         status: jobState.status,
         progress: jobState.progress ?? 0,
@@ -774,10 +756,47 @@ export function SeoArticleExpressClient() {
   const totalActiveMs = accumulatedMs + (phaseStartMs !== null ? Date.now() - phaseStartMs : 0);
   const duration = Math.max(0, Math.round(totalActiveMs / 1000));
   const genElapsed = genStart ? Math.floor((nowTick - genStart) / 1000) : 0;
+  const genEstSec = estimateGenerationSeconds(
+    (input.target_char_count as number) ?? 8000,
+    (input.image_count as number) ?? 0,
+    (input.ai_model as string) ?? 'opus47',
+    (input.analysis_model as string) ?? 'sonnet',
+  );
+  const genRemaining = Math.max(0, genEstSec - genElapsed);
 
-  const mapSteps = (baseSteps: ProgressStep[], offset = 0): ProgressStep[] => {
+  const GEN_STEP_BY_NAME: Record<string, number> = {
+    'Модерация заголовков': 0,
+    'Написание статьи': 1,
+    'Проверка качества': 2,
+    'Анализ текста': 2,
+    'Финальные улучшения': 3,
+    'Точечный рерайт': 3,
+    'Генерация изображений': 4,
+    'Сборка и метаданные': 5,
+  };
+
+  const GEN_STEP_BY_NAME_NO_IMAGES: Record<string, number> = {
+    'Модерация заголовков': 0,
+    'Написание статьи': 1,
+    'Проверка качества': 2,
+    'Анализ текста': 2,
+    'Финальные улучшения': 3,
+    'Точечный рерайт': 3,
+    'Генерация изображений': 4, // быстрый skip при 0 картинок → подсвечиваем сборку
+    'Сборка и метаданные': 4,
+  };
+
+  const hasImages = ((input.image_count as number) ?? 0) > 0;
+
+  const mapSteps = (
+    baseSteps: ProgressStep[],
+    phase: 'analysis' | 'generation' = 'analysis',
+  ): ProgressStep[] => {
     if (!jobState) return baseSteps;
-    const adjustedStep = (jobState.currentStep ?? 0) - offset;
+    const adjustedStep =
+      phase === 'generation'
+        ? ((hasImages ? GEN_STEP_BY_NAME : GEN_STEP_BY_NAME_NO_IMAGES)[jobState.stepName ?? ''] ?? 0)
+        : (jobState.currentStep ?? 0);
     return baseSteps.map((step, i) => {
       if (jobState.status === 'completed') return { ...step, status: 'done' as const };
       if (jobState.status === 'failed' && i === adjustedStep) {
@@ -792,7 +811,7 @@ export function SeoArticleExpressClient() {
   };
 
   return (
-    <>
+    <div className="fixed left-[56px] right-0 top-14 bottom-0 flex overflow-hidden">
       <SessionHistory
         sessions={sessions}
         loading={sessionsLoading}
@@ -804,8 +823,8 @@ export function SeoArticleExpressClient() {
         activeJobs={activeJobs}
         unseenIds={unseenIds}
       />
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="flex flex-col gap-6">
+      <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-[680px] flex-col gap-6 p-6">
           {screen === 'input' && (
             <>
               {submitError && (
@@ -822,7 +841,7 @@ export function SeoArticleExpressClient() {
               title="Анализ"
               subtitle={`«${(input.target_query as string) ?? ''}»`}
               steps={mapSteps(ANALYSIS_STEPS)}
-              progress={jobState?.progress ?? 0}
+              progress={toBarProgress(jobState?.progress ?? 0)}
               currentStepLabel={`осталось ~${Math.max(5, Math.round((15 - (jobState?.progress ?? 0)) * 2.5))} сек`}
               onCancel={handleCancel}
             />
@@ -848,9 +867,9 @@ export function SeoArticleExpressClient() {
             <ScreenProgress
               title="Генерация"
               subtitle={`«${(input.target_query as string) ?? ''}»`}
-              steps={mapSteps(GENERATION_STEPS, 2)}
-              progress={jobState?.progress ?? 15}
-              currentStepLabel={formatDuration(genElapsed)}
+              steps={mapSteps(hasImages ? GENERATION_STEPS : GENERATION_STEPS_NO_IMAGES, 'generation')}
+              progress={toBarProgress(jobState?.progress ?? 15)}
+              currentStepLabel={genRemaining > 0 ? `осталось ~${formatDuration(genRemaining)}` : 'почти готово…'}
               onCancel={handleCancel}
             />
           )}
@@ -874,6 +893,6 @@ export function SeoArticleExpressClient() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

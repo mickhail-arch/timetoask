@@ -58,7 +58,7 @@ interface ExportPanelProps {
   articleHtml?: string;
 }
 
-export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, articleHtml }: ExportPanelProps) {
+export function ExportPanel({ onCopyArticle, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, articleHtml }: ExportPanelProps) {
   const [copied, setCopied] = useState(false);
   const [copiedDzen, setCopiedDzen] = useState(false);
 
@@ -102,39 +102,47 @@ export function ExportPanel({ onCopyArticle, onDownloadHtml, onDownloadDocx, onD
     <div className="rounded-[var(--radius-lg)] border border-[var(--seo-card-border)] bg-[var(--seo-card-bg)] p-4">
       <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">Экспорт статьи</div>
       <div className="space-y-1.5">
-        <button onClick={handleCopy} className={`w-full rounded-[var(--radius-md)] py-2.5 text-[13px] font-medium transition-all ${
-          copied
-            ? 'bg-[var(--color-step-done)] text-white'
-            : 'bg-[var(--seo-selected-bg)] text-[var(--seo-selected-text)] hover:opacity-90'
-        }`}>
-          {copied ? '✓ Скопировано' : 'Скопировать статью'}
-        </button>
-        <div className="flex gap-1.5">
-          <button onClick={onDownloadHtml} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .html</button>
-          <button onClick={() => articleHtml ? downloadDocxFromHtml(articleHtml, 'статья.docx') : onDownloadDocx()} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать .docx</button>
+        <div>
+          <button onClick={handleCopy} className={`w-full rounded-[var(--radius-md)] border py-2.5 text-[13px] font-medium transition-all ${
+            copied
+              ? 'border-[var(--color-step-done)] bg-[var(--color-step-done)] text-white'
+              : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
+          }`}>
+            {copied ? '✓ Скопировано' : 'Скопировать статью'}
+          </button>
+          <div className="mt-1 mb-3 text-center text-[11px] text-[var(--color-text-secondary)]">
+            для VC, Tilda, WordPress, Word, Google Docs и др.
+          </div>
         </div>
+
         {articleHtml && (
           <button onClick={handleCopyDzen} className={`w-full rounded-[var(--radius-md)] border py-2.5 text-[13px] transition-all ${
             copiedDzen
               ? 'border-[var(--color-step-done)] bg-[var(--color-step-done)] text-white'
-              : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] transition-colors hover:bg-[var(--color-bg-page)]'
+              : 'border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-page)]'
           }`}>
-            {copiedDzen ? '✓ Скопировано для Дзен' : 'Копировать для Дзен'}
+            {copiedDzen ? '✓ Скопировано для Дзен' : 'Скопировать для Дзен'}
           </button>
         )}
-        <button onClick={onDownloadMetadata} className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Метаданные .docx</button>
       </div>
-      <div className="mt-2 text-center text-[11px] text-[var(--color-text-secondary)]">Форматирование сохраняется в WordPress, Tilda, Notion, Google Docs</div>
-      {onRegenerate && (
-        <button onClick={onRegenerate}
-          className="mt-3 w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-page)]">
-          Перегенерировать текст
+
+      <div className="mt-4 flex gap-1.5">
+        <button onClick={() => articleHtml ? downloadDocxFromHtml(articleHtml, 'статья.docx') : onDownloadDocx()} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать статью .docx</button>
+        <button onClick={onDownloadMetadata} className="flex-1 rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] transition-colors hover:bg-[var(--color-bg-page)]">↓ Скачать метаданные .docx</button>
+      </div>
+
+      <div className="mt-5 space-y-1.5">
+        {onRegenerate && (
+          <button onClick={onRegenerate}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--seo-btn-default-border)] bg-[var(--seo-btn-default-bg)] py-2.5 text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-page)]">
+            ♻️ Перегенерировать текст
+          </button>
+        )}
+        <button onClick={onNewArticle}
+          className="w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-[13px] text-black transition-colors hover:brightness-90">
+          ✨ Создать новую статью
         </button>
-      )}
-      <button onClick={onNewArticle}
-        className="mt-3 w-full rounded-[var(--radius-md)] bg-[var(--color-accent)] py-2.5 text-[13px] text-black transition-colors hover:brightness-90">
-        Создать новую статью
-      </button>
+      </div>
     </div>
   );
 }

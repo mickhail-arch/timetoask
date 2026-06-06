@@ -1,3 +1,5 @@
+//components/app/header.tsx
+
 'use client';
 
 import { useRef, useState } from 'react';

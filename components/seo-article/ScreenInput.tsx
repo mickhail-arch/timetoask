@@ -1,4 +1,6 @@
-﻿'use client';
+﻿//components/seo-article/ScreenInput.tsx
+
+'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { calculatePriceClient } from '@/lib/seo-article/price-calculator';
@@ -1100,7 +1102,7 @@ export function ScreenInput({ onSubmit, pricingConfig, initialValues, onQueryCha
         <div>
           <span>Стоимость генерации:</span>
           <div className="text-[11px] text-[var(--color-text-secondary)]">
-            база {price.base.toLocaleString('ru-RU')} + объём {price.chars.toLocaleString('ru-RU')} + картинки {price.images.toLocaleString('ru-RU')} + FAQ {price.faq.toLocaleString('ru-RU')}
+            текст {price.chars.toLocaleString('ru-RU')} ₽ + картинки {price.images.toLocaleString('ru-RU')} ₽
           </div>
         </div>
         <div className="text-[15px] font-medium">{price.total.toLocaleString('ru-RU')} ₽</div>

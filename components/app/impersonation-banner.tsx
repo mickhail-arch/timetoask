@@ -1,3 +1,5 @@
+//components/app/impersonation-banner.tsx 
+
 'use client';
 
 import { useSession } from 'next-auth/react';

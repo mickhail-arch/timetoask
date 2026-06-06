@@ -53,21 +53,30 @@ function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
 }
 
-function parseInline(html: string): (TextRun | ExternalHyperlink)[] {
+function parseInline(html: string, size = 24): (TextRun | ExternalHyperlink)[] {
   const runs: (TextRun | ExternalHyperlink)[] = [];
   const cleaned = html.replace(/<br\s*\/?>/gi, '\n');
   const parts = cleaned.split(/(<(?:strong|b|em|i|a|cite)[^>]*>[\s\S]*?<\/(?:strong|b|em|i|a|cite)>)/gi);
   for (const part of parts) {
     let m = part.match(/<(?:strong|b)[^>]*>([\s\S]*?)<\/(?:strong|b)>/i);
-    if (m) { runs.push(new TextRun({ text: stripTags(m[1]), bold: true, size: 24 })); continue; }
+    if (m) { runs.push(new TextRun({ text: stripTags(m[1]), bold: true, size })); continue; }
     m = part.match(/<(?:em|i)[^>]*>([\s\S]*?)<\/(?:em|i)>/i);
-    if (m) { runs.push(new TextRun({ text: stripTags(m[1]), italics: true, size: 24 })); continue; }
+    if (m) { runs.push(new TextRun({ text: stripTags(m[1]), italics: true, size })); continue; }
     m = part.match(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (m) { runs.push(new ExternalHyperlink({ link: m[1], children: [new TextRun({ text: stripTags(m[2]), color: '2563EB', underline: {}, size: 24 })] })); continue; }
+    if (m) { runs.push(new ExternalHyperlink({ link: m[1], children: [new TextRun({ text: stripTags(m[2]), color: '2563EB', underline: {}, size })] })); continue; }
     m = part.match(/<cite[^>]*>([\s\S]*?)<\/cite>/i);
     if (m) { runs.push(new TextRun({ text: stripTags(m[1]), italics: true, size: 20, color: '666666' })); continue; }
     const text = stripTags(part);
-    if (text.trim()) runs.push(new TextRun({ text, size: 24 }));
+    if (text.trim()) {
+      const lines = text.split('\n');
+      lines.forEach((line, idx) => {
+        if (idx === 0) {
+          if (line) runs.push(new TextRun({ text: line, size }));
+        } else {
+          runs.push(new TextRun({ text: line, size, break: 1 }));
+        }
+      });
+    }
   }
   return runs;
 }
@@ -85,11 +94,11 @@ export async function generateDocxBuffer(options: HtmlToDocxOptions): Promise<Bu
     const t = block.trim();
 
     let m = t.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    if (m) { children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: parseInline(m[1]), spacing: { after: 200 } })); continue; }
+    if (m) { children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: parseInline(m[1], 40), spacing: { after: 200 } })); continue; }
     m = t.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
-    if (m) { children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: parseInline(m[1]), spacing: { before: 300, after: 150 } })); continue; }
+    if (m) { children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: parseInline(m[1], 30), spacing: { before: 300, after: 150 } })); continue; }
     m = t.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-    if (m) { children.push(new Paragraph({ heading: HeadingLevel.HEADING_3, children: parseInline(m[1]), spacing: { before: 200, after: 100 } })); continue; }
+    if (m) { children.push(new Paragraph({ heading: HeadingLevel.HEADING_3, children: parseInline(m[1], 26), spacing: { before: 200, after: 100 } })); continue; }
 
     m = t.match(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/i);
     if (m) {

@@ -1,40 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import { calculatePrice } from '../pricing';
 
-describe('calculatePrice', () => {
-  it('default config: 8000 chars, 0 images, 5 faq', () => {
-    const r = calculatePrice(8000, 0, 5);
-    expect(r.base).toBe(100);
-    expect(r.chars).toBe(24); // ceil(8000/1000)*3
-    expect(r.images).toBe(0);
-    expect(r.faq).toBe(25); // 5*5
-    expect(r.total).toBe(149);
-    expect(r.analysisCost).toBe(22); // round(149 * 0.15)
+describe('calculatePrice (cost-based model)', () => {
+  it('возвращает корректную структуру PriceBreakdown', () => {
+    const r = calculatePrice(8000, 2, 3, null, 'opus47', 'sonnet');
+    expect(r).toHaveProperty('total');
+    expect(r).toHaveProperty('chars');
+    expect(r).toHaveProperty('images');
+    expect(r).toHaveProperty('analysisCost');
+    expect(typeof r.total).toBe('number');
   });
 
-  it('min values: 4000 chars, 0 images, 0 faq', () => {
-    const r = calculatePrice(4000, 0, 0);
-    expect(r.total).toBe(112); // 100 + 12 + 0 + 0
+  it('Opus дороже Gemini на том же объёме', () => {
+    const opus = calculatePrice(8000, 2, 3, null, 'opus47', 'sonnet');
+    const gemini = calculatePrice(8000, 2, 3, null, 'gemini', 'sonnet');
+    expect(opus.total).toBeGreaterThan(gemini.total);
   });
 
-  it('max values: 20000 chars, 10 images, 10 faq', () => {
-    const r = calculatePrice(20000, 10, 10);
-    expect(r.chars).toBe(60); // ceil(20000/1000)*3
-    expect(r.images).toBe(150); // 10*15
-    expect(r.faq).toBe(50); // 10*5
-    expect(r.total).toBe(360);
+  it('больше картинок — выше цена', () => {
+    const noImg = calculatePrice(8000, 0, 0, null, 'sonnet', 'sonnet');
+    const withImg = calculatePrice(8000, 3, 0, null, 'sonnet', 'sonnet');
+    expect(withImg.total).toBeGreaterThan(noImg.total);
   });
 
-  it('custom config overrides defaults', () => {
-    const r = calculatePrice(8000, 2, 3, { base: 50, perImage: 20 });
-    expect(r.base).toBe(50);
-    expect(r.images).toBe(40); // 2*20
-    expect(r.faq).toBe(15); // 3*5 (default)
+  it('соблюдается минимальная цена', () => {
+    const r = calculatePrice(500, 0, 0, null, 'gemini', 'gemini');
+    expect(r.total).toBeGreaterThanOrEqual(50);
   });
 
-  it('partial config merges with defaults', () => {
-    const r = calculatePrice(5000, 0, 0, { base: 200 });
-    expect(r.base).toBe(200);
-    expect(r.chars).toBe(15); // ceil(5000/1000)*3 (default perCharBlock)
+  it('analysisCost — доля от total', () => {
+    const r = calculatePrice(8000, 2, 3, null, 'opus47', 'sonnet');
+    expect(r.analysisCost).toBe(Math.round(r.total * 0.15));
   });
 });

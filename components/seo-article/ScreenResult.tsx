@@ -7,6 +7,7 @@ import { MetaPanel } from './MetaPanel';
 import { MetadataPanel } from './MetadataPanel';
 import { ExportPanel } from './ExportPanel';
 import { RichEditor } from '@/components/ui/rich-editor';
+import { downloadDocxFromHtml } from '@/lib/seo-article/export';
 
 interface ArticleResult {
   article_html: string;
@@ -31,7 +32,7 @@ interface ScreenResultProps {
   onSave?: (data: { articleHtml: string; metadata: ArticleResult['metadata'] }) => Promise<void>;
 }
 
-export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onDownloadMetadata, onNewArticle, onRegenerate, sessionId, onSave }: ScreenResultProps) {
+export function ScreenResult({ result, query, stepCount, duration, onCopyArticle, onDownloadHtml, onDownloadDocx, onNewArticle, onRegenerate, sessionId, onSave }: ScreenResultProps) {
   const fmtDuration = (sec: number): string => {
     const s = Math.max(0, Math.round(sec));
     const m = Math.floor(s / 60);
@@ -85,15 +86,34 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
     navigator.clipboard.writeText(htmlToCopy);
   }, [editedHtml, renderedHtml]);
 
+  const visibleWarnings = [...new Set(
+    (result.warnings ?? []).filter(
+      (w) => !/откачен/i.test(w) && !w.startsWith('[ai-code]'),
+    ),
+  )];
+
+  const handleDownloadMetadata = useCallback(() => {
+    const esc = (s: string) => (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const html = [
+      `<h1>Метаданные для статьи: ${esc(query)}</h1>`,
+      `<p><strong>Title:</strong><br>${esc(editedTitle)}</p>`,
+      `<p><strong>Description:</strong><br>${esc(editedDescription)}</p>`,
+      `<p><strong>ЧПУ / Slug:</strong><br>${esc(editedSlug)}</p>`,
+      `<p><strong>Хлебные крошки:</strong><br>${esc(editedBreadcrumb)}</p>`,
+    ].join('');
+    const safeTitle = (query ?? 'статья').replace(/[\\/:*?"<>|]/g, '').trim() || 'статья';
+    downloadDocxFromHtml(html, `Метаданные - ${safeTitle}.docx`);
+  }, [query, editedTitle, editedDescription, editedSlug, editedBreadcrumb]);
+
   return (
     <div className="mx-auto max-w-[680px] space-y-3">
       <div className="text-[13px] text-[var(--color-text-secondary)]">
         <strong className="font-medium text-[var(--color-text-primary)]">{query}</strong> · {stepCount} шагов · ~{fmtDuration(duration)}
       </div>
 
-      {result.warnings && result.warnings.length > 0 && (
+      {visibleWarnings.length > 0 && (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-warn-border)] bg-[var(--color-warn-bg)] px-4 py-2.5 text-xs text-[var(--color-warn-text)]">
-          {result.warnings.join('. ')}
+          {visibleWarnings.join('. ')}
         </div>
       )}
 
@@ -160,9 +180,8 @@ export function ScreenResult({ result, query, stepCount, duration, onCopyArticle
         </button>
       )}
 
-      <ExportPanel articleHtml={result.article_html} onCopyArticle={handleCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={onDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
+      <ExportPanel articleHtml={result.article_html} onCopyArticle={handleCopyArticle} onDownloadHtml={onDownloadHtml} onDownloadDocx={onDownloadDocx} onDownloadMetadata={handleDownloadMetadata} onNewArticle={onNewArticle} onRegenerate={onRegenerate} />
 
-      <div className="text-center text-[11px] text-[var(--color-text-secondary)]">Сгенерировано за {fmtDuration(duration)} · {stepCount} шагов</div>
     </div>
   );
 }

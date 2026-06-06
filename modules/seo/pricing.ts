@@ -1,64 +1,41 @@
-// modules/seo/pricing.ts — динамический расчёт стоимости
+// modules/seo/pricing.ts — расчёт цены статьи на основе оценочной себестоимости
 import type { PriceBreakdown } from './types';
+import { estimateArticleCost } from './cost-model';
 
 export interface PricingConfig {
-  base: number;
-  perCharBlock: number;
-  perImage: number;
-  perFaq: number;
-  charBlockSize: number;
-  sonnetMultiplier: number;
-  geminiMultiplier: number;
   analysisShare: number;
 }
 
 const DEFAULT_PRICING: PricingConfig = {
-  base: 100,
-  perCharBlock: 3,
-  perImage: 15,
-  perFaq: 5,
-  charBlockSize: 1000,
-  sonnetMultiplier: 0.35,
-  geminiMultiplier: 0.25,
   analysisShare: 0.15,
 };
 
 /**
- * Рассчитать стоимость генерации статьи.
- * Формула: base + ceil(chars / charBlockSize) * perCharBlock + images * perImage + faq * perFaq
- * Конфиг читается из manifest.json config.pricing (через БД).
+ * Рассчитать цену статьи (вперёд, до генерации).
+ * Цена = себестоимость текста × 3 + себестоимость картинок × 2 (см. cost-model).
+ * faqCount оставлен в сигнатуре для совместимости, в новой модели не влияет на цену напрямую.
  */
 export function calculatePrice(
   charCount: number,
   imageCount: number,
-  faqCount: number,
+  _faqCount: number,
   config?: Partial<PricingConfig> | null,
   aiModel: string = 'opus47',
   analysisModel: string = 'sonnet',
 ): PriceBreakdown {
   const c = { ...DEFAULT_PRICING, ...config };
+  const est = estimateArticleCost(charCount, imageCount, aiModel, analysisModel);
 
-  const chars = Math.ceil(charCount / c.charBlockSize) * c.perCharBlock;
-  const images = imageCount * c.perImage;
-  const faq = faqCount * c.perFaq;
-  const baseCost = c.base + chars + images + faq;
-
-  const draftMultiplier = aiModel === 'gemini' ? c.geminiMultiplier
-    : aiModel === 'sonnet' ? c.sonnetMultiplier
-    : 1;
-
-  const analysisExtra = analysisModel === 'opus47' ? 0.4 : 0;
-  const total = Math.round(baseCost * draftMultiplier * (1 + analysisExtra));
-  const analysisCost = Math.round(total * c.analysisShare);
+  const analysisCost = Math.round(est.total * c.analysisShare);
 
   return {
-    base: c.base,
-    chars,
-    images,
-    faq,
-    multiplier: draftMultiplier,
-    totalBeforeMultiplier: baseCost,
-    total,
+    base: 0,
+    chars: est.textPrice,                                  // цена текстовой части
+    images: est.imagePrice,                                // цена картинок
+    faq: 0,
+    multiplier: 3,
+    totalBeforeMultiplier: Math.round(est.textCostRub + est.imageCostRub), // себестоимость
+    total: est.total,
     analysisCost,
   };
 }

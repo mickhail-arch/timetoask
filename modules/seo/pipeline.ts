@@ -316,9 +316,23 @@ export async function resumePipeline(
   resumeFromIndex: number,
   remainingCost: number,
 ): Promise<void> {
-  await syncSessionStatus(jobId, 'generating');
   const state = await getRedisState(jobId);
   if (!state) throw new Error('Job state not found in Redis');
+
+  // Сразу помечаем processing в Redis, чтобы polling увидел переход без задержки.
+  // originalInput/result уже считаны в локальный state и далее берутся из него.
+  const firstStep = steps[resumeFromIndex];
+  await saveRedisState(jobId, {
+    jobId,
+    status: 'processing',
+    currentStep: resumeFromIndex,
+    totalSteps: steps.length,
+    stepName: firstStep?.displayName ?? 'Генерация',
+    progress: STEP_PROGRESS[firstStep?.name ?? '']?.[0] ?? 15,
+    originalInput: state.originalInput,
+  });
+
+  await syncSessionStatus(jobId, 'generating');
 
   const ctx: PipelineContext = {
     jobId,

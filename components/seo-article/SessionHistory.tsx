@@ -54,6 +54,13 @@ export function SessionHistory({
     }
   };
 
+  const effStatusOf = (s: { id: string; status: string }) => {
+    const live = activeSessionId === s.id ? activeJobs?.[s.id]?.status : undefined;
+    if (live === 'processing') return 'generating';
+    if (live === 'awaiting_confirmation' || live === 'completed' || live === 'failed') return live;
+    return s.status;
+  };
+
   return (
     <div className="flex h-full w-[260px] shrink-0 flex-col border-r border-[var(--seo-card-border)] bg-[var(--color-bg-sidebar)]">
       {/* Заголовок + кнопка */}
@@ -96,7 +103,7 @@ export function SessionHistory({
             <div className="flex items-start justify-between gap-1">
               <div className="min-w-0 flex-1">
                 <div className="flex items-start gap-1.5">
-                  <span className={`mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getStatusDot(s.status, s.id)}`} />
+                  <span className={`mt-[3px] inline-block h-1.5 w-1.5 shrink-0 rounded-full ${getStatusDot(effStatusOf(s), s.id)}`} />
                   <span className="text-[14px] font-normal leading-[1.3] line-clamp-2 text-[var(--color-text-primary)]">
                     {s.title}
                   </span>
@@ -105,26 +112,26 @@ export function SessionHistory({
                   <span>{formatDate(s.createdAt)}</span>
                   {s.version > 1 && <span>v{s.version}</span>}
                   {s.tokensUsed > 0 && <span>{s.tokensUsed} тк</span>}
-                  {s.status === 'draft' && (
+                  {effStatusOf(s) === 'draft' && (
                     <span className="text-[11px] text-[var(--color-text-secondary)]">Черновик</span>
                   )}
-                  {s.status === 'generating' && (
+                  {effStatusOf(s) === 'generating' && (
                     <span className="text-[11px] text-[var(--color-accent)]">Генерация...</span>
                   )}
-                  {s.status === 'awaiting_confirmation' && (
+                  {effStatusOf(s) === 'awaiting_confirmation' && (
                     <span className="text-[11px] text-[var(--color-warn-text)]">Ожидает проверки</span>
                   )}
-                  {s.status === 'failed' && (
+                  {effStatusOf(s) === 'failed' && (
                     <span className="text-[11px] text-[var(--color-step-error)]">Ошибка</span>
                   )}
-                  {s.status === 'completed' && unseenIds?.includes(s.id) && (
+                  {effStatusOf(s) === 'completed' && unseenIds?.includes(s.id) && (
                     <span className="text-[11px] text-[var(--color-success)]">Готово ✓</span>
                   )}
                 </div>
               </div>
 
               {(() => {
-                if (s.status === 'generating') {
+                if (effStatusOf(s) === 'generating') {
                   return (
                     <div className="flex items-center" title="Генерация...">
                       <svg className="h-4 w-4 animate-spin text-[var(--color-accent)]" viewBox="0 0 24 24" fill="none">
@@ -134,7 +141,7 @@ export function SessionHistory({
                     </div>
                   );
                 }
-                if (s.status === 'awaiting_confirmation') {
+                if (effStatusOf(s) === 'awaiting_confirmation') {
                   return (
                     <div className="flex items-center" title="Проверьте структуру статьи">
                       <svg className="h-4 w-4 text-[var(--color-warn-text)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -145,7 +152,7 @@ export function SessionHistory({
                     </div>
                   );
                 }
-                if (s.status === 'completed' && unseenIds?.includes(s.id)) {
+                if (effStatusOf(s) === 'completed' && unseenIds?.includes(s.id)) {
                   return (
                     <div className="flex items-center" title="Статья готова">
                       <svg className="h-4 w-4 text-[var(--color-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

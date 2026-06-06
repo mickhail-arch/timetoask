@@ -39,14 +39,18 @@ export function calculatePriceClient(
   analysisModel: string = 'sonnet',
 ): PriceBreakdown {
   const c = { ...DEFAULT, ...config };
-  const chars = Math.ceil(charCount / c.charBlockSize) * c.perCharBlock;
-  const images = imageCount * c.perImage;
+  const rawChars = Math.ceil(charCount / c.charBlockSize) * c.perCharBlock;
+  const rawImages = imageCount * c.perImage;
   const faq = faqCount * c.perFaq;
-  const totalBeforeMultiplier = c.base + chars + images + faq;
+  const totalBeforeMultiplier = c.base + rawChars + rawImages + faq;
   const multiplier = aiModel === 'gemini' ? c.geminiMultiplier
     : aiModel === 'sonnet' ? c.sonnetMultiplier
     : 1;
   const analysisExtra = analysisModel === 'opus47' ? 0.4 : 0;
-  const total = Math.round(totalBeforeMultiplier * multiplier * (1 + analysisExtra));
+  const factor = multiplier * (1 + analysisExtra);
+  const total = Math.round(totalBeforeMultiplier * factor);
+  // Части в тех же единицах, что и total: картинки — их вклад, текст — остаток (вкл. базу/faq).
+  const images = Math.round(rawImages * factor);
+  const chars = Math.max(0, total - images);
   return { base: c.base, chars, images, faq, total, multiplier, totalBeforeMultiplier };
 }

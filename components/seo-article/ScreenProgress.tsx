@@ -43,18 +43,43 @@ export function ScreenProgress({
         {subtitle}
       </div>
 
-      {/* Прогресс-бар */}
-      <div className="mb-6 h-1 overflow-hidden rounded-full bg-[var(--seo-card-border)]">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${Math.min(100, Math.max(0, progress))}%`,
-            backgroundColor: hasError
-              ? 'var(--color-step-error)'
-              : 'var(--color-step-running)',
-          }}
-        />
-      </div>
+      {/* Прогресс-бар: 2 сегмента — структура (20%) и статья (80%) */}
+      {(() => {
+        const p = Math.min(100, Math.max(0, progress));
+        const seg1 = Math.min(100, (p / 20) * 100);
+        const seg2 = Math.min(100, Math.max(0, ((p - 20) / 80) * 100));
+        const fillColor = hasError
+          ? 'var(--color-step-error)'
+          : 'var(--color-step-running)';
+        return (
+          <div className="mb-6">
+            <div className="flex h-1 items-stretch gap-1">
+              <div
+                className="h-full overflow-hidden rounded-full bg-[var(--seo-card-border)]"
+                style={{ flexBasis: '20%' }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${seg1}%`, backgroundColor: fillColor }}
+                />
+              </div>
+              <div
+                className="h-full overflow-hidden rounded-full bg-[var(--seo-card-border)]"
+                style={{ flexBasis: '80%' }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${seg2}%`, backgroundColor: fillColor }}
+                />
+              </div>
+            </div>
+            <div className="mt-1.5 flex gap-1 text-[10px] font-medium uppercase tracking-wider text-[var(--color-text-secondary)]">
+              <span style={{ flexBasis: '20%' }}>Структура</span>
+              <span style={{ flexBasis: '80%' }}>Текст статьи</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Список шагов */}
       <div className="mb-6 space-y-3">

@@ -1,8 +1,7 @@
 // modules/llm/meter.ts — обёртка LLM-вызова с учётом реальной себестоимости в usage_log
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { generateTextWithUsage, type LlmParams } from '@/adapters/llm/openrouter.adapter';
-import { calculateCostRub } from '@/modules/billing/model-pricing';
-import { env } from '@/core/config/env';
+import { calculateCostRub, realCostRub } from '@/modules/billing/model-pricing';
 import { prisma } from '@/lib/prisma';
 
 export interface MeterContext {
@@ -29,7 +28,7 @@ export async function generateAndMeter(params: LlmParams, ctx: MeterContext): Pr
 
   if (ctx.userId) {
     const costRub = usage.costUsd !== undefined
-      ? usage.costUsd * env.USD_RUB_RATE
+      ? realCostRub(usage.costUsd)
       : calculateCostRub(model, usage.promptTokens, usage.completionTokens);
     const sessionId = ctx.sessionId ?? meterStore.getStore()?.sessionId ?? null;
     try {

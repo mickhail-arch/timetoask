@@ -1,4 +1,6 @@
-﻿'use client';
+﻿//components/ui/rewrite-panel.tsx
+
+'use client';
 
 import { useState, useCallback } from 'react';
 
@@ -24,7 +26,8 @@ export function RewritePanel({
   const [price, setPrice] = useState<number | null>(null);
 
   const plainFragment = fragment.replace(/<[^>]*>/g, '');
-  const estimatedPrice = Math.max(3, Math.ceil(plainFragment.length / 100) * 0.7);
+  // Цена переписки: 0.02 ₽ за символ (синхронно с сервером)
+  const estimatedPrice = Math.max(3, Math.round(plainFragment.length * 0.02));
 
   const handleRewrite = useCallback(async () => {
     if (!prompt.trim()) return;
@@ -82,7 +85,7 @@ export function RewritePanel({
           />
           <div className="mb-3 flex items-center justify-between text-[11px] text-[#999]">
             <span>{prompt.length}/300</span>
-            <span>~{estimatedPrice.toFixed(1)} ₽</span>
+            <span>{plainFragment.length} симв · ~{estimatedPrice} ₽</span>
           </div>
           {error && (
             <div className="mb-2 rounded bg-[#FFF5F5] px-2.5 py-1.5 text-[11px] text-[#DC2626]">{error}</div>
