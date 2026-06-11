@@ -14,7 +14,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     if (!tool) return NextResponse.json(
       { error: { code: 'NOT_FOUND', message: 'Tool not found', statusCode: 404 } }, { status: 404 });
     const body = await req.json();
-    const userMessage = tool.buildUserMessage(body.input as Record<string, unknown>);
+    const parsed = tool.inputSchema.safeParse(body.input);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Некорректный ввод', statusCode: 400 } },
+        { status: 400 },
+      );
+    }
+    const userMessage = tool.buildUserMessage(parsed.data as Record<string, unknown>);
     if (tool.executionMode === 'async') {
       const result = await executeAsync(session.user.id, tool, userMessage);
       return NextResponse.json({ data: result });

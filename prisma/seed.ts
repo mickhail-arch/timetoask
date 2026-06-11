@@ -36,6 +36,10 @@ async function main() {
   const adminPassword = process.env.ADMIN_PASSWORD ?? 'Admin1234!';
 
   if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('ADMIN_EMAIL / ADMIN_PASSWORD обязательны в production. Seed остановлен.');
+      process.exit(1);
+    }
     console.warn(
       '⚠️  ADMIN_EMAIL / ADMIN_PASSWORD не заданы в .env — используются дефолтные значения. Смените пароль после первого входа!'
     );

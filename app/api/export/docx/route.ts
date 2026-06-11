@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { authOptions } from '@/lib/auth';
 import { unauthorized, apiError } from '@/lib/api-helpers';
 import { generateDocxBuffer } from '@/modules/export';
+import { readJson } from '@/lib/read-json';
 
 const schema = z.object({
   html: z.string().min(1),
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
   if (!session?.user?.id) return unauthorized();
 
   try {
-    const { html, title } = schema.parse(await req.json());
+    const { html, title } = schema.parse(await readJson(req, 10 * 1024 * 1024));
     const buffer = await generateDocxBuffer({ html, title });
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,

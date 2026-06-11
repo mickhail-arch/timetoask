@@ -20,6 +20,12 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  referralCode     String?  @unique
+  referredById     String?
+  referredBy       User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals        User[]   @relation("UserReferrals")
+  referralEarnings ReferralEarning[] @relation("ReferrerEarnings")
+
   sessions            Session[]
   balance             Balance?
   chats               Chat[]
@@ -235,4 +241,49 @@ model AdminAuditLog {
   @@index([adminId])
   @@index([targetUserId])
   @@map("admin_audit_log")
+}
+
+model ReferralEarning {
+  id          String   @id @default(cuid())
+  referrerId  String
+  referredId  String
+  amount      Decimal  @db.Decimal(12, 2)
+  spendAmount Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+
+  referrer    User     @relation("ReferrerEarnings", fields: [referrerId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
+  @@map("referral_earnings")
+}
+
+model HealthCheckLog {
+  id               String   @id @default(cuid())
+  model            String
+  label            String
+  status           String
+  response         String?
+  errorMessage     String?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  costRub          Decimal  @default(0) @db.Decimal(12, 4)
+  latencyMs        Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("health_check_log")
+}
+
+model TokenReserve {
+  id             String   @id @default(cuid())
+  userId         String
+  amount         Decimal  @db.Decimal(12, 2)
+  idempotencyKey String
+  status         String   @default("active") // active | finalized | rolled_back
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([idempotencyKey, status])
+  @@index([status, createdAt])
+  @@map("token_reserves")
 }

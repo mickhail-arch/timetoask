@@ -2,6 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { acquireSlot, releaseSlot } from '@/lib/concurrency';
+import { acquireIdempotency, releaseIdempotency } from '@/lib/idempotency';
+import { createHash } from 'node:crypto';
 import {
   reserveTokens,
   finalizeTokens,
@@ -16,6 +18,7 @@ import {
   TooManyRequestsError,
   ForbiddenError,
   ValidationError,
+  DuplicateRequestError,
 } from '@/core/errors';
 import type { JobStatus } from '@/core/types';
 
@@ -50,11 +53,21 @@ export async function* executeSync(
   if (!acquired) throw new TooManyRequestsError();
 
   try {
+    const inputHash = createHash('sha1').update(input).digest('hex').slice(0, 16);
+    const dedupeKey = `sync:${userId}:${tool.id}:${inputHash}`;
     const idempotencyKey = `sync:${userId}:${tool.id}:${Date.now()}`;
 
-    await prisma.$transaction(async (tx) => {
-      await reserveTokens(userId, tool.tokenCost, idempotencyKey, tx);
-    });
+    const fresh = await acquireIdempotency(dedupeKey);
+    if (!fresh) throw new DuplicateRequestError();
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await reserveTokens(userId, tool.tokenCost, idempotencyKey, tx);
+      }, { isolationLevel: 'Serializable' });
+    } catch (err) {
+      await releaseIdempotency(dedupeKey);
+      throw err;
+    }
 
     let fullText = '';
     try {
@@ -71,7 +84,7 @@ export async function* executeSync(
       }
 
       await prisma.$transaction(async (tx) => {
-        await finalizeTokens(userId, tool.tokenCost, tx);
+        await finalizeTokens(userId, tool.tokenCost, tx, idempotencyKey);
 
         let chat = await tx.chat.findFirst({
           where: { userId, toolId: tool.id },
@@ -103,8 +116,9 @@ export async function* executeSync(
       });
     } catch (err) {
       await prisma.$transaction(async (tx) => {
-        await rollbackTokens(userId, tool.tokenCost, tx);
+        await rollbackTokens(userId, tool.tokenCost, tx, idempotencyKey);
       });
+      await releaseIdempotency(dedupeKey);
       throw err;
     }
   } finally {
@@ -121,29 +135,40 @@ export async function executeAsync(
   tool: ToolRecord,
   input: string,
 ): Promise<{ jobId: string }> {
-  const activeCount = await prisma.jobStep.count({
-    where: {
-      userId,
-      status: { in: ['pending', 'processing'] },
-    },
-  });
+  const inputHash = createHash('sha1').update(input).digest('hex').slice(0, 16);
+  const dedupeKey = `async:${userId}:${tool.id}:${inputHash}`;
 
-  if (activeCount >= env.MAX_CONCURRENT_ASYNC) {
-    throw new TooManyRequestsError();
+  const fresh = await acquireIdempotency(dedupeKey);
+  if (!fresh) throw new DuplicateRequestError();
+
+  try {
+    const activeCount = await prisma.jobStep.count({
+      where: {
+        userId,
+        status: { in: ['pending', 'processing'] },
+      },
+    });
+
+    if (activeCount >= env.MAX_CONCURRENT_ASYNC) {
+      throw new TooManyRequestsError();
+    }
+
+    const job = await prisma.jobStep.create({
+      data: {
+        userId,
+        toolId: tool.id,
+        status: 'pending',
+        input: { userMessage: input },
+      },
+    });
+
+    void processJob(job.id);
+
+    return { jobId: job.id };
+  } catch (err) {
+    await releaseIdempotency(dedupeKey);
+    throw err;
   }
-
-  const job = await prisma.jobStep.create({
-    data: {
-      userId,
-      toolId: tool.id,
-      status: 'pending',
-      input: { userMessage: input },
-    },
-  });
-
-  void processJob(job.id);
-
-  return { jobId: job.id };
 }
 
 // ---------------------------------------------------------------------------

@@ -5,9 +5,10 @@ import { usePathname } from 'next/navigation';
 
 // Вкладки админки. Новые добавляются сюда одной строкой.
 const TABS = [
-  { label: 'Доступы', href: '/admin/users' },
   { label: 'Аналитика', href: '/admin/analytics' },
-  { label: 'Журнал', href: '/admin/activity' },
+  { label: 'Журнал генераций', href: '/admin/activity' },
+  { label: 'Журнал проверок', href: '/admin/health-log' },
+  { label: 'Доступы', href: '/admin/users' },
 ];
 
 export function AdminTabs() {

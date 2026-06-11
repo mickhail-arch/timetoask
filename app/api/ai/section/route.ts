@@ -8,7 +8,9 @@ import { prisma } from '@/lib/prisma';
 import { reserveTokens, finalizeTokens, rollbackTokens } from '@/modules/billing/billing.service';
 import { generateSection } from '@/modules/section-generator';
 import { calculateSectionPrice, SECTION_RANGES, type SectionModel } from '@/modules/section-generator/pricing';
-import { InsufficientBalanceError } from '@/core/errors';
+import { acquireIdempotency, releaseIdempotency } from '@/lib/idempotency';
+import { createHash } from 'node:crypto';
+import { InsufficientBalanceError, DuplicateRequestError } from '@/core/errors';
 
 const schema = z.object({
   heading: z.string().min(3).max(200),
@@ -30,13 +32,21 @@ export async function POST(req: Request) {
     const model = body.model as SectionModel;
     const userId = session.user.id;
     const cost = calculateSectionPrice(chars, model);
+    const dedupeKey = `ai-section:${userId}:${createHash('sha1')
+      .update(JSON.stringify(body))
+      .digest('hex')
+      .slice(0, 16)}`;
     const idempotencyKey = `ai-section:${userId}:${Date.now()}`;
+
+    const fresh = await acquireIdempotency(dedupeKey);
+    if (!fresh) throw new DuplicateRequestError();
 
     try {
       await prisma.$transaction(async (tx) => {
         await reserveTokens(userId, cost, idempotencyKey, tx);
       }, { isolationLevel: 'Serializable' });
     } catch (err) {
+      await releaseIdempotency(dedupeKey);
       if (err instanceof InsufficientBalanceError) {
         return NextResponse.json(
           { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов. Нужно: ${cost}`, statusCode: 402 } },
@@ -59,13 +69,14 @@ export async function POST(req: Request) {
       });
     } catch (genErr) {
       await prisma.$transaction(async (tx) => {
-        await rollbackTokens(userId, cost, tx);
+        await rollbackTokens(userId, cost, tx, idempotencyKey);
       }, { isolationLevel: 'Serializable' });
+      await releaseIdempotency(dedupeKey);
       throw genErr;
     }
 
     await prisma.$transaction(async (tx) => {
-      await finalizeTokens(userId, cost, tx);
+      await finalizeTokens(userId, cost, tx, idempotencyKey);
     }, { isolationLevel: 'Serializable' });
 
     return NextResponse.json({ data: { html, price: cost } });

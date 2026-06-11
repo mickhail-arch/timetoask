@@ -104,7 +104,7 @@ export async function getDashboard(): Promise<DashboardStats> {
 export async function getUsers(
   filters: UserFilters,
   pagination: Pagination,
-): Promise<{ users: SafeUser[]; total: number }> {
+): Promise<{ users: (SafeUser & { referralInvited: number; referralEarned: number; balance: number; articlesCount: number })[]; total: number }> {
   const where: Prisma.UserWhereInput = {};
 
   if (filters.email) {
@@ -127,7 +127,27 @@ export async function getUsers(
     prisma.user.count({ where }),
   ]);
 
-  return { users, total };
+  const userIds = users.map((u) => u.id);
+  const [invitedGroups, earnedGroups, balances, articleGroups] = await Promise.all([
+    prisma.user.groupBy({ by: ['referredById'], where: { referredById: { in: userIds } }, _count: { _all: true } }),
+    prisma.referralEarning.groupBy({ by: ['referrerId'], where: { referrerId: { in: userIds } }, _sum: { amount: true } }),
+    prisma.balance.findMany({ where: { userId: { in: userIds } }, select: { userId: true, amount: true } }),
+    prisma.toolSession.groupBy({ by: ['userId'], where: { userId: { in: userIds }, status: 'completed' }, _count: { _all: true } }),
+  ]);
+  const invitedMap = new Map(invitedGroups.map((g) => [g.referredById, g._count._all]));
+  const earnedMap = new Map(earnedGroups.map((g) => [g.referrerId, Number(g._sum.amount ?? 0)]));
+  const balanceMap = new Map(balances.map((b) => [b.userId, Number(b.amount)]));
+  const articlesMap = new Map(articleGroups.map((g) => [g.userId, g._count._all]));
+
+  const enriched = users.map((u) => ({
+    ...u,
+    referralInvited: invitedMap.get(u.id) ?? 0,
+    referralEarned: earnedMap.get(u.id) ?? 0,
+    balance: balanceMap.get(u.id) ?? 0,
+    articlesCount: articlesMap.get(u.id) ?? 0,
+  }));
+
+  return { users: enriched, total };
 }
 
 // ---------------------------------------------------------------------------

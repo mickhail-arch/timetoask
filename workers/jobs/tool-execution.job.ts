@@ -184,7 +184,7 @@ async function executeSingleStep(
   try {
     await prisma.$transaction(async (tx) => {
       await reserveTokens(userId, tool.tokenCost, idempotencyKey, tx);
-    });
+    }, { isolationLevel: 'Serializable' });
     reserved = true;
 
     const systemPrompt = wrapSystemPrompt(tool.promptText);
@@ -195,7 +195,7 @@ async function executeSingleStep(
     });
 
     await prisma.$transaction(async (tx) => {
-      await finalizeTokens(userId, tool.tokenCost, tx);
+      await finalizeTokens(userId, tool.tokenCost, tx, idempotencyKey);
 
       let chat = await tx.chat.findFirst({
         where: { userId, toolId: tool.id },
@@ -238,7 +238,7 @@ async function executeSingleStep(
     if (reserved) {
       try {
         await prisma.$transaction(async (tx) => {
-          await rollbackTokens(userId, tool.tokenCost, tx);
+          await rollbackTokens(userId, tool.tokenCost, tx, idempotencyKey);
         });
       } catch {
         console.error(

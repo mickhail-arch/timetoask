@@ -1,8 +1,10 @@
 // app/api/auth/register/route.ts
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { register } from '@/modules/auth/auth.service';
 import { ValidationError } from '@/core/errors';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 const registerSchema = z.object({
   email: z.string().email('Невалидный email'),
@@ -20,8 +22,19 @@ const registerSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
+    const within = await rateLimit(`register:${ip}`, 10, 3600);
+    if (!within) {
+      return NextResponse.json(
+        { error: { code: 'TOO_MANY_REQUESTS', message: 'Слишком много попыток регистрации. Попробуйте позже', statusCode: 429 } },
+        { status: 429 },
+      );
+    }
+
     const body = registerSchema.parse(await req.json());
-    const user = await register(body.email, body.password, body.name);
+    const cookieStore = await cookies();
+    const refCode = cookieStore.get('ref')?.value ?? null;
+    const user = await register(body.email, body.password, body.name, refCode);
     return NextResponse.json({ data: user }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

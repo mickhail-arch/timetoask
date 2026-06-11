@@ -9,8 +9,6 @@ export const STALE_RESERVE_CUTOFF_MS = 30 * 60 * 1000;
 export const STALE_JOB_BUFFER_MS = 60_000;
 export const DELETED_ACCOUNT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const TOOL_CACHE_TTL_SEC = 30;
-export const MAX_CONCURRENT_GLOBAL = 50;
-export const MAX_CONCURRENT_PER_USER = 5;
 
 export const VERIFICATION_CODE_TTL_MS = 15 * 60 * 1000; // 15 min
 export const MAX_VERIFICATION_ATTEMPTS = 5;

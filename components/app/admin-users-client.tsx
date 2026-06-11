@@ -1,3 +1,5 @@
+//components/app/admin-users-client.tsx
+
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -11,6 +13,10 @@ type Row = {
   name: string | null;
   role: string;
   supportLevel: string | null;
+  referralInvited: number;
+  referralEarned: number;
+  balance: number;
+  articlesCount: number;
 };
 
 export function AdminUsersClient() {
@@ -20,11 +26,12 @@ export function AdminUsersClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (q = '') => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/users?limit=100');
+      const res = await fetch(`/api/admin/users?limit=100${q ? `&email=${encodeURIComponent(q)}` : ''}`);
       const json = await res.json();
       if (!res.ok) { setError(json.error?.message ?? 'Ошибка'); return; }
       setRows(json.data.users);
@@ -35,7 +42,10 @@ export function AdminUsersClient() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(() => load(email), 350);
+    return () => clearTimeout(t);
+  }, [email, load]);
 
   const impersonate = async (id: string) => {
     setBusy(id);
@@ -62,23 +72,36 @@ export function AdminUsersClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ access }),
       });
-      await load();
+      await load(email);
     } finally {
       setBusy(null);
     }
   };
 
-  if (loading) return <p className="text-sm text-[var(--color-text-secondary)]">Загрузка...</p>;
-  if (error) return <p className="text-sm text-[var(--color-step-error)]">{error}</p>;
-
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="space-y-3">
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Поиск по email"
+        className="w-72 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-3 py-2 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)]"
+      />
+      {loading ? (
+        <p className="text-sm text-[var(--color-text-secondary)]">Загрузка...</p>
+      ) : error ? (
+        <p className="text-sm text-[var(--color-step-error)]">{error}</p>
+      ) : (
+      <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
         <thead className="bg-[var(--color-bg-surface)] text-left text-[var(--color-text-secondary)]">
           <tr>
             <th className="px-4 py-2 font-medium">Email</th>
             <th className="px-4 py-2 font-medium">Роль</th>
             <th className="px-4 py-2 font-medium">Доступ поддержки</th>
+            <th className="px-4 py-2 font-medium text-right">Баланс</th>
+            <th className="px-4 py-2 font-medium text-right">Сгенерировано статей</th>
+            <th className="px-4 py-2 font-medium text-right">Партнёрские приглашения</th>
+            <th className="px-4 py-2 font-medium text-right">Партнёрский заработок</th>
             <th className="px-4 py-2 font-medium text-right">Войти</th>
           </tr>
         </thead>
@@ -103,6 +126,10 @@ export function AdminUsersClient() {
                   </select>
                 )}
               </td>
+              <td className="px-4 py-2 text-right text-[var(--color-text-primary)]">{u.balance.toLocaleString('ru-RU')} ₽</td>
+              <td className="px-4 py-2 text-right text-[var(--color-text-secondary)]">{u.articlesCount}</td>
+              <td className="px-4 py-2 text-right text-[var(--color-text-primary)]">{u.referralInvited}</td>
+              <td className="px-4 py-2 text-right text-[var(--color-text-secondary)]">{u.referralEarned.toLocaleString('ru-RU')} ₽</td>
               <td className="px-4 py-2 text-right">
                 {u.role !== 'admin' && (
                   <button
@@ -118,7 +145,9 @@ export function AdminUsersClient() {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
+      )}
     </div>
   );
 }

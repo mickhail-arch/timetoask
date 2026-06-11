@@ -6,8 +6,10 @@ import { regeneratePipeline } from '@/modules/seo/pipeline';
 import { seoExpressSteps } from '@/modules/seo/steps';
 import { ToolRegistry } from '@/plugins/registry';
 import { prisma } from '@/lib/prisma';
+import { env } from '@/core/config/env';
 import { reserveTokens } from '@/modules/billing/billing.service';
-import { InsufficientBalanceError } from '@/core/errors';
+import { acquireIdempotency, releaseIdempotency } from '@/lib/idempotency';
+import { InsufficientBalanceError, DuplicateRequestError } from '@/core/errors';
 
 export async function POST(
   req: Request,
@@ -28,15 +30,41 @@ export async function POST(
       );
     }
 
+    const [userActive, globalActive] = await Promise.all([
+      prisma.jobStep.count({
+        where: { userId: session.user.id, status: { in: ['pending', 'processing'] }, parentId: null },
+      }),
+      prisma.jobStep.count({
+        where: { status: { in: ['pending', 'processing'] }, parentId: null },
+      }),
+    ]);
+    if (userActive >= env.MAX_CONCURRENT_ASYNC) {
+      return NextResponse.json(
+        { error: { code: 'TOO_MANY_REQUESTS', message: 'У вас уже выполняется максимум задач. Дождитесь завершения текущих', statusCode: 429 } },
+        { status: 429 },
+      );
+    }
+    if (globalActive >= env.MAX_CONCURRENT_GLOBAL) {
+      return NextResponse.json(
+        { error: { code: 'TOO_MANY_REQUESTS', message: 'Сервис сейчас перегружен. Попробуйте через пару минут', statusCode: 429 } },
+        { status: 429 },
+      );
+    }
+
     const jobInput = job.input as Record<string, unknown>;
     const fullCost = (jobInput.fullCost as number) ?? 0;
-    const idempotencyKey = `seo-regenerate:${session.user.id}:${id}:${Date.now()}`;
+    const dedupeKey = `seo-regenerate:${session.user.id}:${id}`;
+    const idempotencyKey = `seo-regenerate:${session.user.id}:${id}`;
+
+    const fresh = await acquireIdempotency(dedupeKey);
+    if (!fresh) throw new DuplicateRequestError();
 
     try {
       await prisma.$transaction(async (tx) => {
         await reserveTokens(session.user.id, fullCost, idempotencyKey, tx);
       }, { isolationLevel: 'Serializable' });
     } catch (err) {
+      await releaseIdempotency(dedupeKey);
       if (err instanceof InsufficientBalanceError) {
         return NextResponse.json(
           { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов для перегенерации. Нужно: ${fullCost}`, statusCode: 402 } },

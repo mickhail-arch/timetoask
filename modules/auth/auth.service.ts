@@ -9,6 +9,7 @@ import {
   MAX_PASSWORD_ATTEMPTS,
   VERIFICATION_CODE_TTL_MS,
   MAX_VERIFICATION_ATTEMPTS,
+  RESEND_CODE_COOLDOWN_SEC,
 } from '@/core/constants';
 import {
   UnauthorizedError,
@@ -19,6 +20,7 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from '@/adapters/email/smtp.adapter';
+import { attachReferrer } from '@/modules/referral/referral.service';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 h
@@ -56,6 +58,7 @@ export async function register(
   email: string,
   password: string,
   name: string,
+  refCode: string | null = null,
 ): Promise<SafeUser> {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing && existing.emailVerified) {
@@ -95,6 +98,19 @@ export async function register(
         amount: env.FREE_TOKENS_ON_REGISTER,
       },
     });
+
+    if (env.FREE_TOKENS_ON_REGISTER > 0) {
+      await tx.transaction.create({
+        data: {
+          userId: created.id,
+          type: 'bonus',
+          amount: env.FREE_TOKENS_ON_REGISTER,
+          status: 'succeeded',
+        },
+      });
+    }
+
+    await attachReferrer(tx, created.id, refCode);
 
     await tx.verificationToken.deleteMany({ where: { userId: created.id } });
 
@@ -136,8 +152,8 @@ export async function login(
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
-    await redis.incr(attemptsKey);
-    await redis.expire(attemptsKey, LOGIN_ATTEMPTS_TTL_SEC);
+    const count = await redis.incr(attemptsKey);
+    if (count === 1) await redis.expire(attemptsKey, LOGIN_ATTEMPTS_TTL_SEC);
     throw new UnauthorizedError('Invalid credentials');
   }
 
@@ -245,8 +261,8 @@ export async function verifyCode(
   });
 
   if (!record || record.expiresAt < new Date() || record.token !== code) {
-    await redis.incr(attemptsKey);
-    await redis.expire(attemptsKey, Math.ceil(VERIFICATION_CODE_TTL_MS / 1000));
+    const count = await redis.incr(attemptsKey);
+    if (count === 1) await redis.expire(attemptsKey, Math.ceil(VERIFICATION_CODE_TTL_MS / 1000));
     throw new ValidationError('Invalid or expired code');
   }
 
@@ -264,6 +280,12 @@ export async function verifyCode(
 export async function resendVerificationCode(email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || user.emailVerified) return;
+
+  const cooldownKey = `auth:resend-cooldown:${email}`;
+  const fresh = await redis.set(cooldownKey, '1', 'EX', RESEND_CODE_COOLDOWN_SEC, 'NX');
+  if (fresh !== 'OK') {
+    throw new TooManyRequestsError('Код уже отправлен. Подождите перед повторной отправкой');
+  }
 
   const code = generateCode();
   await prisma.$transaction([

@@ -1,7 +1,7 @@
 // modules/export/html-to-docx.ts — переиспользуемый конвертер HTML → .docx (Buffer)
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ImageRun, ExternalHyperlink, BorderStyle } from 'docx';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 export interface HtmlToDocxOptions {
   html: string;
@@ -23,7 +23,10 @@ async function loadImage(src: string): Promise<{ data: Buffer; type: 'png' | 'jp
     type = m[1].toLowerCase().startsWith('jp') ? 'jpg' : 'png';
     buf = Buffer.from(m[2], 'base64');
   } else if (src.startsWith('/uploads/')) {
-    try { buf = await readFile(join(process.cwd(), 'public', src)); } catch { return null; }
+    const uploadsRoot = resolve(process.cwd(), 'public', 'uploads');
+    const candidate = resolve(process.cwd(), 'public', `.${src}`);
+    if (candidate !== uploadsRoot && !candidate.startsWith(uploadsRoot + sep)) return null;
+    try { buf = await readFile(candidate); } catch { return null; }
     type = /\.jpe?g$/i.test(src) ? 'jpg' : 'png';
   } else {
     return null; // внешние URL не вшиваем

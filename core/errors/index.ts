@@ -7,6 +7,8 @@ export const ErrorCode = {
   INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
   FREE_LIMIT_EXHAUSTED: 'FREE_LIMIT_EXHAUSTED',
   TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
+  DUPLICATE_REQUEST: 'DUPLICATE_REQUEST',
+  PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
   LLM_UNAVAILABLE: 'LLM_UNAVAILABLE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
@@ -63,6 +65,20 @@ export class TooManyRequestsError extends AppError {
   constructor(message = 'Too many requests') {
     super(ErrorCode.TOO_MANY_REQUESTS, 429, message);
     this.name = 'TooManyRequestsError';
+  }
+}
+
+export class DuplicateRequestError extends AppError {
+  constructor(message = 'Duplicate request') {
+    super(ErrorCode.DUPLICATE_REQUEST, 409, message);
+    this.name = 'DuplicateRequestError';
+  }
+}
+
+export class PayloadTooLargeError extends AppError {
+  constructor(message = 'Payload too large') {
+    super(ErrorCode.PAYLOAD_TOO_LARGE, 413, message);
+    this.name = 'PayloadTooLargeError';
   }
 }
 

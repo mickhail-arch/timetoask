@@ -9,7 +9,8 @@ import { ToolRegistry } from '@/plugins/registry';
 import { Prisma } from '@/generated/prisma';
 import { prisma } from '@/lib/prisma';
 import { reserveTokens } from '@/modules/billing/billing.service';
-import { InsufficientBalanceError } from '@/core/errors';
+import { acquireIdempotency, releaseIdempotency } from '@/lib/idempotency';
+import { InsufficientBalanceError, DuplicateRequestError } from '@/core/errors';
 
 export async function POST(
   req: Request,
@@ -31,12 +32,17 @@ export async function POST(
     }
 
     const jobStep = await prisma.jobStep.findUnique({ where: { id } });
-    if (!jobStep) {
+    if (!jobStep || jobStep.userId !== session.user.id) {
       return NextResponse.json(
         { error: { code: 'NOT_FOUND', message: 'Job not found', statusCode: 404 } },
         { status: 404 },
       );
     }
+
+    const dedupeKey = `seo-confirm:${session.user.id}:${id}`;
+    const fresh = await acquireIdempotency(dedupeKey);
+    if (!fresh) throw new DuplicateRequestError();
+
     const jobInput = jobStep.input as Record<string, unknown>;
     const analysisCost = (jobInput.analysisCost as number) ?? 0;
     const fullCost = (jobInput.fullCost as number) ?? 0;
@@ -55,6 +61,7 @@ export async function POST(
         await reserveTokens(session.user.id, remainingCost, idempotencyKey, tx);
       }, { isolationLevel: 'Serializable' });
     } catch (err) {
+      await releaseIdempotency(dedupeKey);
       if (err instanceof InsufficientBalanceError) {
         return NextResponse.json(
           { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов для продолжения. Нужно: ${remainingCost}`, statusCode: 402 } },

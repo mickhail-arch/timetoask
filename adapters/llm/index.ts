@@ -2,8 +2,10 @@
 export {
   streamText,
   generateText,
+  generateTextWithUsage,
   generateImage,
   type LlmParams,
+  type LlmUsage,
   type ImageParams,
   type ImageResult,
 } from './openrouter.adapter';

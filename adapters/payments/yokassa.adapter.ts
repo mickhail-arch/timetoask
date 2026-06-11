@@ -49,6 +49,24 @@ export async function createPayment(
   };
 }
 
+export async function getPayment(paymentId: string): Promise<{ paymentId: string; status: string; amountValue: string }> {
+  const credentials = Buffer.from(
+    `${env.YOKASSA_SHOP_ID}:${env.YOKASSA_SECRET_KEY}`,
+  ).toString('base64');
+
+  const res = await fetch(`${YOKASSA_API}/${encodeURIComponent(paymentId)}`, {
+    headers: { 'Authorization': `Basic ${credentials}` },
+  });
+
+  if (!res.ok) {
+    console.error(`[yokassa] getPayment failed status=${res.status}`);
+    throw new InternalError('YoKassa payment fetch failed');
+  }
+
+  const data = await res.json();
+  return { paymentId: data.id, status: data.status, amountValue: data.amount?.value ?? '0' };
+}
+
 export function verifyWebhookSignature(
   body: string,
   signature: string,

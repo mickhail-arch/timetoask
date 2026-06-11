@@ -53,11 +53,11 @@ const envSchema = z.object({
   MAX_CONCURRENT_GLOBAL: z.coerce.number().int().default(20),
   MAX_CONCURRENT_PER_USER: z.coerce.number().int().default(2),
   MAX_CONCURRENT_ASYNC: z.coerce.number().int().default(5),
-  MAX_EXECUTION_TIMEOUT_MS: z.coerce.number().int().default(120_000),
+  MAX_EXECUTION_TIMEOUT_MS: z.coerce.number().int().default(600_000),
 
   // Billing defaults
   TOOL_TOKEN_COST: z.coerce.number().int().default(100),
-  FREE_TOKENS_ON_REGISTER: z.coerce.number().int().default(300),
+  FREE_TOKENS_ON_REGISTER: z.coerce.number().int().default(100),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().default(60),
 
   // AI Detection (Winston AI)

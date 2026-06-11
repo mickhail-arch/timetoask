@@ -12,8 +12,9 @@ import {
 } from '@/core/errors';
 import {
   createPayment,
-  verifyWebhookSignature,
+  getPayment,
 } from '@/adapters/payments/yokassa.adapter';
+import { creditReferralOnSpend } from '@/modules/referral/referral.service';
 
 type TxClient = Omit<
   PrismaClient,
@@ -89,15 +90,23 @@ export async function createCheckout(
 
   const payment = await createPayment(amount, idempotencyKey);
 
-  await prisma.transaction.create({
-    data: {
-      userId,
-      type: 'deposit',
-      amount,
-      providerPaymentId: payment.paymentId,
-      status: 'pending',
-    },
-  });
+  try {
+    await prisma.transaction.create({
+      data: {
+        userId,
+        type: 'deposit',
+        amount,
+        providerPaymentId: payment.paymentId,
+        status: 'pending',
+      },
+    });
+  } catch (err) {
+    // Повтор в том же минутном окне — транзакция уже создана, не падаем
+    const isDuplicate =
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002';
+    if (!isDuplicate) throw err;
+  }
 
   return {
     paymentId: payment.paymentId,
@@ -109,40 +118,26 @@ export async function createCheckout(
 // handleWebhook
 // ---------------------------------------------------------------------------
 
-export async function handleWebhook(
-  body: string,
-  signature: string,
-): Promise<void> {
-  if (!verifyWebhookSignature(body, signature)) {
-    throw new ValidationError('Invalid webhook signature');
-  }
+export async function handleWebhook(body: string): Promise<void> {
+  const payload = JSON.parse(body) as { object?: { id?: string } };
+  const claimedId = payload.object?.id;
+  if (!claimedId) throw new ValidationError('Malformed webhook payload');
 
-  const payload = JSON.parse(body) as {
-    object: { id: string; status: string };
-  };
-
-  const providerPaymentId = payload.object.id;
-  const paymentStatus = payload.object.status;
+  // Источник истины — API ЮKassa, а не тело вебхука
+  const payment = await getPayment(claimedId);
+  if (payment.status !== 'succeeded') return;
 
   const existing = await prisma.transaction.findUnique({
-    where: { providerPaymentId },
+    where: { providerPaymentId: payment.paymentId },
   });
-
-  if (!existing) {
-    throw new ValidationError('Transaction not found for this payment');
-  }
-
+  if (!existing) throw new ValidationError('Transaction not found for this payment');
   if (existing.status === 'succeeded') return;
-
-  if (paymentStatus !== 'succeeded') return;
 
   await prisma.$transaction(
     async (tx) => {
-      await tx.transaction.update({
-        where: { id: existing.id },
-        data: { status: 'succeeded' },
-      });
-
+      const fresh = await tx.transaction.findUnique({ where: { id: existing.id } });
+      if (!fresh || fresh.status === 'succeeded') return;
+      await tx.transaction.update({ where: { id: existing.id }, data: { status: 'succeeded' } });
       await tx.balance.update({
         where: { userId: existing.userId },
         data: { amount: { increment: existing.amount } },
@@ -162,20 +157,22 @@ export async function reserveTokens(
   idempotencyKey: string,
   tx: TxClient,
 ): Promise<void> {
-  const existingLog = await tx.usageLog.findUnique({
-    where: { idempotencyKey },
-  });
-  if (existingLog) return;
+  if (cost <= 0) return;
 
-  const balance = await tx.balance.findUniqueOrThrow({
-    where: { userId },
+  const existing = await tx.tokenReserve.findFirst({
+    where: { idempotencyKey, status: 'active' },
   });
+  if (existing) return;
 
+  const balance = await tx.balance.findUniqueOrThrow({ where: { userId } });
   const available = balance.amount.sub(balance.reserved);
   if (available.lt(cost)) {
     throw new InsufficientBalanceError();
   }
 
+  await tx.tokenReserve.create({
+    data: { userId, amount: cost, idempotencyKey, status: 'active' },
+  });
   await tx.balance.update({
     where: { userId },
     data: { reserved: { increment: cost } },
@@ -190,14 +187,36 @@ export async function finalizeTokens(
   userId: string,
   cost: number,
   tx: TxClient,
+  idempotencyKey?: string,
 ): Promise<void> {
+  const reserve = idempotencyKey
+    ? await tx.tokenReserve.findFirst({
+        where: { idempotencyKey, status: 'active' },
+        orderBy: { createdAt: 'desc' },
+      })
+    : null;
+  const amount = reserve ? reserve.amount : new Prisma.Decimal(cost);
+
+  if (reserve) {
+    await tx.tokenReserve.update({
+      where: { id: reserve.id },
+      data: { status: 'finalized' },
+    });
+  }
+
+  const balance = await tx.balance.findUniqueOrThrow({
+    where: { userId },
+    select: { reserved: true },
+  });
+  const nextReserved = balance.reserved.lt(amount)
+    ? new Prisma.Decimal(0)
+    : balance.reserved.sub(amount);
+
   await tx.balance.update({
     where: { userId },
-    data: {
-      amount: { decrement: cost },
-      reserved: { decrement: cost },
-    },
+    data: { amount: { decrement: amount }, reserved: nextReserved },
   });
+  await creditReferralOnSpend(tx, userId, Number(amount));
 }
 
 // ---------------------------------------------------------------------------
@@ -208,10 +227,34 @@ export async function rollbackTokens(
   userId: string,
   cost: number,
   tx: TxClient,
+  idempotencyKey?: string,
 ): Promise<void> {
+  const reserve = idempotencyKey
+    ? await tx.tokenReserve.findFirst({
+        where: { idempotencyKey, status: 'active' },
+        orderBy: { createdAt: 'desc' },
+      })
+    : null;
+  const amount = reserve ? reserve.amount : new Prisma.Decimal(cost);
+
+  if (reserve) {
+    await tx.tokenReserve.update({
+      where: { id: reserve.id },
+      data: { status: 'rolled_back' },
+    });
+  }
+
+  const balance = await tx.balance.findUniqueOrThrow({
+    where: { userId },
+    select: { reserved: true },
+  });
+  const nextReserved = balance.reserved.lt(amount)
+    ? new Prisma.Decimal(0)
+    : balance.reserved.sub(amount);
+
   await tx.balance.update({
     where: { userId },
-    data: { reserved: { decrement: cost } },
+    data: { reserved: nextReserved },
   });
 }
 
@@ -248,26 +291,44 @@ export async function cleanupStaleReserves(): Promise<void> {
   const cutoff = new Date(Date.now() - STALE_RESERVE_CUTOFF_MS);
 
   await prisma.$transaction(async (tx) => {
-    const stale = await tx.balance.findMany({
-      where: {
-        reserved: { gt: 0 },
-        updatedAt: { lt: cutoff },
-      },
-      select: { id: true, userId: true },
+    const stale = await tx.tokenReserve.findMany({
+      where: { status: 'active', createdAt: { lt: cutoff } },
     });
-
     if (stale.length === 0) return;
 
-    for (const record of stale) {
+    const activeJobs = await tx.jobStep.findMany({
+      where: {
+        userId: { in: [...new Set(stale.map((r) => r.userId))] },
+        status: { in: ['pending', 'processing', 'awaiting_confirmation'] },
+      },
+      select: { userId: true },
+    });
+    const activeUserIds = new Set(activeJobs.map((j) => j.userId));
+    const orphaned = stale.filter((r) => !activeUserIds.has(r.userId));
+    if (orphaned.length === 0) return;
+
+    for (const r of orphaned) {
+      await tx.tokenReserve.update({
+        where: { id: r.id },
+        data: { status: 'rolled_back' },
+      });
+      const bal = await tx.balance.findUnique({
+        where: { userId: r.userId },
+        select: { reserved: true },
+      });
+      if (!bal) continue;
+      const next = bal.reserved.lt(r.amount)
+        ? new Prisma.Decimal(0)
+        : bal.reserved.sub(r.amount);
       await tx.balance.update({
-        where: { id: record.id },
-        data: { reserved: 0 },
+        where: { userId: r.userId },
+        data: { reserved: next },
       });
     }
 
     console.warn(
-      `[billing] cleanupStaleReserves: reset ${stale.length} stale reserve(s)`,
-      stale.map((r) => r.userId),
+      `[billing] cleanupStaleReserves: rolled back ${orphaned.length} stale reserve(s)`,
+      orphaned.map((r) => `${r.userId}:${r.idempotencyKey}`),
     );
-  });
+  }, { isolationLevel: 'Serializable' });
 }

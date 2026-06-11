@@ -196,12 +196,13 @@ export async function executeAssembly(
   let slug: string = buildSlug(targetQuery, h1Text);
 
   try {
-    const analysisModelChoice = (ctx.input.analysis_model as string) ?? 'sonnet';
-    const ANALYSIS_MODEL_MAP: Record<string, string> = {
+    const metadataModelChoice = (ctx.input.metadata_model as string) ?? 'sonnet';
+    const METADATA_MODEL_MAP: Record<string, string> = {
+      gemini_flash: 'google/gemini-2.5-flash',
       sonnet: 'anthropic/claude-sonnet-4.6',
       opus47: 'anthropic/claude-opus-4-8',
     };
-    const metaModel = ANALYSIS_MODEL_MAP[analysisModelChoice] ?? ANALYSIS_MODEL_MAP.sonnet;
+    const metaModel = METADATA_MODEL_MAP[metadataModelChoice] ?? METADATA_MODEL_MAP.sonnet;
 
     const raw = await generateAndMeter({
       model: metaModel,

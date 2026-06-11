@@ -17,31 +17,35 @@ export async function GET(
   const { id } = await params;
 
   try {
-    // Сначала проверить Redis (SEO-пайплайн, быстрый ответ)
+    const job = await prisma.jobStep.findUnique({ where: { id }, select: { userId: true, status: true, output: true, input: true } });
+    if (!job || job.userId !== session.user.id) {
+      return NextResponse.json(
+        { error: { code: 'NOT_FOUND', message: 'Job not found', statusCode: 404 } },
+        { status: 404 },
+      );
+    }
+
     const redisState = await getRedisState(id);
     if (redisState) {
       return NextResponse.json({ data: redisState });
     }
 
-    if (!redisState) {
-      const job = await prisma.jobStep.findUnique({ where: { id } });
-      if (job && job.userId === session.user.id && job.status === 'awaiting_confirmation') {
-        const output = job.output as Record<string, unknown> | null;
-        if (output?.brief) {
-          const restored: Parameters<typeof saveRedisState>[1] = {
-            jobId: id,
-            status: 'awaiting_confirmation',
-            currentStep: 2,
-            totalSteps: 11,
-            stepName: 'Формирование ТЗ',
-            progress: 15,
-            brief: output.brief as import('@/modules/seo/types').BriefData,
-            calculatedPrice: output.calculatedPrice as number | undefined,
-            originalInput: job.input as Record<string, unknown>,
-          };
-          await saveRedisState(id, restored);
-          return NextResponse.json({ data: restored });
-        }
+    if (job.status === 'awaiting_confirmation') {
+      const output = job.output as Record<string, unknown> | null;
+      if (output?.brief) {
+        const restored: Parameters<typeof saveRedisState>[1] = {
+          jobId: id,
+          status: 'awaiting_confirmation',
+          currentStep: 2,
+          totalSteps: 11,
+          stepName: 'Формирование ТЗ',
+          progress: 15,
+          brief: output.brief as import('@/modules/seo/types').BriefData,
+          calculatedPrice: output.calculatedPrice as number | undefined,
+          originalInput: job.input as Record<string, unknown>,
+        };
+        await saveRedisState(id, restored);
+        return NextResponse.json({ data: restored });
       }
     }
 

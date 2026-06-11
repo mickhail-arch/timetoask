@@ -1,4 +1,5 @@
 // modules/seo/pipeline.ts — SEO pipeline runner
+import * as Sentry from '@sentry/nextjs';
 import { redis } from '@/lib/redis';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@/generated/prisma';
@@ -15,6 +16,11 @@ import { finalizeTokens, rollbackTokens } from '@/modules/billing/billing.servic
 
 const REDIS_TTL = 7200; // 2 часа
 const redisKey = (jobId: string) => `seo:job:${jobId}`;
+const cancelKey = (jobId: string) => `seo:cancel:${jobId}`;
+
+async function isCancelled(jobId: string): Promise<boolean> {
+  return (await redis.exists(cancelKey(jobId))) === 1;
+}
 
 const STEP_PROGRESS: Record<string, [number, number]> = {
   'moderation': [0, 5],
@@ -94,6 +100,7 @@ async function syncSessionStatus(
       });
     }
   } catch (err) {
+    Sentry.captureException(err, { tags: { area: 'seo-pipeline-sync' } });
     console.warn('[pipeline] syncSessionStatus failed:', err);
   }
 }
@@ -109,8 +116,9 @@ export async function deleteRedisState(jobId: string): Promise<void> {
 export async function cancelJob(jobId: string, userId: string): Promise<void> {
   const job = await prisma.jobStep.findUnique({ where: { id: jobId }, select: { userId: true } });
   if (!job || job.userId !== userId) return;
+  await redis.setex(cancelKey(jobId), 7200, '1');
   await redis.del(redisKey(jobId));
-  await prisma.jobStep.update({ where: { id: jobId }, data: { status: 'failed' } });
+  await prisma.jobStep.update({ where: { id: jobId }, data: { status: 'failed', error: 'Отменено пользователем', endedAt: new Date() } });
   await syncSessionStatus(jobId, 'failed');
 }
 
@@ -196,6 +204,7 @@ export async function runPipeline(
     });
 
     try {
+      if (await isCancelled(jobId)) throw new Error('Отменено пользователем');
       const result = await step.execute(ctx);
 
       ctx.data[step.name] = result.data;
@@ -233,7 +242,7 @@ export async function runPipeline(
         });
 
         await prisma.$transaction(async (tx) => {
-          await finalizeTokens(userId, analysisCost, tx);
+          await finalizeTokens(userId, analysisCost, tx, `seo-analysis:${userId}:${jobId}`);
         }, { isolationLevel: 'Serializable' });
 
         await syncSessionStatus(jobId, 'awaiting_confirmation');
@@ -255,6 +264,7 @@ export async function runPipeline(
         warnings: result.data?.warnings as string[],
       });
     } catch (err) {
+      Sentry.captureException(err, { tags: { area: 'seo-pipeline', jobId } });
       const message = err instanceof Error ? err.message : String(err);
 
       await saveRedisState(jobId, {
@@ -276,7 +286,7 @@ export async function runPipeline(
 
       if (i <= 2) {
         await prisma.$transaction(async (tx) => {
-          await rollbackTokens(userId, analysisCost, tx);
+          await rollbackTokens(userId, analysisCost, tx, `seo-analysis:${userId}:${jobId}`);
         }, { isolationLevel: 'Serializable' });
       }
 
@@ -317,7 +327,12 @@ export async function resumePipeline(
   remainingCost: number,
 ): Promise<void> {
   const state = await getRedisState(jobId);
-  if (!state) throw new Error('Job state not found in Redis');
+  if (!state) {
+    await prisma.$transaction(async (tx) => {
+      await rollbackTokens(userId, remainingCost, tx, `seo-remaining:${userId}:${jobId}`);
+    }, { isolationLevel: 'Serializable' });
+    throw new Error('Job state not found in Redis');
+  }
 
   // Сразу помечаем processing в Redis, чтобы polling увидел переход без задержки.
   // originalInput/result уже считаны в локальный state и далее берутся из него.
@@ -347,6 +362,7 @@ export async function resumePipeline(
 
   await updateJobStep(jobId, {
     status: 'processing',
+    startedAt: new Date(),
   });
 
   for (let i = 0; i < remainingSteps.length; i++) {
@@ -368,6 +384,7 @@ export async function resumePipeline(
     });
 
     try {
+      if (await isCancelled(jobId)) throw new Error('Отменено пользователем');
       const result = await step.execute(ctx);
       ctx.data[step.name] = result.data;
 
@@ -385,6 +402,7 @@ export async function resumePipeline(
         warnings: result.data?.warnings as string[],
       });
     } catch (err) {
+      Sentry.captureException(err, { tags: { area: 'seo-pipeline', jobId } });
       const message = err instanceof Error ? err.message : String(err);
 
       await saveRedisState(jobId, {
@@ -405,7 +423,7 @@ export async function resumePipeline(
       });
 
       await prisma.$transaction(async (tx) => {
-        await rollbackTokens(userId, remainingCost, tx);
+        await rollbackTokens(userId, remainingCost, tx, `seo-remaining:${userId}:${jobId}`);
       }, { isolationLevel: 'Serializable' });
 
       await syncSessionStatus(jobId, 'failed');
@@ -415,7 +433,7 @@ export async function resumePipeline(
   }
 
   await prisma.$transaction(async (tx) => {
-    await finalizeTokens(userId, remainingCost, tx);
+    await finalizeTokens(userId, remainingCost, tx, `seo-remaining:${userId}:${jobId}`);
   }, { isolationLevel: 'Serializable' });
 
   const finalHtml = (ctx.data.assembly as Record<string, unknown>)?.article_html as string | undefined;
@@ -460,7 +478,12 @@ export async function regeneratePipeline(
   regenerateCost: number,
 ): Promise<void> {
   const state = await getRedisState(jobId);
-  if (!state) throw new Error('Job state not found in Redis');
+  if (!state) {
+    await prisma.$transaction(async (tx) => {
+      await rollbackTokens(userId, regenerateCost, tx, `seo-regenerate:${userId}:${jobId}`);
+    }, { isolationLevel: 'Serializable' });
+    throw new Error('Job state not found in Redis');
+  }
 
   const ctx: PipelineContext = {
     jobId,
@@ -482,6 +505,7 @@ export async function regeneratePipeline(
 
   await updateJobStep(jobId, {
     status: 'processing',
+    startedAt: new Date(),
   });
 
   for (let i = 0; i < regenSteps.length; i++) {
@@ -498,6 +522,7 @@ export async function regeneratePipeline(
     });
 
     try {
+      if (await isCancelled(jobId)) throw new Error('Отменено пользователем');
       const result = await step.execute(ctx);
       ctx.data[step.name] = result.data;
 
@@ -515,6 +540,7 @@ export async function regeneratePipeline(
         warnings: result.data?.warnings as string[],
       });
     } catch (err) {
+      Sentry.captureException(err, { tags: { area: 'seo-pipeline', jobId } });
       const message = err instanceof Error ? err.message : String(err);
       await saveRedisState(jobId, {
         jobId,
@@ -532,7 +558,7 @@ export async function regeneratePipeline(
         endedAt: new Date(),
       });
       await prisma.$transaction(async (tx) => {
-        await rollbackTokens(userId, regenerateCost, tx);
+        await rollbackTokens(userId, regenerateCost, tx, `seo-regenerate:${userId}:${jobId}`);
       }, { isolationLevel: 'Serializable' });
 
       await syncSessionStatus(jobId, 'failed');
@@ -542,7 +568,7 @@ export async function regeneratePipeline(
   }
 
   await prisma.$transaction(async (tx) => {
-    await finalizeTokens(userId, regenerateCost, tx);
+    await finalizeTokens(userId, regenerateCost, tx, `seo-regenerate:${userId}:${jobId}`);
   }, { isolationLevel: 'Serializable' });
 
   const finalHtml = (ctx.data.assembly as Record<string, unknown>)?.article_html as string | undefined;

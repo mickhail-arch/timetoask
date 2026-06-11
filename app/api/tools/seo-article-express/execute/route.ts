@@ -10,8 +10,11 @@ import { calculatePrice } from '@/modules/seo/pricing';
 import { runPipeline } from '@/modules/seo/pipeline';
 import { seoExpressSteps } from '@/modules/seo/steps';
 import { ToolRegistry } from '@/plugins/registry';
+import { env } from '@/core/config/env';
 import { reserveTokens } from '@/modules/billing/billing.service';
-import { InsufficientBalanceError } from '@/core/errors';
+import { acquireIdempotency, releaseIdempotency } from '@/lib/idempotency';
+import { createHash } from 'node:crypto';
+import { InsufficientBalanceError, DuplicateRequestError } from '@/core/errors';
 import type { Prisma } from '@/generated/prisma';
 
 export async function POST(req: Request) {
@@ -41,6 +44,27 @@ export async function POST(req: Request) {
       );
     }
 
+    const [userActive, globalActive] = await Promise.all([
+      prisma.jobStep.count({
+        where: { userId: session.user.id, status: { in: ['pending', 'processing'] }, parentId: null },
+      }),
+      prisma.jobStep.count({
+        where: { status: { in: ['pending', 'processing'] }, parentId: null },
+      }),
+    ]);
+    if (userActive >= env.MAX_CONCURRENT_ASYNC) {
+      return NextResponse.json(
+        { error: { code: 'TOO_MANY_REQUESTS', message: 'У вас уже выполняется максимум задач. Дождитесь завершения текущих', statusCode: 429 } },
+        { status: 429 },
+      );
+    }
+    if (globalActive >= env.MAX_CONCURRENT_GLOBAL) {
+      return NextResponse.json(
+        { error: { code: 'TOO_MANY_REQUESTS', message: 'Сервис сейчас перегружен. Попробуйте через пару минут', statusCode: 429 } },
+        { status: 429 },
+      );
+    }
+
     const pricingConfig = (tool.config as Record<string, unknown>)?.pricing as Record<string, unknown> | undefined;
     const price = calculatePrice(
       input.target_char_count,
@@ -54,6 +78,13 @@ export async function POST(req: Request) {
     const balance = await prisma.balance.findUnique({
       where: { userId: session.user.id },
     });
+
+    const dedupeKey = `seo-execute:${session.user.id}:${createHash('sha1')
+      .update(JSON.stringify(input))
+      .digest('hex')
+      .slice(0, 16)}`;
+    const fresh = await acquireIdempotency(dedupeKey);
+    if (!fresh) throw new DuplicateRequestError();
 
     // Атомарно: создать JobStep + создать/обновить ToolSession + зарезервировать токены
     type AtomicResult = { jobId: string; sessionId: string };
@@ -140,6 +171,7 @@ export async function POST(req: Request) {
         return { jobId: jobStep.id, sessionId: toolSession.id };
       }, { isolationLevel: 'Serializable' });
     } catch (err) {
+      await releaseIdempotency(dedupeKey);
       if (err instanceof InsufficientBalanceError) {
         return NextResponse.json(
           { error: { code: 'INSUFFICIENT_BALANCE', message: `Недостаточно токенов. Нужно: ${price.analysisCost}, доступно: ${Number(balance?.amount ?? 0)}`, statusCode: 402 } },
